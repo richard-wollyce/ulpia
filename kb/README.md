@@ -59,17 +59,19 @@ convention writes `[[file-name]]` in backticks and those are examples, not refer
 
 ## Build
 
-The default `rustc` on this machine is a Chocolatey GNU install whose MinGW environment is incomplete,
-so it compiles and then fails to link. Use the rustup MSVC toolchain:
-
 ```
-$tc = "$env:USERPROFILE\.rustup\toolchains\stable-x86_64-pc-windows-msvc\bin"
-& "$tc\cargo.exe" test
-& "$tc\cargo.exe" build --release
+cargo test
+cargo build --release
 ```
 
-The binary lands in `target/release/kb.exe`. See F4 in [the fleet backlog](../../fleet/backlog.md) for
-the root cause and the permanent fix.
+The binary lands in `target/release/kb.exe`.
+
+Historical note, because it cost an hour and the mechanism generalises: this used to require calling
+the rustup toolchain by absolute path. A Chocolatey Rust package with an incomplete MinGW environment
+was shadowing rustup, so every build compiled and then failed to link. A PATH reorder could not fix it,
+because Windows composes the machine PATH before the user PATH, and cargo resolves `rustc` through
+PATH, so even calling the correct `cargo.exe` directly still picked up the wrong compiler. Removing the
+package fixed it. See F4 in [the fleet backlog](../../fleet/backlog.md).
 
 ## Design notes
 
