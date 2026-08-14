@@ -187,9 +187,13 @@ fn cmd_index(paths: &[&str], all: bool) -> ExitCode {
 
 fn cmd_route(question: &str, paths: &[&str], all: bool, top: usize) -> ExitCode {
     let mut entries = Vec::new();
+    let mut aliases = Vec::new();
     for path in paths {
         match Base::discover(Path::new(path), all) {
-            Ok(base) => entries.extend(index::build(&base)),
+            Ok(base) => {
+                entries.extend(index::build(&base));
+                aliases.extend(base.aliases.clone());
+            }
             Err(e) => {
                 eprintln!("kb: cannot read {path}: {e}");
                 return ExitCode::from(1);
@@ -197,10 +201,15 @@ fn cmd_route(question: &str, paths: &[&str], all: bool, top: usize) -> ExitCode 
         }
     }
 
-    let hits = index::route(question, &entries, top);
+    let hits = index::route(question, &entries, &aliases, top);
 
     println!("question: {question}");
-    println!("indexed:  {} entries across {} bases", entries.len(), paths.len());
+    println!(
+        "indexed:  {} entries across {} bases, {} aliases",
+        entries.len(),
+        paths.len(),
+        aliases.len()
+    );
     println!();
 
     if hits.is_empty() {
@@ -213,7 +222,7 @@ fn cmd_route(question: &str, paths: &[&str], all: bool, top: usize) -> ExitCode 
 
     for hit in &hits {
         println!(
-            "  {:>3}  {:<8} {:<44} {}",
+            "  {:>6.1}  {:<8} {:<44} {}",
             hit.score,
             hit.entry.base,
             if hit.entry.rel.is_empty() { hit.entry.stem.clone() } else { hit.entry.rel.clone() },

@@ -45,6 +45,28 @@ pub struct Base {
     pub unreadable: Vec<(String, String)>,
     /// True when the file list was narrowed to what git tracks.
     pub tracked_only: bool,
+    /// `alias -> canonical` pairs read from `kb-aliases.txt` at the root.
+    pub aliases: Vec<(String, String)>,
+}
+
+/// Reads the alias table, if the base has one.
+///
+/// Format is one `alias = canonical` per line, `#` starts a comment. Deliberately
+/// not a config format: the file is edited by whoever just watched a real question
+/// miss, and a parser they have to look up is a parser they will not use.
+fn load_aliases(root: &Path) -> Vec<(String, String)> {
+    let text = match fs::read_to_string(root.join("kb-aliases.txt")) {
+        Ok(t) => t,
+        Err(_) => return Vec::new(),
+    };
+
+    text.lines()
+        .map(|l| l.split('#').next().unwrap_or("").trim())
+        .filter(|l| !l.is_empty())
+        .filter_map(|l| l.split_once('='))
+        .map(|(alias, canonical)| (alias.trim().to_string(), canonical.trim().to_string()))
+        .filter(|(a, c)| !a.is_empty() && !c.is_empty())
+        .collect()
 }
 
 impl Base {
@@ -60,6 +82,7 @@ impl Base {
             files: Vec::new(),
             unreadable: Vec::new(),
             tracked_only: false,
+            aliases: load_aliases(root),
         };
 
         collect(root, root, &mut base)?;

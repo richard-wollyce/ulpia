@@ -34,6 +34,27 @@ involved**: instant, free, explainable, and incapable of inventing a file that d
 prints which words matched, so a bad ranking can be diagnosed instead of guessed at, and it says
 plainly when nothing matched rather than returning a confident guess.
 
+### How route scores
+
+Each query word is weighted by **inverse document frequency**, so a word that appears in most entries
+carries almost no information about which file to open, which is arithmetic rather than opinion. A
+multi word keyword found whole in the question scores highest. Hand written keywords outrank the title
+and the file name, which outrank the entry prose.
+
+### The alias table
+
+An optional `kb-aliases.txt` at the base root, one `alias = canonical` per line, `#` for comments.
+Expansion is **additive**: the original words always survive, so a wrong alias can add noise and can
+never remove signal.
+
+It exists because a question can be entirely correct and still match nothing. Translation is the loud
+case: an English base asked in Portuguese. The quiet case is the same shape and more common, a
+Portuguese base asked in Portuguese where the file is keyed `sono` and the person said `dormir`. The
+table is really about **the distance between how someone asks and how a file was indexed**.
+
+Only add a line after a real question missed. It is a record of misses, not a dictionary, and a
+dictionary is what makes it unmaintainable.
+
 - `--strict` counts warnings toward the exit code, which is what a commit hook wants.
 - `--all` includes files git does not track. By default only tracked files are checked, because the
   private layer is gitignored by design, it is nobody's to publish, and linting it buries the findings

@@ -11,6 +11,7 @@
 
 use crate::base::Base;
 use crate::checks::map_entries;
+use std::collections::HashMap;
 
 pub struct Entry {
     /// Which agent this belongs to, taken from the base directory name.
@@ -19,12 +20,21 @@ pub struct Entry {
     pub stem: String,
     pub title: String,
     pub keywords: Vec<String>,
+    /// Truncated, for display and for the JSON index.
     pub summary: String,
+    /// The whole entry body, for matching.
+    ///
+    /// Kept separate because the two jobs conflict: a display summary wants to be
+    /// short, and truncating what gets matched silently makes a file unfindable by
+    /// the words that happened to fall past the cut. That is exactly how
+    /// `formulas` lost to `rotulos-analisados` on a question about protein per
+    /// meal: "refeicao" was in its entry, just past character 400.
+    pub body: String,
 }
 
 pub struct Hit<'a> {
     pub entry: &'a Entry,
-    pub score: u32,
+    pub score: f32,
     /// The query words that matched, so a bad ranking can be diagnosed instead of guessed at.
     pub matched: Vec<String>,
 }
@@ -69,7 +79,8 @@ pub fn build(base: &Base) -> Vec<Entry> {
             stem: entry.name.clone(),
             title,
             keywords: keywords_in(&entry.body),
-            summary: summarise(&entry.body),
+            summary: summarise(&entry.body, 400),
+            body: summarise(&entry.body, usize::MAX),
         });
     }
     out
@@ -126,8 +137,8 @@ pub fn keywords_in(body: &str) -> Vec<String> {
         .collect()
 }
 
-/// The entry text without its keyword line, flattened and trimmed.
-fn summarise(body: &str) -> String {
+/// The entry text without its keyword line, flattened and trimmed to `limit` chars.
+fn summarise(body: &str, limit: usize) -> String {
     let text: Vec<&str> = body
         .lines()
         .take_while(|l| !(l.contains("Search for:") || l.contains("Buscar por:")))
@@ -137,7 +148,7 @@ fn summarise(body: &str) -> String {
         .split_whitespace()
         .collect::<Vec<&str>>()
         .join(" ");
-    cleaned.chars().take(400).collect()
+    cleaned.chars().take(limit).collect()
 }
 
 // ---------------------------------------------------------------------------
@@ -194,57 +205,154 @@ fn fold(c: char) -> char {
 /// The title and the file name are close behind because they were also chosen
 /// deliberately. The summary is prose and matches things incidentally, so it
 /// only breaks ties.
-const W_KEYWORD: u32 = 6;
-const W_PHRASE: u32 = 10;
-const W_TITLE: u32 = 3;
-const W_STEM: u32 = 3;
-const W_SUMMARY: u32 = 1;
+const W_KEYWORD: f32 = 6.0;
+const W_PHRASE: f32 = 10.0;
+const W_TITLE: f32 = 3.0;
+const W_STEM: f32 = 3.0;
+const W_SUMMARY: f32 = 1.0;
 
-pub fn route<'a>(query: &str, entries: &'a [Entry], top: usize) -> Vec<Hit<'a>> {
-    let terms = normalise(query);
+struct Prepared<'a> {
+    entry: &'a Entry,
+    keywords: Vec<String>,
+    /// Multi word keywords, kept as (original, normalised) for phrase matching.
+    phrases: Vec<(String, String)>,
+    title: Vec<String>,
+    stem: Vec<String>,
+    summary: Vec<String>,
+}
+
+impl<'a> Prepared<'a> {
+    fn new(entry: &'a Entry) -> Self {
+        let phrases = entry
+            .keywords
+            .iter()
+            .map(|k| (k.clone(), normalise(k).join(" ")))
+            .filter(|(_, n)| n.split_whitespace().count() > 1)
+            .collect();
+
+        Prepared {
+            entry,
+            keywords: entry.keywords.iter().flat_map(|k| normalise(k)).collect(),
+            phrases,
+            title: normalise(&entry.title),
+            stem: normalise(&entry.stem),
+            summary: normalise(&entry.body),
+        }
+    }
+
+    /// Every distinct word this entry can be found by, for document frequency.
+    fn vocabulary(&self) -> Vec<&String> {
+        let mut all: Vec<&String> = self
+            .keywords
+            .iter()
+            .chain(self.title.iter())
+            .chain(self.stem.iter())
+            .chain(self.summary.iter())
+            .collect();
+        all.sort();
+        all.dedup();
+        all
+    }
+}
+
+/// Inverse document frequency: how much a word discriminates between entries.
+///
+/// Without it, "proteina" scores the same on the one file that computes protein
+/// per meal and on every other file in a nutrition base that merely mentions it,
+/// and the tie is broken by accident. A word that appears everywhere carries
+/// almost no information about which file to open, and this is the standard way
+/// to say so in arithmetic.
+fn idf(term: &str, df: &HashMap<String, usize>, total: usize) -> f32 {
+    let seen = *df.get(term).unwrap_or(&0) as f32;
+    (1.0 + (total as f32 / (1.0 + seen))).ln()
+}
+
+/// Expands a question with canonical terms from the alias table.
+///
+/// Additive on purpose: the original words are always kept, so a wrong alias can
+/// only add noise and can never remove signal. Replacing the query would make a
+/// bad translation silently fatal.
+fn expand(terms: &[String], aliases: &[(String, String)]) -> Vec<String> {
+    let query_norm = terms.join(" ");
+    let mut out = terms.to_vec();
+
+    for (alias, canonical) in aliases {
+        let alias_norm = normalise(alias).join(" ");
+        if alias_norm.is_empty() {
+            continue;
+        }
+        let matches = if alias_norm.split_whitespace().count() > 1 {
+            query_norm.contains(&alias_norm)
+        } else {
+            terms.iter().any(|t| t == &alias_norm)
+        };
+        if matches {
+            for word in normalise(canonical) {
+                if !out.contains(&word) {
+                    out.push(word);
+                }
+            }
+        }
+    }
+    out
+}
+
+pub fn route<'a>(
+    query: &str,
+    entries: &'a [Entry],
+    aliases: &[(String, String)],
+    top: usize,
+) -> Vec<Hit<'a>> {
+    let prepared: Vec<Prepared> = entries.iter().map(Prepared::new).collect();
+
+    let mut df: HashMap<String, usize> = HashMap::new();
+    for p in &prepared {
+        for word in p.vocabulary() {
+            *df.entry(word.clone()).or_insert(0) += 1;
+        }
+    }
+    let total = prepared.len();
+
+    let terms = expand(&normalise(query), aliases);
     let query_norm = terms.join(" ");
 
     let mut hits: Vec<Hit<'a>> = Vec::new();
 
-    for entry in entries {
-        let mut score = 0u32;
+    for p in &prepared {
+        let mut score = 0.0f32;
         let mut matched: Vec<String> = Vec::new();
 
         // A multi word keyword appearing whole in the question is the strongest
         // signal there is, so it is scored before the individual words.
-        for keyword in &entry.keywords {
-            let norm = normalise(keyword).join(" ");
-            if norm.split_whitespace().count() > 1 && !norm.is_empty() && query_norm.contains(&norm) {
-                score += W_PHRASE;
-                matched.push(keyword.clone());
+        for (original, norm) in &p.phrases {
+            if query_norm.contains(norm) {
+                let weight: f32 = norm
+                    .split_whitespace()
+                    .map(|w| idf(w, &df, total))
+                    .sum::<f32>()
+                    / norm.split_whitespace().count().max(1) as f32;
+                score += W_PHRASE * weight;
+                matched.push(original.clone());
             }
         }
 
-        let keyword_words: Vec<String> = entry
-            .keywords
-            .iter()
-            .flat_map(|k| normalise(k))
-            .collect();
-        let title_words = normalise(&entry.title);
-        let stem_words = normalise(&entry.stem);
-        let summary_words = normalise(&entry.summary);
-
         for term in &terms {
+            let weight = idf(term, &df, total);
             let mut hit = false;
-            if keyword_words.contains(term) {
-                score += W_KEYWORD;
+            if p.keywords.contains(term) {
+                score += W_KEYWORD * weight;
                 hit = true;
             }
-            if title_words.contains(term) {
-                score += W_TITLE;
+            if p.title.contains(term) {
+                score += W_TITLE * weight;
                 hit = true;
             }
-            if stem_words.contains(term) {
-                score += W_STEM;
+            if p.stem.contains(term) {
+                score += W_STEM * weight;
                 hit = true;
             }
-            if summary_words.contains(term) {
-                score += W_SUMMARY;
+            if p.summary.contains(term) {
+                score += W_SUMMARY * weight;
                 hit = true;
             }
             if hit && !matched.iter().any(|m| m == term) {
@@ -252,12 +360,17 @@ pub fn route<'a>(query: &str, entries: &'a [Entry], top: usize) -> Vec<Hit<'a>> 
             }
         }
 
-        if score > 0 {
-            hits.push(Hit { entry, score, matched });
+        if score > 0.0 {
+            hits.push(Hit { entry: p.entry, score, matched });
         }
     }
 
-    hits.sort_by(|a, b| b.score.cmp(&a.score).then(a.entry.rel.cmp(&b.entry.rel)));
+    hits.sort_by(|a, b| {
+        b.score
+            .partial_cmp(&a.score)
+            .unwrap_or(std::cmp::Ordering::Equal)
+            .then(a.entry.rel.cmp(&b.entry.rel))
+    });
     hits.truncate(top);
     hits
 }
@@ -360,6 +473,7 @@ mod tests {
             title: title.into(),
             keywords: keywords.iter().map(|k| k.to_string()).collect(),
             summary: String::new(),
+            body: String::new(),
         }
     }
 
@@ -369,7 +483,7 @@ mod tests {
             entry("quantization", "Quantization", &["q4_K_M", "bits per weight"]),
             entry("the-bar", "The bar", &["garbage", "weak decision"]),
         ];
-        let hits = route("o que e um weak decision", &entries, 5);
+        let hits = route("o que e um weak decision", &entries, &[], 5);
         assert_eq!(hits[0].entry.stem, "the-bar");
     }
 
@@ -379,7 +493,7 @@ mod tests {
             entry("a", "A", &["memory bandwidth"]),
             entry("b", "B", &["memory", "bandwidth"]),
         ];
-        let hits = route("explique memory bandwidth", &entries, 5);
+        let hits = route("explique memory bandwidth", &entries, &[], 5);
         assert_eq!(hits[0].entry.stem, "a");
         assert!(hits[0].score > hits[1].score);
     }
@@ -387,7 +501,44 @@ mod tests {
     #[test]
     fn a_question_about_nothing_in_the_base_returns_nothing() {
         let entries = vec![entry("quantization", "Quantization", &["q4_K_M"])];
-        assert!(route("qual a capital da australia", &entries, 5).is_empty());
+        assert!(route("qual a capital da australia", &entries, &[], 5).is_empty());
+    }
+
+    /// The Z11 failure, reproduced: a word every entry shares must not decide the
+    /// ranking. Only the rare word carries information about which file to open.
+    #[test]
+    fn a_common_word_loses_to_a_rare_one() {
+        let entries = vec![
+            entry("labels", "Labels analysed", &["protein", "sodium", "price per gram"]),
+            entry("formulas", "Formulas", &["protein", "protein per meal", "leucine"]),
+            entry("training", "Training", &["protein", "volume", "sets"]),
+            entry("sleep", "Sleep", &["protein", "circadian", "caffeine"]),
+        ];
+        let hits = route("quanta protein per meal eu preciso", &entries, &[], 5);
+        assert_eq!(hits[0].entry.stem, "formulas");
+    }
+
+    #[test]
+    fn an_alias_bridges_a_question_asked_in_the_other_language() {
+        let entries = vec![
+            entry("compliance", "Compliance", &["personal attributes", "policy"]),
+            entry("hooks", "Hooks", &["hook", "opening line"]),
+        ];
+        let aliases = vec![("atributos pessoais".to_string(), "personal attributes".to_string())];
+
+        assert!(route("meu anuncio tem atributos pessoais", &entries, &[], 5).is_empty());
+
+        let hits = route("meu anuncio tem atributos pessoais", &entries, &aliases, 5);
+        assert_eq!(hits[0].entry.stem, "compliance");
+    }
+
+    #[test]
+    fn expansion_adds_and_never_replaces() {
+        let terms = normalise("preciso do hook certo");
+        let aliases = vec![("hook".to_string(), "gancho".to_string())];
+        let out = expand(&terms, &aliases);
+        assert!(out.contains(&"hook".to_string()), "original survives");
+        assert!(out.contains(&"gancho".to_string()), "canonical added");
     }
 
     #[test]
@@ -399,6 +550,7 @@ mod tests {
             title: "he said \"hi\"\nthen left".into(),
             keywords: vec![],
             summary: String::new(),
+            body: String::new(),
         }];
         let json = to_json(&e);
         assert!(json.contains("\\\"hi\\\""));
