@@ -1,0 +1,15 @@
+[package]
+name = "kb"
+version = "0.1.0"
+edition = "2024"
+description = "A linter for file based knowledge bases"
+
+# No dependencies, on purpose. Everything here is std: directory walking, string
+# scanning and a hand written wikilink parser. It keeps the build instant, the
+# supply chain empty, and the code readable as a first Rust artefact.
+[dependencies]
+
+[profile.release]
+opt-level = "z"
+lto = true
+strip = true
