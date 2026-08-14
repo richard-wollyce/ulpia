@@ -13,7 +13,7 @@ It knows the three agents by shape, not by configuration:
 |-------|------------|------------------|----------------|
 | Zed   | `MAP.md`   | `knowledge/`     | `Search for:`  |
 | Steve | `MAP.md`   | `knowledge/`     | `Search for:`  |
-| Yaron | `MAPA.md`  | `conhecimento/`  | `Buscar por:`  |
+| Yaron | `MAP.md`   | `knowledge/`    | `Search for:`  |
 
 ## Use
 
