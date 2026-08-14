@@ -1,11 +1,12 @@
-//! kb, a linter for file based knowledge bases.
+//! kb, a linter and router for file based knowledge bases.
 //!
-//! ADR-0003 decided that the markdown files stay the source of truth and that
-//! any index is derived from them. This is the first derived thing: it reads the
-//! files and reports what the conventions promise but nothing was checking.
+//! ADR-0003 decided that the markdown files stay the source of truth and that any index is derived
+//! from them. This is that derived thing: it stores nothing, reads the files on every run, and either
+//! reports what is broken (`check`) or answers which files a question should open (`route`).
 
 mod base;
 mod checks;
+mod index;
 
 use base::Base;
 use checks::{Finding, Level};
@@ -13,14 +14,17 @@ use std::path::Path;
 use std::process::ExitCode;
 
 const USAGE: &str = "\
-kb, a linter for file based knowledge bases
+kb, a linter and router for file based knowledge bases
 
 usage:
     kb check [path]... [--strict] [--all]
+    kb index [path]... [--all]
+    kb route <question> [path]... [--top N]
 
-    path        base to check, defaults to the current directory
-    --strict    count warnings toward the exit code
+    path        base to work on, defaults to the current directory
+    --strict    check: count warnings toward the exit code
     --all       include files git does not track, normally the private layer
+    --top N     route: how many candidates to print, default 5
 
 checks:
     E01 broken-link     a [[link]] with no file behind it
@@ -31,11 +35,14 @@ checks:
     W03 dash            an em dash or en dash, which house style forbids
     W04 front-matter    a note declaring a source with no evidence_tier or valid_for
 
-exit code is 1 when there are errors, or when --strict and there are warnings.
+exit code is 1 when check finds errors, or when --strict and it finds warnings.
 ";
 
 /// How many line numbers to print before collapsing into a count.
 const LINES_SHOWN: usize = 3;
+
+/// Flags that consume the argument after them.
+const VALUE_FLAGS: &[&str] = &["--top"];
 
 fn main() -> ExitCode {
     let args: Vec<String> = std::env::args().skip(1).collect();
@@ -45,24 +52,62 @@ fn main() -> ExitCode {
         return ExitCode::SUCCESS;
     }
 
-    if args[0] != "check" {
-        eprintln!("kb: unknown command '{}'\n", args[0]);
-        print!("{USAGE}");
-        return ExitCode::from(2);
-    }
-
-    let strict = args.iter().any(|a| a == "--strict");
     let all = args.iter().any(|a| a == "--all");
+    let strict = args.iter().any(|a| a == "--strict");
+    let top = flag_value(&args, "--top").and_then(|v| v.parse().ok()).unwrap_or(5);
 
-    let mut paths: Vec<&str> = args[1..]
-        .iter()
-        .filter(|a| !a.starts_with("--"))
-        .map(|s| s.as_str())
-        .collect();
-    if paths.is_empty() {
-        paths.push(".");
+    // Flags that take a value swallow the argument after them, otherwise that
+    // value gets read as a path and the error message blames the wrong thing.
+    let mut positional: Vec<&str> = Vec::new();
+    let mut skip_next = false;
+    for arg in &args[1..] {
+        if skip_next {
+            skip_next = false;
+            continue;
+        }
+        if arg.starts_with("--") {
+            skip_next = VALUE_FLAGS.contains(&arg.as_str());
+            continue;
+        }
+        positional.push(arg.as_str());
     }
 
+    match args[0].as_str() {
+        "check" => cmd_check(&paths_or_default(&positional), all, strict),
+        "index" => cmd_index(&paths_or_default(&positional), all),
+        "route" => {
+            if positional.is_empty() {
+                eprintln!("kb: route needs a question\n");
+                print!("{USAGE}");
+                return ExitCode::from(2);
+            }
+            let question = positional[0];
+            let paths = paths_or_default(&positional[1..]);
+            cmd_route(question, &paths, all, top)
+        }
+        other => {
+            eprintln!("kb: unknown command '{other}'\n");
+            print!("{USAGE}");
+            ExitCode::from(2)
+        }
+    }
+}
+
+/// The value after a flag, as in `--top 8`. Returns None when the flag is absent.
+fn flag_value(args: &[String], flag: &str) -> Option<String> {
+    let i = args.iter().position(|a| a == flag)?;
+    args.get(i + 1).cloned()
+}
+
+fn paths_or_default<'a>(given: &[&'a str]) -> Vec<&'a str> {
+    if given.is_empty() { vec!["."] } else { given.to_vec() }
+}
+
+// ---------------------------------------------------------------------------
+// check
+// ---------------------------------------------------------------------------
+
+fn cmd_check(paths: &[&str], all: bool, strict: bool) -> ExitCode {
     let mut errors = 0usize;
     let mut warnings = 0usize;
 
@@ -93,21 +138,13 @@ fn check_one(path: &Path, all: bool) -> std::io::Result<(usize, usize)> {
     let base = Base::discover(path, all)?;
     let findings = checks::run(&base);
 
-    let label = base
-        .root
-        .canonicalize()
-        .unwrap_or_else(|_| base.root.clone())
-        .file_name()
-        .map(|n| n.to_string_lossy().to_string())
-        .unwrap_or_else(|| path.display().to_string());
-
     let map = base.map.clone().unwrap_or_else(|| "none".to_string());
     let scope = if base.tracked_only {
         "tracked files"
     } else {
         "files, git not consulted"
     };
-    println!("{label}  ({} {scope}, map: {map})", base.files.len());
+    println!("{}  ({} {scope}, map: {map})", label(&base), base.files.len());
 
     for (file, reason) in &base.unreadable {
         println!("  skipped  {file}: {reason}");
@@ -129,6 +166,78 @@ fn check_one(path: &Path, all: bool) -> std::io::Result<(usize, usize)> {
     Ok((errors, warnings))
 }
 
+// ---------------------------------------------------------------------------
+// index and route
+// ---------------------------------------------------------------------------
+
+fn cmd_index(paths: &[&str], all: bool) -> ExitCode {
+    let mut entries = Vec::new();
+    for path in paths {
+        match Base::discover(Path::new(path), all) {
+            Ok(base) => entries.extend(index::build(&base)),
+            Err(e) => {
+                eprintln!("kb: cannot read {path}: {e}");
+                return ExitCode::from(1);
+            }
+        }
+    }
+    print!("{}", index::to_json(&entries));
+    ExitCode::SUCCESS
+}
+
+fn cmd_route(question: &str, paths: &[&str], all: bool, top: usize) -> ExitCode {
+    let mut entries = Vec::new();
+    for path in paths {
+        match Base::discover(Path::new(path), all) {
+            Ok(base) => entries.extend(index::build(&base)),
+            Err(e) => {
+                eprintln!("kb: cannot read {path}: {e}");
+                return ExitCode::from(1);
+            }
+        }
+    }
+
+    let hits = index::route(question, &entries, top);
+
+    println!("question: {question}");
+    println!("indexed:  {} entries across {} bases", entries.len(), paths.len());
+    println!();
+
+    if hits.is_empty() {
+        // Saying so plainly is the point. A router that always returns something
+        // teaches you to trust a guess.
+        println!("  nothing matched. Either the base does not cover it, or the");
+        println!("  Search for lines do not carry the words a real question uses.");
+        return ExitCode::SUCCESS;
+    }
+
+    for hit in &hits {
+        println!(
+            "  {:>3}  {:<8} {:<44} {}",
+            hit.score,
+            hit.entry.base,
+            if hit.entry.rel.is_empty() { hit.entry.stem.clone() } else { hit.entry.rel.clone() },
+            hit.entry.title
+        );
+        println!("       matched: {}", hit.matched.join(", "));
+    }
+
+    ExitCode::SUCCESS
+}
+
+// ---------------------------------------------------------------------------
+// Reporting
+// ---------------------------------------------------------------------------
+
+fn label(base: &Base) -> String {
+    base.root
+        .canonicalize()
+        .unwrap_or_else(|_| base.root.clone())
+        .file_name()
+        .map(|n| n.to_string_lossy().to_string())
+        .unwrap_or_else(|| base.root.display().to_string())
+}
+
 struct Group<'a> {
     level: Level,
     code: &'static str,
@@ -139,9 +248,9 @@ struct Group<'a> {
 
 /// Collapses findings that repeat the same message in the same file.
 ///
-/// Two hundred separate lines saying "em dash" is not two hundred findings, it
-/// is one finding with a count, and printing it the long way buries everything
-/// else. The count is always shown, so nothing is hidden by the collapse.
+/// Two hundred separate lines saying "em dash" is not two hundred findings, it is one finding with a
+/// count, and printing it the long way buries everything else. The count is always shown, so nothing
+/// is hidden by the collapse.
 fn group<'a>(findings: &'a [Finding]) -> Vec<Group<'a>> {
     let mut groups: Vec<Group<'a>> = Vec::new();
 

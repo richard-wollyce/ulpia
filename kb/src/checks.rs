@@ -140,6 +140,8 @@ pub struct MapEntry {
     pub line: usize,
     pub name: String,
     pub has_search_line: bool,
+    /// Every line the entry owns, which is what the index reads for keywords.
+    pub body: String,
 }
 
 /// Entries in a map file: top level list items opening with a bold wikilink.
@@ -187,6 +189,7 @@ pub fn map_entries(text: &str) -> Vec<MapEntry> {
             line: start + 1,
             name: name.clone(),
             has_search_line,
+            body: lines[*start..end].join("\n"),
         });
     }
     out

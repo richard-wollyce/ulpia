@@ -19,11 +19,20 @@ It knows the three agents by shape, not by configuration:
 
 ```
 kb check [path]... [--strict] [--all]
+kb index [path]... [--all]
+kb route <question> [path]... [--top N]
 ```
 
 ```
 kb check ../../ ../../../steve ../../../yaron
+kb route "quanto de proteina por refeicao" ../../ ../../../steve ../../../yaron
 ```
+
+`check` reports what is broken. `index` emits the derived index as JSON. `route` answers which agent
+and which files a question should open, by scoring it against the `Search for:` lines, with **no model
+involved**: instant, free, explainable, and incapable of inventing a file that does not exist. It
+prints which words matched, so a bad ranking can be diagnosed instead of guessed at, and it says
+plainly when nothing matched rather than returning a confident guess.
 
 - `--strict` counts warnings toward the exit code, which is what a commit hook wants.
 - `--all` includes files git does not track. By default only tracked files are checked, because the
