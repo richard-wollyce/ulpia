@@ -115,26 +115,38 @@ pub fn dashes(text: &str) -> Vec<(usize, char)> {
     out
 }
 
-/// Front matter keys, if the file opens with a `---` fenced block.
-pub fn front_matter(text: &str) -> Option<Vec<String>> {
+/// Front matter as key and value pairs, if the file opens with a `---` fenced block.
+pub fn front_matter(text: &str) -> Option<Vec<(String, String)>> {
     let mut lines = text.lines();
     if lines.next()?.trim() != "---" {
         return None;
     }
-    let mut keys = Vec::new();
+    let mut pairs = Vec::new();
     for line in lines {
         if line.trim() == "---" {
-            return Some(keys);
+            return Some(pairs);
         }
-        if let Some((key, _)) = line.split_once(':') {
+        // An indented line belongs to the key above it. The test has to run on the
+        // raw line, because trimming first makes the leading whitespace vanish and
+        // the check always pass, which is how the first version of this shipped.
+        if line.starts_with(char::is_whitespace) {
+            continue;
+        }
+        if let Some((key, value)) = line.split_once(':') {
             let key = key.trim();
             if !key.is_empty() && !key.starts_with('#') {
-                keys.push(key.to_string());
+                pairs.push((key.to_string(), value.trim().to_string()));
             }
         }
     }
     None // opened and never closed, so not front matter
 }
+
+/// Legal values for the two axes in ADR-0007. They are orthogonal on purpose:
+/// provenance says who made the claim, stage says where it is in its life, and
+/// collapsing them is how a base loses track of what was verified.
+const PROVENANCE: &[&str] = &["human", "agent", "external"];
+const STAGE: &[&str] = &["raw", "distilled", "derived"];
 
 pub struct MapEntry {
     pub line: usize,
@@ -316,11 +328,13 @@ fn check_note(base: &Base, file: &MdFile, findings: &mut Vec<Finding>) {
     // like the evidence ruler itself, is not evidence about anything, so the
     // requirement keys off the file declaring a source rather than off where it
     // sits.
-    if let Some(keys) = front_matter(&file.text) {
-        let declares_source = keys.iter().any(|k| k == "source" || k == "type");
-        if declares_source {
+    if let Some(pairs) = front_matter(&file.text) {
+        let has = |k: &str| pairs.iter().any(|(key, _)| key == k);
+        let value = |k: &str| pairs.iter().find(|(key, _)| key == k).map(|(_, v)| v.clone());
+
+        if has("source") || has("type") {
             for required in ["evidence_tier", "valid_for"] {
-                if !keys.iter().any(|k| k == required) {
+                if !has(required) {
                     findings.push(Finding {
                         level: Level::Warning,
                         code: "W04",
@@ -329,6 +343,28 @@ fn check_note(base: &Base, file: &MdFile, findings: &mut Vec<Finding>) {
                         message: format!("front matter declares a source but has no {required}"),
                     });
                 }
+            }
+        }
+
+        // ADR-0007. Without these two, the rule that an agent claim is never
+        // promoted to human or external cannot be applied by anyone reading it.
+        for (field, legal) in [("provenance", PROVENANCE), ("stage", STAGE)] {
+            match value(field) {
+                None => findings.push(Finding {
+                    level: Level::Warning,
+                    code: "W05",
+                    file: file.rel.clone(),
+                    line: 1,
+                    message: format!("front matter has no {field}, so who wrote this is unknown"),
+                }),
+                Some(v) if !legal.contains(&v.as_str()) => findings.push(Finding {
+                    level: Level::Error,
+                    code: "E04",
+                    file: file.rel.clone(),
+                    line: 1,
+                    message: format!("{field} is '{v}', which is not one of {}", legal.join(", ")),
+                }),
+                Some(_) => {}
             }
         }
     }
@@ -394,10 +430,20 @@ mod tests {
     }
 
     #[test]
-    fn reads_front_matter_keys() {
+    fn reads_front_matter_keys_and_values() {
         let text = "---\ntitle: A note\nevidence_tier: B\n---\n\n# A note";
-        let keys = front_matter(text).expect("front matter");
-        assert_eq!(keys, vec!["title".to_string(), "evidence_tier".to_string()]);
+        let pairs = front_matter(text).expect("front matter");
+        assert_eq!(pairs[0], ("title".to_string(), "A note".to_string()));
+        assert_eq!(pairs[1], ("evidence_tier".to_string(), "B".to_string()));
+    }
+
+    #[test]
+    fn nested_front_matter_lines_are_not_keys() {
+        // An indented line belongs to the key above it, not to the document.
+        let text = "---\nmetadata:\n  type: project\n---\n";
+        let pairs = front_matter(text).expect("front matter");
+        assert_eq!(pairs.len(), 1);
+        assert_eq!(pairs[0].0, "metadata");
     }
 
     #[test]

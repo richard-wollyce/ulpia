@@ -73,6 +73,8 @@ Exit code is 1 when there are errors, or when `--strict` and there are warnings.
 | W02  | warn  | A map entry with no `Search for:` line, so grep cannot route to it |
 | W03  | warn  | An em dash or en dash, which house style forbids |
 | W04  | warn  | A note declaring a source with no `evidence_tier` or `valid_for` |
+| W05  | warn  | A note with no `provenance` or no `stage`, so who wrote it is unknown |
+| E04  | error | `provenance` or `stage` carries a value outside the legal set |
 
 Links inside fenced blocks and inline code are ignored, because a base that documents its own link
 convention writes `[[file-name]]` in backticks and those are examples, not references. The

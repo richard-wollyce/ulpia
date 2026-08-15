@@ -34,6 +34,8 @@ checks:
     W02 no-search-line  a map entry with no Search for line
     W03 dash            an em dash or en dash, which house style forbids
     W04 front-matter    a note declaring a source with no evidence_tier or valid_for
+    W05 no-provenance   a note with no provenance or stage, so who wrote it is unknown
+    E04 bad-provenance  provenance or stage carries a value outside the legal set
 
 exit code is 1 when check finds errors, or when --strict and it finds warnings.
 ";
