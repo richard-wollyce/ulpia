@@ -84,6 +84,43 @@ A file contributes to the fusion **once**, at the rank of its best chunk. Scorin
 turns the ranking into "which file has the most matching pieces", which is a different question and
 usually the wrong one.
 
+### `kb blocks`: what the agent wakes up knowing, and what it costs
+
+```
+kb blocks .            # the report
+kb blocks . --emit     # the assembled resident constitution
+```
+
+An optional `blocks.txt` at the base root declares the constitution as labelled blocks, **in stability
+order, most stable first**, each marked `resident` or `on-demand`.
+
+The order is a mechanism rather than a preference. Prefix caching reuses the KV state of a prompt only
+up to the first token that differs, so a change invalidates its own block and everything after it. Put
+a frequently changing block early and every switch pays to recompute the stable ones behind it, for
+nothing.
+
+The report prints exactly that asymmetry:
+
+```
+  #   block      mode       files     bytes   ~tokens  cumulative
+  1   identity   resident       3     23643      5911        5911
+  2   user       resident       1      9595      2399        8310
+  3   map        resident       1     25617      6404       14714
+
+  cost of changing a block, in tokens that have to be prefilled again:
+    identity     14714
+    user          8803
+    map           6404
+```
+
+**The measurement it produced immediately:** the map is 44% of Zed's resident set and **69% of
+Steve's**, after the map was already cut from 99 KB to 24 KB. It is the largest resident block and the
+one that changes most often, which is the worst combination available.
+
+It is still resident only because the agent routes by reading it. **The moment `kb route` is wired
+into the loop, the map becomes on-demand and the resident set drops by 46% across the fleet**, because
+routing is the map's whole job and it will be happening outside the model by then.
+
 ### `kb remember`: the write side
 
 ```

@@ -5,6 +5,7 @@
 //! reports what is broken (`check`) or answers which files a question should open (`route`).
 
 mod base;
+mod blocks;
 mod checks;
 mod index;
 mod remember;
@@ -24,8 +25,10 @@ usage:
     kb index [path]... [--db FILE] [--json] [--all]
     kb route <question> [path]... [--top N] [--hybrid] [--db FILE]
     kb remember <claim> [path]... [--db FILE]
+    kb blocks [path] [--emit]
 
     path        base to work on, defaults to the current directory
+    --emit      blocks: print the assembled resident constitution instead of the report
     --strict    check: count warnings toward the exit code
     --all       include files git does not track, normally the private layer
     --top N     route: how many candidates to print, default 5
@@ -108,6 +111,10 @@ fn main() -> ExitCode {
             let question = positional[0];
             let paths = paths_or_default(&positional[1..]);
             cmd_route(question, &paths, all, top, hybrid, &db)
+        }
+        "blocks" => {
+            let paths = paths_or_default(&positional);
+            cmd_blocks(paths[0], args.iter().any(|a| a == "--emit"))
         }
         "remember" => {
             if positional.is_empty() {
@@ -346,6 +353,68 @@ fn report_keyword(hits: &[index::Hit], top: usize) -> ExitCode {
         );
         println!("       matched: {}", hit.matched.join(", "));
     }
+    ExitCode::SUCCESS
+}
+
+// ---------------------------------------------------------------------------
+// blocks
+// ---------------------------------------------------------------------------
+
+fn cmd_blocks(path: &str, emit: bool) -> ExitCode {
+    let root = Path::new(path);
+    let blocks = match blocks::read(root) {
+        Some(b) => b,
+        None => {
+            eprintln!("kb: no blocks.txt at {path}");
+            return ExitCode::from(1);
+        }
+    };
+
+    if emit {
+        print!("{}", blocks::assemble(root, &blocks));
+        return ExitCode::SUCCESS;
+    }
+
+    println!("{path}/blocks.txt");
+    println!();
+    println!(
+        "  {:<3} {:<10} {:<10} {:>5} {:>9} {:>9} {:>11}",
+        "#", "block", "mode", "files", "bytes", "~tokens", "cumulative"
+    );
+
+    let mut cumulative = 0usize;
+    for (i, b) in blocks.iter().enumerate() {
+        let resident = b.mode == blocks::Mode::Resident;
+        if resident {
+            cumulative += b.tokens();
+        }
+        println!(
+            "  {:<3} {:<10} {:<10} {:>5} {:>9} {:>9} {:>11}",
+            i + 1,
+            b.name,
+            if resident { "resident" } else { "on-demand" },
+            b.files.len(),
+            b.bytes,
+            b.tokens(),
+            if resident { cumulative.to_string() } else { "-".to_string() }
+        );
+        for m in &b.missing {
+            println!("      missing file: {m}");
+        }
+    }
+
+    println!();
+    println!("  resident total: about {cumulative} tokens");
+    println!();
+    println!("  cost of changing a block, in tokens that have to be prefilled again:");
+    for (name, cost) in blocks::invalidation_cost(&blocks) {
+        println!("    {name:<10} {cost:>7}");
+    }
+    println!();
+    println!("  A change invalidates its own block and everything after it, so the");
+    println!("  first block is the most expensive to touch. That is why the order is");
+    println!("  by how often a block changes, most stable first.");
+
     ExitCode::SUCCESS
 }
 
