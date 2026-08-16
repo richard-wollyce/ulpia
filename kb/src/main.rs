@@ -4,18 +4,10 @@
 //! from them. This is that derived thing: it stores nothing, reads the files on every run, and either
 //! reports what is broken (`check`) or answers which files a question should open (`route`).
 
-mod base;
-mod blocks;
-mod checks;
-mod index;
-mod json;
-mod mcp;
-mod remember;
-mod retrieve;
-mod store;
 
+use kb::checks::{Finding, Level};
+use kb::{base, blocks, checks, index, mcp, remember, retrieve, store};
 use base::Base;
-use checks::{Finding, Level};
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 
@@ -459,7 +451,7 @@ fn cmd_remember(claim: &str, paths: &[&str], all: bool, db: &str) -> ExitCode {
                 eprintln!("kb: {db} predates the tracked column and could not say which");
                 eprintln!("    of its rows were private, so it was emptied. Run `kb index`.");
             }
-            s.search(&terms, 25, scope).unwrap_or_default()
+            s.search(&terms, remember::EVIDENCE_WIDTH, scope).unwrap_or_default()
         }
         Err(e) => {
             eprintln!("kb: cannot open {db}: {e}. Run `kb index` first.");

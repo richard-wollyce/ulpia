@@ -29,12 +29,9 @@ use std::io::{BufRead, Write};
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 
-use crate::base::Base;
-use crate::index;
 use crate::json::{self, Value};
+use crate::memory::Memory;
 use crate::remember;
-use crate::retrieve;
-use crate::store;
 
 const SERVER_NAME: &str = "kb";
 const SERVER_VERSION: &str = env!("CARGO_PKG_VERSION");
@@ -51,69 +48,46 @@ const METHOD_NOT_FOUND: i64 = -32601;
 const INVALID_PARAMS: i64 = -32602;
 
 struct Server {
-    entries: Vec<index::Entry>,
-    aliases: Vec<(String, String)>,
-    store: store::Store,
-    scope: store::Scope,
+    memory: Memory,
     top: usize,
 }
 
 pub fn serve(paths: &[&str], all: bool, db: &str, top: usize) -> ExitCode {
-    let mut entries = Vec::new();
-    let mut aliases = Vec::new();
+    let owned: Vec<PathBuf> = paths.iter().map(PathBuf::from).collect();
+    let refs: Vec<&Path> = owned.iter().map(|p| p.as_path()).collect();
 
-    for path in paths {
-        let base = match Base::discover(Path::new(path), all) {
-            Ok(b) => b,
-            Err(e) => {
-                eprintln!("kb serve: cannot read {path}: {e}");
-                return ExitCode::from(1);
-            }
-        };
-
-        // The refusal that matters. When git could not be asked, every file's privacy
-        // is unknown, and unknown is not public. Serving on a guess is exactly the
-        // failure that put profile/richard.md into a query that never asked for it.
-        if !all && !base.tracked_only {
-            eprintln!("kb serve: refusing to serve {path}: git could not be consulted, so");
-            eprintln!("    there is no way to tell which files are private. Either make it a");
-            eprintln!("    git repository, or pass --all to say you meant to serve everything.");
-            return ExitCode::from(1);
-        }
-
-        eprintln!(
-            "kb serve: {path}, {} files{}",
-            base.files.len(),
-            if all { ", private layer INCLUDED" } else { "" }
-        );
-        entries.extend(index::build(&base));
-        aliases.extend(base.aliases.clone());
-    }
-
-    let store = match store::Store::open(&PathBuf::from(db)) {
-        Ok(s) => {
-            if s.rebuilt {
-                eprintln!("kb serve: {db} predated the tracked column and was emptied.");
-                eprintln!("    Run `kb index` before relying on retrieval.");
-            }
-            s
-        }
+    // Everything the server knows about the base comes through Memory, including the
+    // refusal when git could not be consulted. Rebuilding the pipeline here is how a
+    // second caller ends up expanding aliases for one scorer and not the other, which
+    // has already happened once in this codebase.
+    let memory = match Memory::open(&refs, all, Path::new(db)) {
+        Ok(m) => m,
         Err(e) => {
-            eprintln!("kb serve: cannot open {db}: {e}. Run `kb index` first.");
+            eprintln!("kb serve: {e}");
             return ExitCode::from(1);
         }
     };
 
-    let scope = if all { store::Scope::All } else { store::Scope::Public };
+    if memory.index_was_rebuilt {
+        eprintln!("kb serve: {db} predated the tracked column and was emptied.");
+        eprintln!("    Run `kb index` before relying on retrieval.");
+    }
+
+    for base in &memory.bases {
+        eprintln!(
+            "kb serve: {}{}",
+            base.display(),
+            if all { "  (private layer INCLUDED)" } else { "" }
+        );
+    }
     eprintln!(
         "kb serve: {} map entries, {} aliases, scope {:?}. Ready on stdio.",
-        entries.len(),
-        aliases.len(),
-        scope
+        memory.entry_count(),
+        memory.alias_count(),
+        memory.scope()
     );
 
-    let server = Server { entries, aliases, store, scope, top };
-    server.run()
+    Server { memory, top }.run()
 }
 
 impl Server {
@@ -293,16 +267,13 @@ impl Server {
     // -- the tools themselves ------------------------------------------------
 
     fn route(&self, question: &str, top: usize) -> String {
-        let hits = index::route(question, &self.entries, &self.aliases, top);
+        let hits = self.memory.route(question, top);
         if hits.is_empty() {
             return no_match(question);
         }
 
         let mut out = format!("Files to open for: {question}\n\n");
         for (i, hit) in hits.iter().enumerate() {
-            if hit.entry.rel.is_empty() {
-                continue;
-            }
             out.push_str(&format!(
                 "{}. {}/{}  ({})\n   matched: {}\n   {}\n",
                 i + 1,
@@ -317,15 +288,7 @@ impl Server {
     }
 
     fn retrieve(&self, question: &str, top: usize) -> String {
-        let terms = index::expand_query(question, &self.aliases);
-        let keyword =
-            index::route(question, &self.entries, &self.aliases, top * retrieve::KEYWORD_OVERSAMPLE);
-        let text = self
-            .store
-            .search(&terms, top * retrieve::TEXT_OVERSAMPLE, self.scope)
-            .unwrap_or_default();
-
-        let found = retrieve::fuse(&keyword, &text, top);
+        let found = self.memory.retrieve(question, top);
         if found.is_empty() {
             return no_match(question);
         }
@@ -337,7 +300,7 @@ impl Server {
         // line a caller sees five files and no passages and concludes the base is
         // thin, which is the wrong conclusion and an invisible one. Found by pointing
         // a benchmark at the wrong index file and believing the result.
-        if found.iter().all(|f| f.passages.is_empty()) {
+        if self.memory.looks_stale(&found) {
             out.push_str(
                 "NOTE: the keyword index ranked these files but the full text index has no \
                  chunks for any of them, which usually means the index is stale or was built \
@@ -372,17 +335,9 @@ impl Server {
     }
 
     fn remember(&self, claim: &str) -> String {
-        let terms = index::expand_query(claim, &self.aliases);
-        let hits = self.store.search(&terms, 25, self.scope).unwrap_or_default();
-        let a = remember::assess(claim, &terms, &hits);
-
-        let outcome = match a.outcome {
-            remember::Outcome::Noop => "NOOP",
-            remember::Outcome::Update => "UPDATE",
-            remember::Outcome::Add => "ADD",
-        };
-
-        let mut out = format!("claim: {claim}\nproposal: {outcome}\nreason: {}\n", a.reason);
+        let a = self.memory.remember(claim);
+        let mut out =
+            format!("claim: {claim}\nproposal: {}\nreason: {}\n", a.outcome.label(), a.reason);
 
         if a.evidence.is_empty() {
             out.push_str("\nNothing in the base overlaps this claim.\n");

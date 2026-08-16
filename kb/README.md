@@ -153,6 +153,48 @@ delete on its own; the constraint is that the reason goes in the commit message.
 A useful side effect, found on the first real run: asking about the calorie floor returned containment
 1.00 from **two** files, which is the base telling you a fact is written down twice.
 
+### `kb::memory::Memory`: the contract
+
+`kb` is a library as well as a binary. **Start at `Memory`**: three verbs over a set of bases, and the
+one place an answer is computed.
+
+```rust
+let memory = kb::memory::Memory::open(&[Path::new("../../")], false, Path::new(".kb/index.db"))?;
+
+memory.route("why is poke expensive in protein", 5);     // which files to open
+memory.retrieve("why is poke expensive in protein", 5);  // the passages themselves
+memory.remember("the calorie floor for men is 1600");    // ADD / UPDATE / NOOP, writes nothing
+```
+
+The `serve` subcommand wraps it in MCP for other people's runtimes, the Tauri GUI links it and calls it
+directly, and a hosted service later would wrap it in HTTP. Three surfaces, one pipeline, no way for
+them to answer differently.
+
+**Reaching past it into the modules means rebuilding the pipeline**, which is how two of the bugs
+listed at the bottom of this file happened: alias expansion reaching one scorer and not the other, and
+the two oversampling factors drifting apart. `mcp.rs` did assemble it by hand for one commit, and that
+is exactly why it does not any more.
+
+`Memory::open` refuses a base whose privacy is unknowable, meaning git could not be consulted, unless
+the caller explicitly asked for the private layer. Unknown is not public.
+
+#### A fleet root, accepted and never required
+
+A path may be a base, or a **fleet root**: a directory that is not itself a base but whose immediate
+children are. Both work.
+
+```
+kb serve C:\Users\user\Desktop        # finds steve, yaron and zed
+kb serve C:\Users\user\Desktop\zed    # just the one
+```
+
+Requiring an arrangement would be an assumption about the user's filesystem, which ADR-0008 forbids in
+as many words. Accepting one makes a tidy layout a convenience rather than a shape imposed on anyone,
+so grouping agents under a parent is optional tidying instead of a migration.
+
+A directory holding a map of its own is a base and is never expanded, even when it contains bases:
+expanding it would silently drop the parent's own notes.
+
 ### `kb serve`: the base as an MCP server
 
 ```

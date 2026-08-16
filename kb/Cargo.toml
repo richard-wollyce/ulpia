@@ -19,6 +19,17 @@ description = "A linter for file based knowledge bases"
 #
 # `bundled` compiles SQLite from the amalgamation, so there is no system package to
 # install and nothing to run.
+# A library target as well as a binary, so the Tauri backend can link the memory
+# instead of shelling out to the CLI and parsing its stdout. ADR-0009 chose Tauri
+# partly for this; it was not possible while the crate was bin only.
+[lib]
+name = "kb"
+path = "src/lib.rs"
+
+[[bin]]
+name = "kb"
+path = "src/main.rs"
+
 [dependencies]
 rusqlite = { version = "0.37", features = ["bundled"] }
 

@@ -143,6 +143,12 @@ pub fn assess(claim: &str, terms: &[String], hits: &[Hit]) -> Assessment {
     Assessment { outcome, reason, evidence }
 }
 
+/// How many chunks to weigh a claim against. Wide enough that the same fact written
+/// in two places is visible, which is a finding rather than noise: the first real run
+/// of `remember` returned containment 1.00 from two files, which is the base telling
+/// you something is written down twice.
+pub const EVIDENCE_WIDTH: usize = 25;
+
 /// What this tool refuses to do, printed with every assessment.
 ///
 /// Not decoration. A tool that proposes three outcomes and stays silent about the

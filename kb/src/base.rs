@@ -77,6 +77,23 @@ fn load_aliases(root: &Path) -> Vec<(String, String)> {
         .collect()
 }
 
+/// True when the directory holds a root map file, which is what makes it a base.
+///
+/// Matched case sensitively against the names actually on disk, for the same reason
+/// `discover` does: Windows answers yes to `INDEX.md` when the file is really
+/// `index.md`, which once made Yaron's operating instructions look like its map and
+/// silently skipped every map check.
+pub fn has_map(dir: &Path) -> bool {
+    let names: Vec<String> = match fs::read_dir(dir) {
+        Ok(entries) => entries
+            .filter_map(|e| e.ok())
+            .map(|e| e.file_name().to_string_lossy().to_string())
+            .collect(),
+        Err(_) => return false,
+    };
+    MAP_NAMES.iter().any(|m| names.iter().any(|n| n == m))
+}
+
 impl Base {
     /// Discovers a base. Unless `all` is set, only files tracked by git are
     /// considered: the private layer is gitignored by design, it is nobody's to
