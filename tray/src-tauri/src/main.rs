@@ -28,6 +28,7 @@ use tauri::menu::{Menu, MenuItem, PredefinedMenuItem};
 use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
 use tauri::{AppHandle, Emitter, Manager, State};
 use tauri_plugin_autostart::MacosLauncher;
+use tauri_plugin_global_shortcut::{Code, Modifiers, Shortcut, ShortcutState};
 use tauri_plugin_notification::NotificationExt;
 
 /// One frame per ten percent. A tray icon has no progress API on any platform, so
@@ -192,9 +193,15 @@ fn ask(app: AppHandle, state: State<Fleet>, question: String) -> Result<Vec<Answ
     progress(&app, 100);
 
     if found.is_empty() {
+        // The icon has to come back to idle here too. Leaving it at a full progress
+        // bar is what made a 283 ms "nothing matched" look like an unbounded wait:
+        // the panel said so in small text while the tray still showed work in
+        // progress, and the tray is what the eye goes to. A failure that looks like
+        // slowness is worse than a failure that looks like a failure.
+        idle(&app);
         // Said plainly on purpose. A router that always returns something teaches
         // you to trust a guess.
-        return Err(format!("Nothing matched \"{question}\"."));
+        return Err(format!("Nada casou com \"{question}\"."));
     }
 
     let stale = memory.looks_stale(&found);
@@ -315,10 +322,30 @@ fn toggle(app: &AppHandle, label: &str, near_tray: Option<(f64, f64)>) {
 }
 
 fn main() {
+    // Ctrl+Shift+Space summons the compose window from anywhere, which is the point
+    // of a tray app: the thought arrives while you are in another program, and a
+    // shortcut that only works when the panel already has focus is no shortcut.
+    //
+    // Space rather than a letter because letter combinations collide with editors
+    // and browsers far more often, and a global shortcut that steals a key from
+    // something the user already relies on is a bug they will blame on us.
+    let summon = Shortcut::new(Some(Modifiers::CONTROL | Modifiers::SHIFT), Code::Space);
+    let for_handler = summon;
+
+    let shortcuts = tauri_plugin_global_shortcut::Builder::new()
+        .with_handler(move |app, pressed, event| {
+            // Fires on both press and release. Acting on both toggles twice and the
+            // window appears to do nothing at all.
+            if pressed == &for_handler && event.state() == ShortcutState::Pressed {
+                toggle(app, "compose", None);
+            }
+        })
+        .build();
+
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_notification::init())
-        .plugin(tauri_plugin_global_shortcut::Builder::new().build())
+        .plugin(shortcuts)
         .plugin(tauri_plugin_autostart::init(
             MacosLauncher::LaunchAgent,
             None,
@@ -332,7 +359,7 @@ fn main() {
             open_compose,
             ask_from_compose
         ])
-        .setup(|app| {
+        .setup(move |app| {
             let handle = app.handle().clone();
 
             let open = MenuItem::with_id(app, "open", "Open panel", true, None::<&str>)?;
@@ -381,6 +408,14 @@ fn main() {
                     }
                 })
                 .build(app)?;
+
+            // Registered after the plugin is initialised, and the result is reported
+            // rather than swallowed: a shortcut another program already owns fails
+            // here, and failing in silence means the user presses it forever.
+            use tauri_plugin_global_shortcut::GlobalShortcutExt;
+            if let Err(e) = handle.global_shortcut().register(summon) {
+                eprintln!("fleet: could not register Ctrl+Shift+Space: {e}");
+            }
 
             // Opening at startup means the first question does not pay for discovery
             // and the panel can say what it is serving before being asked.
