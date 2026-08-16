@@ -331,6 +331,22 @@ impl Server {
         }
 
         let mut out = format!("Passages for: {question}\n\n");
+
+        // Every file ranked by keywords and none by text means the full text index
+        // does not cover these files, which usually means it is stale. Without this
+        // line a caller sees five files and no passages and concludes the base is
+        // thin, which is the wrong conclusion and an invisible one. Found by pointing
+        // a benchmark at the wrong index file and believing the result.
+        if found.iter().all(|f| f.passages.is_empty()) {
+            out.push_str(
+                "NOTE: the keyword index ranked these files but the full text index has no \
+                 chunks for any of them, which usually means the index is stale or was built \
+                 over different bases. Run `kb index` over the same paths this server was \
+                 started with. The rankings below are still meaningful; the missing passages \
+                 are not evidence that the files are empty.\n\n",
+            );
+        }
+
         for f in &found {
             out.push_str(&format!("## {}/{}", f.base, f.path));
             if !f.title.is_empty() {
