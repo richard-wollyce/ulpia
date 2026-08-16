@@ -19,7 +19,9 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 use std::path::PathBuf;
-use std::sync::Mutex;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{Arc, Mutex};
+use std::time::Duration;
 
 use kb::memory::Memory;
 use serde::Serialize;
@@ -47,6 +49,29 @@ const PROGRESS_FRAMES: [&[u8]; 11] = [
     include_bytes!("../icons/tray-100.png"),
 ];
 const IDLE_ICON: &[u8] = include_bytes!("../icons/tray.png");
+
+/// A turning ring, for work with no denominator.
+///
+/// Generation produces tokens at a knowable rate toward an unknowable total, so a
+/// bar there would have to guess, and a bar that guesses lies. A ring that turns
+/// says "working" and claims nothing about how much is left. Twelve frames at 80 ms
+/// is about one revolution a second, fast enough to read as motion and slow enough
+/// not to draw the eye away from what the person is doing.
+const SPIN_FRAMES: [&[u8]; 12] = [
+    include_bytes!("../icons/spin-00.png"),
+    include_bytes!("../icons/spin-01.png"),
+    include_bytes!("../icons/spin-02.png"),
+    include_bytes!("../icons/spin-03.png"),
+    include_bytes!("../icons/spin-04.png"),
+    include_bytes!("../icons/spin-05.png"),
+    include_bytes!("../icons/spin-06.png"),
+    include_bytes!("../icons/spin-07.png"),
+    include_bytes!("../icons/spin-08.png"),
+    include_bytes!("../icons/spin-09.png"),
+    include_bytes!("../icons/spin-10.png"),
+    include_bytes!("../icons/spin-11.png"),
+];
+const SPIN_INTERVAL: Duration = Duration::from_millis(80);
 
 /// The one absolute path in the system, per ADR-0011, and it lives outside the
 /// fleet so that moving the fleet is a directory move with nothing to edit inside it.
@@ -93,6 +118,11 @@ struct Fleet {
     memory: Mutex<Option<Memory>>,
     root: Mutex<Option<PathBuf>>,
     progress: Mutex<Progress>,
+    /// Whether the ring should be turning. Read by the spinner thread every frame.
+    spinning: Arc<AtomicBool>,
+    /// Whether a spinner thread exists. Separate from `spinning` so a stop and an
+    /// immediate restart cannot leave two threads sharing one icon.
+    running: Arc<AtomicBool>,
 }
 
 #[derive(Serialize)]
@@ -358,16 +388,23 @@ fn publish(app: &AppHandle, state: &Fleet, next: Progress) {
         *state.progress.lock().unwrap() = next.clone();
     }
 
-    // The tray icon follows the bar when there is one and goes idle otherwise. It is
-    // the only progress visible once the panel is dismissed, and leaving it showing
-    // work that finished is what made a 283 ms failure look like an endless wait.
-    if let Some(tray) = app.tray_by_id("fleet") {
-        let bytes = if next.total > 0 && next.done < next.total {
-            let frac = next.done as f64 / next.total as f64;
-            PROGRESS_FRAMES[((frac * 10.0).round() as usize).min(10)]
-        } else if next.stage.is_some() {
-            // Work with no countable total still deserves a mark that says "busy".
-            PROGRESS_FRAMES[5]
+    // The tray is the only progress visible once the panel is dismissed, and leaving
+    // it showing work that finished is what made a 283 ms failure look like an
+    // endless wait. Three states, and which one applies is decided by whether the
+    // work has a denominator rather than by which command is running.
+    let counted_work = next.total > 0;
+    let uncounted_work = !counted_work && next.stage.is_some();
+
+    // The spinner owns the icon while it runs, so stop it before drawing anything
+    // else or the two fight over the tray a frame at a time.
+    state.spinning.store(uncounted_work, Ordering::Relaxed);
+
+    if uncounted_work {
+        start_spinner(app, state);
+    } else if let Some(tray) = app.tray_by_id("fleet") {
+        let bytes = if counted_work {
+            let frac = (next.done as f64 / next.total as f64).min(1.0);
+            PROGRESS_FRAMES[(frac * 10.0).round() as usize]
         } else {
             IDLE_ICON
         };
@@ -377,6 +414,41 @@ fn publish(app: &AppHandle, state: &Fleet, next: Progress) {
     }
 
     let _ = app.emit("progress", next);
+}
+
+/// Turns the ring until the flag drops. Started only when nothing is already
+/// turning: two threads on one icon is a stutter, not a faster spin.
+fn start_spinner(app: &AppHandle, state: &Fleet) {
+    if state.running.swap(true, Ordering::Relaxed) {
+        return;
+    }
+
+    let app = app.clone();
+    let spinning = state.spinning.clone();
+    let running = state.running.clone();
+
+    std::thread::spawn(move || {
+        let mut frame = 0usize;
+        while spinning.load(Ordering::Relaxed) {
+            if let Some(tray) = app.tray_by_id("fleet") {
+                if let Ok(icon) = Image::from_bytes(SPIN_FRAMES[frame % SPIN_FRAMES.len()]) {
+                    let _ = tray.set_icon(Some(icon));
+                }
+            }
+            frame += 1;
+            std::thread::sleep(SPIN_INTERVAL);
+        }
+
+        // Clear the icon here rather than in `publish`. The thread is what set the
+        // last frame, so it is what has to unset it, or a stopped spinner leaves the
+        // ring frozen mid turn and the tray still looks busy.
+        if let Some(tray) = app.tray_by_id("fleet") {
+            if let Ok(icon) = Image::from_bytes(IDLE_ICON) {
+                let _ = tray.set_icon(Some(icon));
+            }
+        }
+        running.store(false, Ordering::Relaxed);
+    });
 }
 
 /// A named step, with no bar. This is the whole feedback for a question: the stages

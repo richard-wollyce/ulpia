@@ -87,8 +87,52 @@ def mark(size: int, progress: float | None = None):
     return px
 
 
+SPIN_FRAMES = 12
+
+
+def spinner(size: int, frame: int):
+    """The same badge, with a rotating arc where the index bars sit.
+
+    Rotation rather than a filling bar because generation has no denominator: the
+    model produces tokens at a knowable rate toward an unknowable total. A ring that
+    turns says "working" without claiming to know how much is left, and a bar that
+    guesses is a bar that lies.
+    """
+    unit = size / 32.0
+    cx = cy = size / 2.0
+    outer, inner = 9.5 * unit, 6.5 * unit
+    start = (frame / SPIN_FRAMES) * 2 * math.pi
+    sweep = 1.55 * math.pi  # a gap, so the rotation is visible at all
+
+    def px(x, y):
+        cover = rounded(x, y, size, 2 * unit, 7 * unit)
+        if cover <= 0:
+            return (0, 0, 0, 0)
+
+        r, g, b, a = 24, 24, 27, int(235 * cover)
+
+        dx, dy = x + 0.5 - cx, y + 0.5 - cy
+        dist = math.hypot(dx, dy)
+        if inner <= dist <= outer:
+            # atan2 grows counterclockwise in maths and the screen's y grows
+            # downward, so this turns clockwise, which is what a person expects.
+            angle = (math.atan2(dy, dx) - start) % (2 * math.pi)
+            if angle <= sweep:
+                # Fade along the arc so the leading end reads as the head.
+                lead = angle / sweep
+                r, g, b = 110, 231, 183
+                a = int(a * (0.30 + 0.70 * lead))
+
+        return (r, g, b, a)
+
+    return px
+
+
 # The source the Tauri icon generator expands into every platform format.
 png(ICONS / "source.png", 512, mark(512))
+
+for frame in range(SPIN_FRAMES):
+    png(ICONS / f"spin-{frame:02d}.png", 32, spinner(32, frame))
 
 # The tray icon itself, plus one frame per progress step.
 png(ICONS / "tray.png", 32, mark(32))
