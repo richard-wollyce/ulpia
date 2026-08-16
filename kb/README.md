@@ -84,6 +84,38 @@ A file contributes to the fusion **once**, at the rank of its best chunk. Scorin
 turns the ranking into "which file has the most matching pieces", which is a different question and
 usually the wrong one.
 
+### `kb remember`: the write side
+
+```
+kb remember "the calorie floor for men is 1600 kcal" ../../../yaron
+```
+
+Measures a claim against what the base already says and **proposes** one of ADD, UPDATE or NOOP, with
+the evidence that produced the proposal: the closest chunks, how much of the claim each already
+contains, and which words are shared and which are new.
+
+**It decides nothing.** That is the design, not a limitation. mem0 lets a similarity score decide, and
+a similarity score cannot tell "the user changed their mind" from "two things are true in different
+contexts", which is why it deletes live facts in silence. A number can say how much two texts overlap.
+It cannot say whether the older one is now wrong.
+
+The measure is **containment**, the fraction of the claim's words already present in one chunk, rather
+than Jaccard. Jaccard divides by the union, so a short claim sitting inside a long section scores low
+however completely the section already covers it, which is the opposite of the question being asked.
+
+| Containment | Proposal | Reading |
+|---|---|---|
+| ≥ 0.90 | **NOOP** | The base already says this. Writing it again is the duplicate that grows a base without adding to it |
+| ≥ 0.55 | **UPDATE** | Substantial overlap with a small difference, which is what the same fact with a new value looks like |
+| below | **ADD** | Related material at most, not the same fact |
+
+**DELETE is never proposed**, and the tool says so on every run. Deleting needs the claim to be false
+rather than absent, and no count of shared words can tell those apart. Per ADR-0007 the agent may
+delete on its own; the constraint is that the reason goes in the commit message.
+
+A useful side effect, found on the first real run: asking about the calorie floor returned containment
+1.00 from **two** files, which is the base telling you a fact is written down twice.
+
 ### The alias table
 
 An optional `kb-aliases.txt` at the base root, one `alias = canonical` per line, `#` for comments.

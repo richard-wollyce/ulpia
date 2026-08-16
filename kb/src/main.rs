@@ -7,6 +7,7 @@
 mod base;
 mod checks;
 mod index;
+mod remember;
 mod store;
 
 use base::Base;
@@ -22,6 +23,7 @@ usage:
     kb check [path]... [--strict] [--all]
     kb index [path]... [--db FILE] [--json] [--all]
     kb route <question> [path]... [--top N] [--hybrid] [--db FILE]
+    kb remember <claim> [path]... [--db FILE]
 
     path        base to work on, defaults to the current directory
     --strict    check: count warnings toward the exit code
@@ -106,6 +108,16 @@ fn main() -> ExitCode {
             let question = positional[0];
             let paths = paths_or_default(&positional[1..]);
             cmd_route(question, &paths, all, top, hybrid, &db)
+        }
+        "remember" => {
+            if positional.is_empty() {
+                eprintln!("kb: remember needs a claim\n");
+                print!("{USAGE}");
+                return ExitCode::from(2);
+            }
+            let claim = positional[0];
+            let paths = paths_or_default(&positional[1..]);
+            cmd_remember(claim, &paths, all, &db)
         }
         other => {
             eprintln!("kb: unknown command '{other}'\n");
@@ -334,6 +346,66 @@ fn report_keyword(hits: &[index::Hit], top: usize) -> ExitCode {
         );
         println!("       matched: {}", hit.matched.join(", "));
     }
+    ExitCode::SUCCESS
+}
+
+// ---------------------------------------------------------------------------
+// remember
+// ---------------------------------------------------------------------------
+
+fn cmd_remember(claim: &str, paths: &[&str], all: bool, db: &str) -> ExitCode {
+    let mut aliases = Vec::new();
+    for path in paths {
+        match Base::discover(Path::new(path), all) {
+            Ok(base) => aliases.extend(base.aliases.clone()),
+            Err(e) => {
+                eprintln!("kb: cannot read {path}: {e}");
+                return ExitCode::from(1);
+            }
+        }
+    }
+
+    let terms = index::expand_query(claim, &aliases);
+
+    let hits = match store::Store::open(&PathBuf::from(db)) {
+        Ok(s) => s.search(&terms, 25).unwrap_or_default(),
+        Err(e) => {
+            eprintln!("kb: cannot open {db}: {e}. Run `kb index` first.");
+            return ExitCode::from(1);
+        }
+    };
+
+    let assessment = remember::assess(claim, &terms, &hits);
+
+    println!("claim: {claim}");
+    println!("terms: {}", terms.join(", "));
+    println!();
+
+    if assessment.evidence.is_empty() {
+        println!("closest in the base: nothing matched.");
+    } else {
+        println!("closest in the base:");
+        for e in &assessment.evidence {
+            println!();
+            println!("  {:.2}  {:<8} {}", e.containment, e.base, e.path);
+            println!("        {}", e.heading_path);
+            println!("        \"{}\"", e.excerpt.replace('\n', " ").trim());
+            println!("        shared:  {}", e.shared.join(", "));
+            println!(
+                "        missing: {}",
+                if e.missing.is_empty() { "nothing".to_string() } else { e.missing.join(", ") }
+            );
+        }
+    }
+
+    println!();
+    println!("proposal: {}", assessment.outcome.label());
+    println!("  {}", assessment.reason);
+    println!();
+    for line in remember::DISCLAIMER.lines() {
+        println!("  {line}");
+    }
+
     ExitCode::SUCCESS
 }
 

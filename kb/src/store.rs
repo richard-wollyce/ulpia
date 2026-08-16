@@ -219,6 +219,9 @@ pub struct Hit {
     pub path: String,
     pub heading_path: String,
     pub excerpt: String,
+    /// The whole chunk. `remember` measures overlap against it, and a snippet would
+    /// make the measurement depend on where the snippet happened to cut.
+    pub text: String,
     // No score field on purpose. BM25 still decides the SQL ordering, but the fusion
     // in main.rs is Reciprocal Rank Fusion, which uses position and deliberately
     // ignores the raw value, so carrying it out of here would be a field nothing
@@ -363,6 +366,7 @@ impl Store {
         let mut stmt = self.conn.prepare(
             "SELECT base, path, heading_path,
                     snippet(chunks, 3, '', '', ' ... ', 14),
+                    text,
                     bm25(chunks, 0.0, 0.0, 2.0, 1.0) AS score
              FROM chunks
              WHERE chunks MATCH ?1
@@ -376,6 +380,7 @@ impl Store {
                 path: row.get(1)?,
                 heading_path: row.get(2)?,
                 excerpt: row.get(3)?,
+                text: row.get(4)?,
             })
         })?;
 
