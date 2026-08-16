@@ -272,6 +272,16 @@ fn idf(term: &str, df: &HashMap<String, usize>, total: usize) -> f32 {
 /// Additive on purpose: the original words are always kept, so a wrong alias can
 /// only add noise and can never remove signal. Replacing the query would make a
 /// bad translation silently fatal.
+/// Normalises a question and expands it through the alias table.
+///
+/// Public because both scorers have to see the same terms. Expanding for the keyword
+/// scorer and not for full text was a real bug: "qual o piso calorico" routed
+/// correctly by keyword and matched zero chunks by text, because `calorie floor` was
+/// never substituted on the text side.
+pub fn expand_query(query: &str, aliases: &[(String, String)]) -> Vec<String> {
+    expand(&normalise(query), aliases)
+}
+
 fn expand(terms: &[String], aliases: &[(String, String)]) -> Vec<String> {
     let query_norm = terms.join(" ");
     let mut out = terms.to_vec();

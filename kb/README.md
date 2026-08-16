@@ -1,6 +1,6 @@
 # kb
 
-A linter for file based knowledge bases. Zero dependencies, one binary.
+A linter, indexer and router for file based knowledge bases. One dependency, one binary.
 
 [ADR-0003](../../decisions/0003-knowledge-storage.md) decided that the markdown files stay the source
 of truth and that any index is **derived** from them. This is the first derived thing. It does not
@@ -19,13 +19,14 @@ It knows the three agents by shape, not by configuration:
 
 ```
 kb check [path]... [--strict] [--all]
-kb index [path]... [--all]
-kb route <question> [path]... [--top N]
+kb index [path]... [--db FILE] [--json] [--all]
+kb route <question> [path]... [--top N] [--hybrid] [--db FILE]
 ```
 
 ```
 kb check ../../ ../../../steve ../../../yaron
-kb route "quanto de proteina por refeicao" ../../ ../../../steve ../../../yaron
+kb index ../../ ../../../steve ../../../yaron
+kb route "por que o poke e caro em proteina" ../../ ../../../steve ../../../yaron --hybrid
 ```
 
 `check` reports what is broken. `index` emits the derived index as JSON. `route` answers which agent
@@ -34,12 +35,54 @@ involved**: instant, free, explainable, and incapable of inventing a file that d
 prints which words matched, so a bad ranking can be diagnosed instead of guessed at, and it says
 plainly when nothing matched rather than returning a confident guess.
 
+### The index
+
+`kb index` builds a SQLite file, `.kb/index.db` by default. **It holds nothing that cannot be
+recomputed from the markdown**, which is what keeps ADR-0003 literally true: delete it and the next
+`kb index` rebuilds it.
+
+Two objects, and you can open both with any `sqlite3` binary:
+
+```sql
+files  (base, path, hash, provenance, stage)         -- one row per file
+chunks (base, path, heading_path, text)              -- FTS5, tokenize unicode61 remove_diacritics 2
+```
+
+**Chunking splits at heading boundaries**, then splits any section over ~1800 characters into windows
+with 300 characters of overlap, cutting at a blank line when there is one. Heading boundaries are free
+structure: the note template already forces named sections, so a chunk means something on its own
+without a parser. The heading path travels with the chunk, `Title > Section > Subsection`, because it
+carries context the chunk itself rarely repeats.
+
+**Content hashing decides what gets reindexed.** Unchanged file, skipped. Changed file, its chunks
+replaced. Deleted file, its rows removed. Reindexing 111 unchanged files is instant, which is what lets
+this run on every startup instead of being a chore.
+
+The hash is `std`'s SipHash, deliberately not cryptographic: the question is "did this change since
+last time", and the adversary is a text editor.
+
 ### How route scores
 
 Each query word is weighted by **inverse document frequency**, so a word that appears in most entries
 carries almost no information about which file to open, which is arithmetic rather than opinion. A
 multi word keyword found whole in the question scores highest. Hand written keywords outrank the title
 and the file name, which outrank the entry prose.
+
+With `--hybrid`, that keyword ranking is fused with BM25 full text search over the chunks, using
+**Reciprocal Rank Fusion**: each list contributes `1 / (60 + rank)` to every document it ranks, and the
+sums are compared. RRF uses position and ignores the raw scores on purpose, because a BM25 value and a
+keyword score live in different numeric universes and normalising them into a weighted sum means
+inventing a conversion factor and then tuning it per corpus. Ranks need no conversion.
+
+**The two scorers are kept independent, and that is a design constraint rather than an implementation
+detail.** RRF reads agreement between lists as strong evidence, and agreement is only evidence when the
+lists are looking at different things. So the `Search for:` lines and the map file itself are excluded
+from the text index: they are the keyword scorer's corpus, and indexing them twice would make one
+scorer wearing two hats look like two scorers agreeing.
+
+A file contributes to the fusion **once**, at the rank of its best chunk. Scoring every matching chunk
+turns the ranking into "which file has the most matching pieces", which is a different question and
+usually the wrong one.
 
 ### The alias table
 
@@ -107,12 +150,15 @@ package fixed it. See F4 in [the fleet backlog](../../fleet/backlog.md).
 
 ## Design notes
 
-**Zero dependencies is a choice, not a limitation.** Directory walking, front matter reading and the
-wikilink parser are about two hundred lines of `std`. The cost of a regex crate here is a supply chain,
-a compile time and a version to track, against parsing a bracket pair. The north star's efficiency
-clause is not rhetorical: it decides real calls, and this is one of them.
+**One dependency, and the stance behind it changed on purpose.** For a linter that matches brackets,
+zero dependencies was right: a regex crate would have bought a supply chain against parsing a bracket
+pair. It stopped being right at the index. SQLite brings FTS5 with BM25 built in, holds the chunks and
+their metadata in the same file, and stays readable with any `sqlite3` binary, which is the property
+the whole design rests on. Writing a B-tree and a full text index by hand to avoid it would be the same
+mistake pointed the other way. `rusqlite` with `bundled` compiles SQLite in, so there is still no
+system package and nothing to run.
 
-**Two bugs found by running it on real bases**, both worth remembering:
+**Five bugs found by running it on real bases**, all worth remembering:
 
 1. **Case insensitive filesystems lie.** Asking Windows whether `INDEX.md` exists returns true when the
    file is really `index.md`, so Yaron's operating instructions were detected as its map, the map
@@ -124,5 +170,17 @@ clause is not rhetorical: it decides real calls, and this is one of them.
    all: indented sub items inside an entry, and cross references in a connections section. The rule is
    now exact, `- **[[name]]**` at the start of a line, and both shapes have tests.
 
-Both were caught in the first ten minutes of real use, which is the argument for pointing a tool at a
-real base before believing it.
+3. **A guard applied after normalisation is not a guard.** The front matter parser trimmed a key and
+   then tested the trimmed key for leading whitespace, so the check for nested keys could never fail
+   and shipped broken until its own test caught it.
+4. **The alias expansion reached one scorer and not the other.** A Portuguese question routed correctly
+   by keyword and matched zero chunks by text, because the English term was substituted on one side
+   only. Both scorers now receive the same expanded terms from one call.
+5. **RRF ranks documents, and the text list ranks chunks.** Scoring every matching chunk made a long
+   file accumulate one contribution per section, so the ranking quietly became "which file has the most
+   matching pieces". The safety protocol, which defines the calorie floor in a single table row, lost
+   to a longer file that mentioned it three times in passing.
+
+All five were caught in the first minutes of real use, which is the argument for pointing a tool at a
+real base before believing it. Three of the five were **silent**: they produced a plausible answer
+rather than an error, which is the class of bug a test suite finds and a demo never does.
