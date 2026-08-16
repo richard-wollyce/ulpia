@@ -214,6 +214,21 @@ pub struct SyncReport {
     pub chunks: usize,
 }
 
+/// Which files a query is allowed to see.
+///
+/// Not a boolean, because the two values are not opposites of equal weight: one is
+/// the default and the other is a deliberate act. A caller that has to name `All`
+/// cannot reach the private layer by forgetting an argument.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum Scope {
+    /// Everything except files git is known to be ignoring. Files whose status is
+    /// unknown are included, which matches what the file walk already does on a base
+    /// that is not a git repository.
+    Public,
+    /// The private layer too. Only ever from an explicit flag.
+    All,
+}
+
 pub struct Hit {
     pub base: String,
     pub path: String,
@@ -222,6 +237,11 @@ pub struct Hit {
     /// The whole chunk. `remember` measures overlap against it, and a snippet would
     /// make the measurement depend on where the snippet happened to cut.
     pub text: String,
+    /// From the `files` row, so a caller can say where a passage came from without
+    /// opening the file. Indexed since the first version and unreachable until now,
+    /// because `search` never joined the table that holds it.
+    pub provenance: Option<String>,
+    pub stage: Option<String>,
     // No score field on purpose. BM25 still decides the SQL ordering, but the fusion
     // in main.rs is Reciprocal Rank Fusion, which uses position and deliberately
     // ignores the raw value, so carrying it out of here would be a field nothing
@@ -231,6 +251,11 @@ pub struct Hit {
 
 pub struct Store {
     conn: Connection,
+    /// True when opening this file had to discard an index built before `tracked`
+    /// existed. The caller has to say so: a router that silently returns nothing
+    /// because its index was just emptied teaches you the base does not cover the
+    /// question, which is the wrong lesson and an expensive one.
+    pub rebuilt: bool,
 }
 
 impl Store {
@@ -239,12 +264,13 @@ impl Store {
             std::fs::create_dir_all(parent)?;
         }
         let conn = Connection::open(path)?;
-        let store = Store { conn };
-        store.schema()?;
+        let mut store = Store { conn, rebuilt: false };
+        store.rebuilt = store.schema()?;
         Ok(store)
     }
 
-    fn schema(&self) -> R<()> {
+    /// Returns true when a pre-privacy-fix index had to be discarded.
+    fn schema(&self) -> R<bool> {
         // `remove_diacritics 2` folds accents inside the tokenizer, which is the same
         // job the hand written fold() does for the keyword scorer, done properly and
         // for free. Portuguese questions against an English base depend on it.
@@ -256,6 +282,9 @@ impl Store {
                 hash        TEXT NOT NULL,
                 provenance  TEXT,
                 stage       TEXT,
+                -- 1 tracked, 0 known untracked, NULL git could not be asked.
+                -- NULL is a third state on purpose: it means unknown, not public.
+                tracked     INTEGER,
                 PRIMARY KEY (base, path)
             );
 
@@ -268,7 +297,22 @@ impl Store {
             );
             ",
         )?;
-        Ok(())
+
+        // An index built before `tracked` existed cannot say which of its rows came
+        // from a `--all` run, and a row whose privacy is unknowable must not be
+        // served on the strength of a guess. If the column had to be added, the file
+        // predates the fix: throw the contents away and let the next sync rebuild
+        // them. The index is derived by ADR-0003, so this costs seconds and buys the
+        // only honest answer.
+        let added = self
+            .conn
+            .execute("ALTER TABLE files ADD COLUMN tracked INTEGER", [])
+            .is_ok();
+        if added {
+            self.conn
+                .execute_batch("DELETE FROM chunks; DELETE FROM files;")?;
+        }
+        Ok(added)
     }
 
     /// Brings the index in line with the files, touching only what changed.
@@ -314,9 +358,16 @@ impl Store {
             };
 
             tx.execute(
-                "INSERT OR REPLACE INTO files (base, path, hash, provenance, stage)
-                 VALUES (?1, ?2, ?3, ?4, ?5)",
-                params![base_name, file.rel, hash, field("provenance"), field("stage")],
+                "INSERT OR REPLACE INTO files (base, path, hash, provenance, stage, tracked)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+                params![
+                    base_name,
+                    file.rel,
+                    hash,
+                    field("provenance"),
+                    field("stage"),
+                    file.tracked.map(|t| t as i64)
+                ],
             )?;
 
             for c in chunk(&file.text) {
@@ -357,30 +408,46 @@ impl Store {
     ///
     /// Takes terms rather than a question, so the caller expands the aliases once and
     /// both scorers see exactly the same words.
-    pub fn search(&self, terms: &[String], limit: usize) -> R<Vec<Hit>> {
+    /// `scope` is not optional and has no default. The leak this replaced came from
+    /// a filter that lived on the file walk and nowhere else, so a query could not
+    /// state what it was allowed to see and therefore saw everything.
+    ///
+    /// `f.tracked IS NOT 0` excludes only files git is *known* to be ignoring. A NULL
+    /// passes, which keeps a base that is not a git repository working exactly as the
+    /// file walk already treats it.
+    pub fn search(&self, terms: &[String], limit: usize, scope: Scope) -> R<Vec<Hit>> {
         let expr = match fts_query(terms) {
             Some(e) => e,
             None => return Ok(Vec::new()),
         };
 
+        // `chunks` stays unaliased: FTS5 wants the table name in MATCH, snippet() and
+        // bm25(), and an alias there is the first thing that breaks.
         let mut stmt = self.conn.prepare(
-            "SELECT base, path, heading_path,
+            "SELECT chunks.base, chunks.path, chunks.heading_path,
                     snippet(chunks, 3, '', '', ' ... ', 14),
-                    text,
+                    chunks.text,
+                    f.provenance, f.stage,
                     bm25(chunks, 0.0, 0.0, 2.0, 1.0) AS score
              FROM chunks
+             LEFT JOIN files f
+                    ON f.base = chunks.base AND f.path = chunks.path
              WHERE chunks MATCH ?1
+               AND (?3 = 1 OR f.tracked IS NOT 0)
              ORDER BY score
              LIMIT ?2",
         )?;
 
-        let rows = stmt.query_map(params![expr, limit as i64], |row| {
+        let unrestricted = i64::from(scope == Scope::All);
+        let rows = stmt.query_map(params![expr, limit as i64, unrestricted], |row| {
             Ok(Hit {
                 base: row.get(0)?,
                 path: row.get(1)?,
                 heading_path: row.get(2)?,
                 excerpt: row.get(3)?,
                 text: row.get(4)?,
+                provenance: row.get(5)?,
+                stage: row.get(6)?,
             })
         })?;
 
@@ -416,6 +483,162 @@ fn fts_query(terms: &[String]) -> Option<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn scratch(name: &str) -> std::path::PathBuf {
+        let dir = std::env::temp_dir()
+            .join("kb-store-tests")
+            .join(format!("{}-{name}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).expect("scratch");
+        dir
+    }
+
+    fn md(rel: &str, text: &str, tracked: Option<bool>) -> crate::base::MdFile {
+        crate::base::MdFile {
+            rel: rel.into(),
+            stem: rel.rsplit('/').next().unwrap().trim_end_matches(".md").into(),
+            text: text.into(),
+            tracked,
+        }
+    }
+
+    fn base_with(root: &std::path::Path, files: Vec<crate::base::MdFile>) -> crate::base::Base {
+        crate::base::Base {
+            root: root.to_path_buf(),
+            map: None,
+            knowledge_dir: None,
+            files,
+            unreadable: Vec::new(),
+            tracked_only: false,
+            aliases: Vec::new(),
+        }
+    }
+
+    /// This guards a leak that was real and reproduced on this machine before the
+    /// fix: `kb index --all` wrote the private layer into the index, and then
+    /// `kb route --hybrid` *without* `--all` returned `profile/richard.md`, because
+    /// the tracked filter lived on the file walk and `search` had no filter at all.
+    /// The database could not say which of its rows were private, so it served all
+    /// of them.
+    #[test]
+    fn an_untracked_file_stays_out_of_a_public_search() {
+        let dir = scratch("public-scope");
+        let mut store = Store::open(&dir.join("i.db")).expect("open");
+
+        let base = base_with(
+            &dir,
+            vec![
+                md("knowledge/public.md", "# Public\n\nthe calorie floor is public\n", Some(true)),
+                md("profile/private.md", "# Private\n\nthe calorie floor is private\n", Some(false)),
+            ],
+        );
+        store.sync(&base, "zed").expect("sync");
+
+        let terms = vec!["calorie".to_string(), "floor".to_string()];
+
+        let public = store.search(&terms, 10, Scope::Public).expect("search");
+        assert!(
+            public.iter().all(|h| h.path != "profile/private.md"),
+            "a file git is known to ignore must never reach a public search"
+        );
+        assert!(
+            public.iter().any(|h| h.path == "knowledge/public.md"),
+            "the tracked file must still come back, or the filter is just breakage"
+        );
+
+        let all = store.search(&terms, 10, Scope::All).expect("search");
+        assert!(
+            all.iter().any(|h| h.path == "profile/private.md"),
+            "Scope::All is the deliberate act that reaches the private layer"
+        );
+    }
+
+    /// Unknown is not ignored. A base outside a git repository has no tracked
+    /// information for any file, and the file walk keeps those files, so a public
+    /// search has to keep them too. Folding NULL into "private" would make
+    /// `kb route --hybrid` silently return nothing outside a repository.
+    #[test]
+    fn unknown_tracking_is_not_treated_as_ignored() {
+        let dir = scratch("unknown-scope");
+        let mut store = Store::open(&dir.join("i.db")).expect("open");
+
+        let base = base_with(
+            &dir,
+            vec![md("knowledge/note.md", "# Note\n\nvulkan prefill was measured\n", None)],
+        );
+        store.sync(&base, "zed").expect("sync");
+
+        let hits = store
+            .search(&["vulkan".to_string()], 5, Scope::Public)
+            .expect("search");
+        assert_eq!(hits.len(), 1, "a file with unknown tracking stays visible");
+    }
+
+    /// `provenance` and `stage` were written into `files` from the first version and
+    /// were unreachable, because `search` queried `chunks` and never joined the table
+    /// holding them. Indexed and unreachable is the same as absent.
+    #[test]
+    fn provenance_survives_the_join_into_a_hit() {
+        let dir = scratch("provenance");
+        let mut store = Store::open(&dir.join("i.db")).expect("open");
+
+        let base = base_with(
+            &dir,
+            vec![md(
+                "knowledge/sourced.md",
+                "---\nprovenance: external\nstage: raw\n---\n\n# Sourced\n\nvulkan prefill measured\n",
+                Some(true),
+            )],
+        );
+        store.sync(&base, "zed").expect("sync");
+
+        let hits = store
+            .search(&["vulkan".to_string()], 5, Scope::Public)
+            .expect("search");
+        let hit = hits.first().expect("the chunk must come back");
+        assert_eq!(hit.provenance.as_deref(), Some("external"));
+        assert_eq!(hit.stage.as_deref(), Some("raw"));
+        assert!(!hit.text.is_empty(), "the full passage travels, not just a snippet");
+    }
+
+    /// Opening an index written before the privacy fix must empty it *and say so*.
+    /// Emptying it silently would leave the router answering "nothing matched",
+    /// which reads as "the base does not cover this" and is a far more expensive
+    /// wrong lesson than an error would have been.
+    #[test]
+    fn a_pre_fix_index_is_emptied_and_reports_it() {
+        let dir = scratch("migration");
+        let path = dir.join("legacy.db");
+
+        // The exact schema as it shipped before `tracked` existed, plus one row that
+        // could have come from either a public or an `--all` run. Nothing in the file
+        // can tell them apart, which is the whole reason it cannot be trusted.
+        {
+            let conn = Connection::open(&path).expect("legacy open");
+            conn.execute_batch(
+                "CREATE TABLE files (
+                     base TEXT NOT NULL, path TEXT NOT NULL, hash TEXT NOT NULL,
+                     provenance TEXT, stage TEXT, PRIMARY KEY (base, path));
+                 CREATE VIRTUAL TABLE chunks USING fts5(
+                     base UNINDEXED, path UNINDEXED, heading_path, text,
+                     tokenize = 'unicode61 remove_diacritics 2');
+                 INSERT INTO files (base, path, hash) VALUES ('zed', 'profile/x.md', 'h');
+                 INSERT INTO chunks (base, path, heading_path, text)
+                     VALUES ('zed', 'profile/x.md', 'X', 'vulkan prefill measured');",
+            )
+            .expect("legacy schema");
+        }
+
+        let store = Store::open(&path).expect("open");
+        assert!(store.rebuilt, "the caller has to be told the index was discarded");
+
+        let (files, chunks) = store.counts().expect("counts");
+        assert_eq!((files, chunks), (0, 0), "nothing unverifiable may survive");
+
+        // And a second open is not a migration: the column is there now.
+        let again = Store::open(&path).expect("reopen");
+        assert!(!again.rebuilt, "migrating on every open would empty a good index");
+    }
 
     #[test]
     fn chunks_split_at_headings() {

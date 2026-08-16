@@ -305,8 +305,20 @@ fn cmd_route(
         return report_keyword(&keyword, top);
     }
 
+    // The same flag that narrows the file walk now narrows the query. Before this,
+    // `--all` at index time poisoned the database permanently: every later query
+    // returned private chunks whether or not it asked for them, and nothing in the
+    // file recorded that it had happened.
+    let scope = if all { store::Scope::All } else { store::Scope::Public };
+
     let text = match store::Store::open(&PathBuf::from(db)) {
-        Ok(s) => s.search(&terms, top * 6).unwrap_or_default(),
+        Ok(s) => {
+            if s.rebuilt {
+                eprintln!("kb: {db} predates the tracked column and could not say which");
+                eprintln!("    of its rows were private, so it was emptied. Run `kb index`.");
+            }
+            s.search(&terms, top * 6, scope).unwrap_or_default()
+        }
         Err(e) => {
             eprintln!("kb: cannot open {db}: {e}. Run `kb index` first.");
             return ExitCode::from(1);
@@ -436,8 +448,16 @@ fn cmd_remember(claim: &str, paths: &[&str], all: bool, db: &str) -> ExitCode {
 
     let terms = index::expand_query(claim, &aliases);
 
+    let scope = if all { store::Scope::All } else { store::Scope::Public };
+
     let hits = match store::Store::open(&PathBuf::from(db)) {
-        Ok(s) => s.search(&terms, 25).unwrap_or_default(),
+        Ok(s) => {
+            if s.rebuilt {
+                eprintln!("kb: {db} predates the tracked column and could not say which");
+                eprintln!("    of its rows were private, so it was emptied. Run `kb index`.");
+            }
+            s.search(&terms, 25, scope).unwrap_or_default()
+        }
         Err(e) => {
             eprintln!("kb: cannot open {db}: {e}. Run `kb index` first.");
             return ExitCode::from(1);

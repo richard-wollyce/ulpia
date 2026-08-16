@@ -164,6 +164,8 @@ mod tests {
             heading_path: "Safety > Limits".into(),
             excerpt: text.chars().take(40).collect(),
             text: text.into(),
+            provenance: None,
+            stage: None,
         }
     }
 

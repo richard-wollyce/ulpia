@@ -31,6 +31,14 @@ pub struct MdFile {
     /// File name without the `.md`, which is what a `[[wikilink]]` points at.
     pub stem: String,
     pub text: String,
+    /// Whether git tracks this file. `None` means git could not be asked, which is
+    /// a third state and not a synonym for `false`.
+    ///
+    /// This exists because the tracked filter used to live only on the file walk,
+    /// so `kb index --all` wrote private files into the index and every later query
+    /// returned them whether or not `--all` was passed. The flag has to travel with
+    /// the file into the index, or the index cannot answer who is allowed to see it.
+    pub tracked: Option<bool>,
 }
 
 pub struct Base {
@@ -88,9 +96,20 @@ impl Base {
         collect(root, root, &mut base)?;
         base.files.sort_by(|a, b| a.rel.cmp(&b.rel));
 
+        // Ask git once, and mark every file, whether or not the list is about to be
+        // narrowed. Marking only when filtering would leave `--all` runs with no
+        // record of which files were private, which is exactly how the index came to
+        // hold private chunks that nothing downstream could recognise as private.
+        let tracked = tracked_files(root);
+        if let Some(set) = &tracked {
+            for f in &mut base.files {
+                f.tracked = Some(set.contains(&f.rel));
+            }
+        }
+
         if !all {
-            if let Some(tracked) = tracked_files(root) {
-                base.files.retain(|f| tracked.contains(&f.rel));
+            if tracked.is_some() {
+                base.files.retain(|f| f.tracked == Some(true));
                 base.tracked_only = true;
             }
         }
@@ -186,7 +205,7 @@ fn collect(root: &Path, dir: &Path, base: &mut Base) -> io::Result<()> {
                     .file_stem()
                     .map(|s| s.to_string_lossy().to_string())
                     .unwrap_or_default();
-                base.files.push(MdFile { rel, stem, text });
+                base.files.push(MdFile { rel, stem, text, tracked: None });
             }
             Err(e) => base.unreadable.push((rel, e.to_string())),
         }
