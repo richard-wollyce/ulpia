@@ -311,16 +311,17 @@ fn cmd_route(
     hybrid: bool,
     db: &str,
 ) -> ExitCode {
+    let given: Vec<&Path> = paths.iter().map(Path::new).collect();
     let mut entries = Vec::new();
     let mut aliases = Vec::new();
-    for path in paths {
-        match Base::discover(Path::new(path), all) {
+    for path in memory::expand_roots(&given) {
+        match Base::discover(&path, all) {
             Ok(base) => {
                 entries.extend(index::build(&base));
                 aliases.extend(base.aliases.clone());
             }
             Err(e) => {
-                eprintln!("kb: cannot read {path}: {e}");
+                eprintln!("kb: cannot read {}: {e}", path.display());
                 return ExitCode::from(1);
             }
         }
@@ -478,12 +479,13 @@ fn cmd_blocks(path: &str, emit: bool) -> ExitCode {
 // ---------------------------------------------------------------------------
 
 fn cmd_remember(claim: &str, paths: &[&str], all: bool, db: &str) -> ExitCode {
+    let given: Vec<&Path> = paths.iter().map(Path::new).collect();
     let mut aliases = Vec::new();
-    for path in paths {
-        match Base::discover(Path::new(path), all) {
+    for path in memory::expand_roots(&given) {
+        match Base::discover(&path, all) {
             Ok(base) => aliases.extend(base.aliases.clone()),
             Err(e) => {
-                eprintln!("kb: cannot read {path}: {e}");
+                eprintln!("kb: cannot read {}: {e}", path.display());
                 return ExitCode::from(1);
             }
         }

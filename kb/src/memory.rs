@@ -155,6 +155,28 @@ impl Memory {
         remember::assess(claim, &terms, &hits)
     }
 
+    /// True when nothing was ranked by **both** scorers.
+    ///
+    /// Agreement between two independent scorers is the strongest signal available
+    /// without a model, which is the whole argument for RRF and is written down in
+    /// `retrieve.rs`. It was computed and never used as a gate, so a result nobody
+    /// agreed on was presented exactly like one everybody agreed on.
+    ///
+    /// Measured on three real questions against the fleet: "quantas calorias posso
+    /// comer hoje" scored 0.032 with both scorers, "é melhor postar video no
+    /// instagram ou youtube" scored 0.033 with both, and "quem é você?" scored 0.016
+    /// with the text scorer alone and returned marketing psychology. The number that
+    /// separates the two right answers from the wrong one is not the score, it is
+    /// how many scorers voted.
+    ///
+    /// This is a warning rather than a filter, deliberately. A file whose map entry
+    /// does not happen to use the question's words but whose text does is a real hit,
+    /// so dropping single scorer results would lose answers. Saying "nobody agreed"
+    /// costs nothing and loses nothing.
+    pub fn no_agreement(&self, found: &[Retrieved]) -> bool {
+        !found.is_empty() && found.iter().all(|f| f.why.len() < 2)
+    }
+
     /// True when the full text index has no chunks for anything the keywords ranked,
     /// which almost always means the index is stale rather than the base being thin.
     /// Worth saying out loud: the alternative is a caller concluding the base is empty.
@@ -293,6 +315,35 @@ mod tests {
         std::fs::write(dir.join("MAP.md"), "# MAP\n\n- **[[a]]** thing\n  Search for: `thing`\n")
             .expect("map");
         dir
+    }
+
+    /// The three questions that produced this rule, as the shapes they had.
+    #[test]
+    fn agreement_between_the_scorers_is_what_separates_a_hit_from_a_guess() {
+        let both = Retrieved {
+            base: "yaron".into(), path: "p".into(), title: String::new(), score: 0.032,
+            why: vec!["keywords #2".into(), "text #5".into()],
+            matched: vec![], passages: vec![],
+        };
+        let one = Retrieved {
+            base: "steve".into(), path: "q".into(), title: String::new(), score: 0.016,
+            why: vec!["text #1".into()],
+            matched: vec![], passages: vec![],
+        };
+
+        let m = Memory {
+            entries: vec![], aliases: vec![],
+            store: Store::open(&scratch("agree").join("i.db")).expect("store"),
+            scope: Scope::Public, bases: vec![], index_was_rebuilt: false,
+        };
+
+        assert!(m.no_agreement(&[one.clone()]), "one scorer alone is a guess");
+        assert!(!m.no_agreement(&[both.clone()]), "two scorers agreeing is a hit");
+        assert!(
+            !m.no_agreement(&[one, both]),
+            "one agreed result is enough; the warning is about nobody agreeing"
+        );
+        assert!(!m.no_agreement(&[]), "nothing found is a different message");
     }
 
     #[test]

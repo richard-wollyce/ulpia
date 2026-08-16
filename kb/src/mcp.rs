@@ -300,6 +300,20 @@ impl Server {
         // line a caller sees five files and no passages and concludes the base is
         // thin, which is the wrong conclusion and an invisible one. Found by pointing
         // a benchmark at the wrong index file and believing the result.
+        if self.memory.no_agreement(&found) {
+            out.push_str(
+                concat!(
+                "NOTE: only one of the two scorers ranked any of these, so this is a guess ",
+                "rather than an answer. Agreement between the keyword index and the full text ",
+                "index is the strongest signal available without a model, and there is none ",
+                "here. Treat these as leads, and consider that the base may not cover the ",
+                "question at all.
+
+",
+            )
+            );
+        }
+
         if self.memory.looks_stale(&found) {
             out.push_str(
                 "NOTE: the keyword index ranked these files but the full text index has no \

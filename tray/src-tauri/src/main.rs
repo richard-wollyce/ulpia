@@ -270,6 +270,10 @@ fn ask(app: AppHandle, state: State<Fleet>, question: String) -> Result<Vec<Answ
     }
 
     let stale = memory.looks_stale(&found);
+    // Nobody agreed means the answer is a guess dressed as a result. Measured: the
+    // two questions that routed correctly had both scorers voting; the one that
+    // returned marketing psychology for "quem é você?" had one.
+    let guessing = memory.no_agreement(&found);
     let answers = found
         .into_iter()
         .map(|f| Answer {
@@ -297,7 +301,23 @@ fn ask(app: AppHandle, state: State<Fleet>, question: String) -> Result<Vec<Answ
         );
     }
 
-    done(&app, &state);
+    if guessing {
+        publish(
+            &app,
+            &state,
+            Progress {
+                stage: None,
+                done: 0,
+                total: 0,
+                problem: Some(
+                    "Só um dos dois buscadores encontrou isso, então é palpite e não                      resposta. Talvez a base não cubra a pergunta."
+                        .into(),
+                ),
+            },
+        );
+    } else {
+        done(&app, &state);
+    }
     Ok(answers)
 }
 
