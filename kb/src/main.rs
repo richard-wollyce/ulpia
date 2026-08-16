@@ -8,12 +8,14 @@ mod base;
 mod blocks;
 mod checks;
 mod index;
+mod json;
+mod mcp;
 mod remember;
+mod retrieve;
 mod store;
 
 use base::Base;
 use checks::{Finding, Level};
-use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 
@@ -26,6 +28,7 @@ usage:
     kb route <question> [path]... [--top N] [--hybrid] [--db FILE]
     kb remember <claim> [path]... [--db FILE]
     kb blocks [path] [--emit]
+    kb serve [path]... [--db FILE] [--top N] [--all]
 
     path        base to work on, defaults to the current directory
     --emit      blocks: print the assembled resident constitution instead of the report
@@ -35,6 +38,10 @@ usage:
     --db FILE   the derived index, default .kb/index.db
     --json      index: print the map entries as JSON instead of building the index
     --hybrid    route: fuse the keyword scorer with full text search over chunks
+
+serve speaks MCP over stdio, so Claude Code, Claude Desktop or any other MCP client
+can search the base. It never serves what git ignores unless --all says so, and it
+refuses to start when git cannot be consulted, because unknown is not public.
 
 checks:
     E01 broken-link     a [[link]] with no file behind it
@@ -58,14 +65,6 @@ const VALUE_FLAGS: &[&str] = &["--top", "--db"];
 
 /// The derived index. Disposable by design: deleting it costs a rebuild.
 const DEFAULT_DB: &str = ".kb/index.db";
-
-/// Reciprocal Rank Fusion's damping constant, 60 in the original paper.
-///
-/// RRF fuses ranked lists by position alone, which is the point: a BM25 score and a
-/// keyword score live in different numeric universes, and normalising them into a
-/// weighted sum means inventing a conversion factor and then tuning it per corpus.
-/// Ranks need no conversion.
-const RRF_K: f64 = 60.0;
 
 fn main() -> ExitCode {
     let args: Vec<String> = std::env::args().skip(1).collect();
@@ -111,6 +110,10 @@ fn main() -> ExitCode {
             let question = positional[0];
             let paths = paths_or_default(&positional[1..]);
             cmd_route(question, &paths, all, top, hybrid, &db)
+        }
+        "serve" => {
+            let paths = paths_or_default(&positional);
+            mcp::serve(&paths, all, &db, top)
         }
         "blocks" => {
             let paths = paths_or_default(&positional);
@@ -290,7 +293,7 @@ fn cmd_route(
 
     // Oversample each list: fusion only helps when it has more than the final answer
     // to choose from.
-    let keyword = index::route(question, &entries, &aliases, top * 4);
+    let keyword = index::route(question, &entries, &aliases, top * retrieve::KEYWORD_OVERSAMPLE);
 
     println!("question: {question}");
     println!(
@@ -317,7 +320,7 @@ fn cmd_route(
                 eprintln!("kb: {db} predates the tracked column and could not say which");
                 eprintln!("    of its rows were private, so it was emptied. Run `kb index`.");
             }
-            s.search(&terms, top * 6, scope).unwrap_or_default()
+            s.search(&terms, top * retrieve::TEXT_OVERSAMPLE, scope).unwrap_or_default()
         }
         Err(e) => {
             eprintln!("kb: cannot open {db}: {e}. Run `kb index` first.");
@@ -327,7 +330,7 @@ fn cmd_route(
     println!("full text: {} chunks matched", text.len());
     println!();
 
-    let fused = fuse(&keyword, &text, top);
+    let fused = retrieve::fuse(&keyword, &text, top);
 
     if fused.is_empty() {
         println!("  nothing matched, in either scorer. Either the base does not cover");
@@ -338,8 +341,8 @@ fn cmd_route(
 
     for f in &fused {
         println!("  {:>5.3}  {:<8} {:<44} {}", f.score, f.base, f.path, f.why.join(" + "));
-        if let Some(excerpt) = &f.excerpt {
-            println!("         {}", excerpt.replace('\n', " ").trim());
+        if let Some(p) = f.passages.first() {
+            println!("         {}: {}", p.heading_path, p.excerpt.replace('\n', " ").trim());
         }
     }
 
@@ -498,77 +501,6 @@ fn cmd_remember(claim: &str, paths: &[&str], all: bool, db: &str) -> ExitCode {
     ExitCode::SUCCESS
 }
 
-struct Fused {
-    base: String,
-    path: String,
-    score: f64,
-    why: Vec<String>,
-    excerpt: Option<String>,
-}
-
-/// Reciprocal Rank Fusion over the two scorers.
-///
-/// Each list contributes `1 / (K + rank)` to every document it ranks, and the sums
-/// are compared. A document both scorers like beats one that either likes a lot,
-/// which is the behaviour we want: the hand written keywords carry intent and the
-/// full text carries the actual words, and agreement between them is the strongest
-/// signal available without a model.
-fn fuse(keyword: &[index::Hit], text: &[store::Hit], top: usize) -> Vec<Fused> {
-    let mut acc: HashMap<(String, String), Fused> = HashMap::new();
-
-    for (rank, hit) in keyword.iter().enumerate() {
-        if hit.entry.rel.is_empty() {
-            continue;
-        }
-        let key = (hit.entry.base.clone(), hit.entry.rel.clone());
-        let entry = acc.entry(key.clone()).or_insert_with(|| Fused {
-            base: key.0.clone(),
-            path: key.1.clone(),
-            score: 0.0,
-            why: Vec::new(),
-            excerpt: None,
-        });
-        entry.score += 1.0 / (RRF_K + rank as f64 + 1.0);
-        entry.why.push(format!("keywords #{}", rank + 1));
-    }
-
-    // The text list ranks chunks, and RRF ranks documents. A file only contributes
-    // once, at the rank of its best chunk.
-    //
-    // Getting this wrong is subtle and it happened: scoring every matching chunk made
-    // a long file accumulate one contribution per section, so the ranking quietly
-    // became "which file has the most matching pieces" rather than "which file ranked
-    // highest". The safety protocol, which defines the calorie floor in one table
-    // row, lost to a longer file that mentioned it in passing three times.
-    let mut counted: HashSet<(String, String)> = HashSet::new();
-
-    for (rank, hit) in text.iter().enumerate() {
-        let key = (hit.base.clone(), hit.path.clone());
-        if !counted.insert(key.clone()) {
-            continue;
-        }
-        let entry = acc.entry(key.clone()).or_insert_with(|| Fused {
-            base: key.0.clone(),
-            path: key.1.clone(),
-            score: 0.0,
-            why: Vec::new(),
-            excerpt: None,
-        });
-        entry.score += 1.0 / (RRF_K + rank as f64 + 1.0);
-        entry.excerpt = Some(format!("{}: {}", hit.heading_path, hit.excerpt));
-        entry.why.push(format!("text #{}", rank + 1));
-    }
-
-    let mut out: Vec<Fused> = acc.into_values().collect();
-    out.sort_by(|a, b| {
-        b.score
-            .partial_cmp(&a.score)
-            .unwrap_or(std::cmp::Ordering::Equal)
-            .then(a.path.cmp(&b.path))
-    });
-    out.truncate(top);
-    out
-}
 
 // ---------------------------------------------------------------------------
 // Reporting

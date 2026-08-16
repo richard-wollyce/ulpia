@@ -153,6 +153,91 @@ delete on its own; the constraint is that the reason goes in the commit message.
 A useful side effect, found on the first real run: asking about the calorie floor returned containment
 1.00 from **two** files, which is the base telling you a fact is written down twice.
 
+### `kb serve`: the base as an MCP server
+
+```
+kb serve [path]... [--db FILE] [--top N] [--all]
+```
+
+Speaks the Model Context Protocol over stdio, so any MCP client can search the base: Claude Code,
+Claude Desktop, or our own GUI driving a local model. **The server does not know which one is calling
+and does not care.** That is the reason retrieval lives here rather than in the GUI: with a cloud model
+the passages travel in the prompt, with a local model nothing leaves the machine, and both read the
+same code.
+
+Three tools, all read only:
+
+| Tool | Returns |
+|---|---|
+| `kb_route` | Ranked file paths with the words that matched. Cheap, no file contents |
+| `kb_retrieve` | The passages themselves, with heading path and provenance |
+| `kb_remember` | The ADD / UPDATE / NOOP proposal and its evidence. **Writes nothing** |
+
+There is no write tool yet, deliberately. A write reached by a model is a different security surface
+and gets built on purpose rather than while the retrieval side is still warm.
+
+**The private layer stays out unless asked.** `profile/`, `projects/` and `records/` are gitignored
+because they are private, and what a tool returns travels to whatever model is reasoning, so the
+default is what git tracks. `--all` includes them and is a deliberate act visible in the client's
+config file.
+
+**It refuses to start when git cannot be consulted.** Then every file's privacy is unknown, and
+unknown is not public. Either the base is a git repository or `--all` says you meant it.
+
+Registering it with Claude Code, project scope, from `.mcp.json` at the repository root:
+
+```json
+{
+  "mcpServers": {
+    "zed-memory": {
+      "type": "stdio",
+      "command": "${CLAUDE_PROJECT_DIR}/tools/kb/target/release/kb.exe",
+      "args": ["serve", "${CLAUDE_PROJECT_DIR}"]
+    }
+  }
+}
+```
+
+For all three agents at once, user scope, which stays out of git:
+
+```
+claude mcp add --transport stdio --scope user fleet-memory -- \
+  C:\Users\user\Desktop\zed\tools\kb\target\release\kb.exe serve \
+  C:\Users\user\Desktop\zed C:\Users\user\Desktop\steve C:\Users\user\Desktop\yaron
+```
+
+The `--` is mandatory: everything after it is passed to the server untouched.
+
+**claude.ai in a browser cannot use this**, and that is documented rather than a limitation of ours: a
+web page cannot spawn a local process, and Anthropic's custom connectors dial out from their
+infrastructure rather than from your machine, so a `localhost` URL resolves to their servers. Claude
+Code and Claude Desktop both run locally and both work.
+
+#### What the protocol demanded, and what it cost
+
+**Dual-era.** Revision 2026-07-28 removed the `initialize` handshake and moved the version into
+per-request `_meta`; 2025-11-25 and earlier require the handshake. The spec names an implementation
+speaking both "dual-era", so the server answers `initialize` when asked, never requires it, and echoes
+back whatever version the client named rather than asserting one. Both paths are tested against the
+real binary.
+
+**stdout belongs to the protocol.** Verbatim from the spec: "The server MUST NOT write anything to its
+stdout that is not a valid MCP message." Every `cmd_*` in `kb` prints to stdout, so the serve path
+sends every diagnostic to stderr instead, which the spec explicitly allows and which clients are told
+not to read as failure.
+
+**The JSON is hand written**, in `json.rs`, keeping the one dependency. What makes a JSON parser hard
+is escapes: `\"`, `\\`, `\uXXXX` and the surrogate pairs that carry anything above U+FFFF. Accents are
+not hard and never were, because Rust strings are UTF-8. The tempting shortcut of folding accents
+before parsing was considered and rejected: it would destroy the framing, since a quote inside a string
+arrives as `\"`, and on the `remember` path the claim becomes a file, so folding would corrupt the base
+permanently and silently. Diacritic folding already happens where it belongs, in the FTS5 tokenizer,
+applied to search terms after parsing and never to text on its way to disk.
+
+Two bounds exist because the input arrives from another process: nesting is capped, so `[[[[[...` is an
+error rather than a stack overflow, and output is always one line, so a passage containing a newline
+cannot split one message into two and desync the stream for good.
+
 ### The alias table
 
 An optional `kb-aliases.txt` at the base root, one `alias = canonical` per line, `#` for comments.
