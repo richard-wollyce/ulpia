@@ -6,7 +6,7 @@
 
 
 use kb::checks::{Finding, Level};
-use kb::{base, blocks, checks, index, mcp, memory, remember, retrieve, store};
+use kb::{base, blocks, checks, index, init, mcp, memory, remember, retrieve, store};
 use base::Base;
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
@@ -19,6 +19,7 @@ usage:
     kb index [path]... [--db FILE] [--json] [--all]
     kb route <question> [path]... [--top N] [--hybrid] [--db FILE]
     kb remember <claim> [path]... [--db FILE]
+    kb init <name> [fleet-root]
     kb blocks [path] [--emit]
     kb serve [path]... [--db FILE] [--top N] [--all]
 
@@ -103,6 +104,17 @@ fn main() -> ExitCode {
             let paths = paths_or_default(&positional[1..]);
             cmd_route(question, &paths, all, top, hybrid, &db)
         }
+        "init" => {
+            if positional.is_empty() {
+                eprintln!("kb: init needs a name for the agent
+");
+                print!("{USAGE}");
+                return ExitCode::from(2);
+            }
+            let name = positional[0];
+            let fleet = positional.get(1).copied().unwrap_or(".");
+            cmd_init(name, Path::new(fleet))
+        }
         "serve" => {
             let paths = paths_or_default(&positional);
             mcp::serve(&paths, all, &db, top)
@@ -142,6 +154,33 @@ fn paths_or_default<'a>(given: &[&'a str]) -> Vec<&'a str> {
 // ---------------------------------------------------------------------------
 // check
 // ---------------------------------------------------------------------------
+
+/// Creates an agent in the shape ADR-0011 defines, under `<fleet>/agents/<name>`.
+fn cmd_init(name: &str, fleet: &Path) -> ExitCode {
+    match init::agent(fleet, name, None) {
+        Ok(made) => {
+            println!("created {}", made.path.display());
+            println!("  {} files and directories", made.files);
+            if made.git {
+                println!("  git initialised");
+            } else {
+                // Not cosmetic. The privacy gate reads `git ls-files` per base, so a
+                // base outside git has no knowable private layer and `Memory::open`
+                // refuses to serve it.
+                eprintln!("  git could NOT be initialised. Run `git init` here before");
+                eprintln!("  serving this agent, or its private layer is unknowable.");
+            }
+            println!();
+            println!("Next: fill in agent.txt's role, then index.md. Both are placeholders,");
+            println!("and a generated file left unedited is a file nobody owns.");
+            ExitCode::SUCCESS
+        }
+        Err(e) => {
+            eprintln!("kb: {e}");
+            ExitCode::from(1)
+        }
+    }
+}
 
 fn cmd_check(paths: &[&str], all: bool, strict: bool) -> ExitCode {
     let mut errors = 0usize;
