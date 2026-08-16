@@ -156,23 +156,17 @@ struct Answer {
 // ---------------------------------------------------------------------------
 
 fn open_fleet(_app: &AppHandle, state: &Fleet, root: PathBuf) -> Status {
-    // One index per agent is ADR-0011 and is not built yet, so this opens the
-    // shared one for now. Recorded here rather than silently assumed.
-    let db = root.join(".kb").join("index.db");
-
-    match Memory::open(&[root.as_path()], false, &db) {
+    // No index path to pass. Each agent keeps its own at <agent>/.kb/index.db, so
+    // there is nothing left to point at the wrong file.
+    match Memory::open(&[root.as_path()], false) {
         Ok(memory) => {
-            let agents: Vec<String> = memory
-                .bases
-                .iter()
-                .filter_map(|p| p.file_name().map(|n| n.to_string_lossy().to_string()))
-                .collect();
+            let agents: Vec<String> = memory.agents.iter().map(|a| a.name.clone()).collect();
             let status = Status {
                 root: Some(root.display().to_string()),
                 agents,
                 entries: memory.entry_count(),
                 problem: if memory.index_was_rebuilt {
-                    Some("The index predated the privacy fix and was emptied. Run kb index.".into())
+                    Some("Um índice era anterior à correção de privacidade e foi esvaziado. Rode kb index.".into())
                 } else {
                     None
                 },
@@ -195,11 +189,7 @@ fn status(app: AppHandle, state: State<Fleet>) -> Status {
     if let Some(memory) = state.memory.lock().unwrap().as_ref() {
         return Status {
             root: state.root.lock().unwrap().as_ref().map(|p| p.display().to_string()),
-            agents: memory
-                .bases
-                .iter()
-                .filter_map(|p| p.file_name().map(|n| n.to_string_lossy().to_string()))
-                .collect(),
+            agents: memory.agents.iter().map(|a| a.name.clone()).collect(),
             entries: memory.entry_count(),
             problem: None,
         };

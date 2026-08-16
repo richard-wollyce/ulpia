@@ -229,6 +229,7 @@ pub enum Scope {
     All,
 }
 
+#[derive(Clone)]
 pub struct Hit {
     pub base: String,
     pub path: String,

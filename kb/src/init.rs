@@ -331,8 +331,7 @@ mod tests {
         );
         assert!(!base.files.is_empty(), "and the tracked set must not be empty");
 
-        let db = fleet.join("i.db");
-        crate::memory::Memory::open(&[&made.path], false, &db)
+        crate::memory::Memory::open(&[&made.path], false)
             .expect("the system must be able to serve what it just created");
     }
 

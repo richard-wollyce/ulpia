@@ -6,9 +6,9 @@
 
 
 use kb::checks::{Finding, Level};
-use kb::{base, blocks, checks, index, init, mcp, memory, remember, retrieve, store};
+use kb::{base, blocks, checks, index, init, mcp, memory, remember, store};
 use base::Base;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::process::ExitCode;
 
 const USAGE: &str = "\
@@ -16,19 +16,22 @@ kb, a linter and router for file based knowledge bases
 
 usage:
     kb check [path]... [--strict] [--all]
-    kb index [path]... [--db FILE] [--json] [--all]
-    kb route <question> [path]... [--top N] [--hybrid] [--db FILE]
-    kb remember <claim> [path]... [--db FILE]
+    kb index [path]... [--json] [--all]
+    kb route <question> [path]... [--top N] [--hybrid] [--all]
+    kb remember <claim> [path]... [--all]
     kb init <name> [fleet-root]
     kb blocks [path] [--emit]
-    kb serve [path]... [--db FILE] [--top N] [--all]
+    kb serve [path]... [--top N] [--all]
 
     path        base to work on, defaults to the current directory
     --emit      blocks: print the assembled resident constitution instead of the report
     --strict    check: count warnings toward the exit code
     --all       include files git does not track, normally the private layer
     --top N     route: how many candidates to print, default 5
-    --db FILE   the derived index, default .kb/index.db
+
+Each agent keeps its own index at <agent>/.kb/index.db. There is no shared index
+and no --db flag: which database you get used to depend on where you were standing,
+and that cost three separate incidents.
     --json      index: print the map entries as JSON instead of building the index
     --hybrid    route: fuse the keyword scorer with full text search over chunks
 
@@ -54,10 +57,7 @@ exit code is 1 when check finds errors, or when --strict and it finds warnings.
 const LINES_SHOWN: usize = 3;
 
 /// Flags that consume the argument after them.
-const VALUE_FLAGS: &[&str] = &["--top", "--db"];
-
-/// The derived index. Disposable by design: deleting it costs a rebuild.
-const DEFAULT_DB: &str = ".kb/index.db";
+const VALUE_FLAGS: &[&str] = &["--top"];
 
 fn main() -> ExitCode {
     let args: Vec<String> = std::env::args().skip(1).collect();
@@ -87,13 +87,12 @@ fn main() -> ExitCode {
         positional.push(arg.as_str());
     }
 
-    let db = flag_value(&args, "--db").unwrap_or_else(|| DEFAULT_DB.to_string());
     let json = args.iter().any(|a| a == "--json");
     let hybrid = args.iter().any(|a| a == "--hybrid");
 
     match args[0].as_str() {
         "check" => cmd_check(&paths_or_default(&positional), all, strict),
-        "index" => cmd_index(&paths_or_default(&positional), all, &db, json),
+        "index" => cmd_index(&paths_or_default(&positional), all, json),
         "route" => {
             if positional.is_empty() {
                 eprintln!("kb: route needs a question\n");
@@ -102,7 +101,7 @@ fn main() -> ExitCode {
             }
             let question = positional[0];
             let paths = paths_or_default(&positional[1..]);
-            cmd_route(question, &paths, all, top, hybrid, &db)
+            cmd_route(question, &paths, all, top, hybrid)
         }
         "init" => {
             if positional.is_empty() {
@@ -117,7 +116,7 @@ fn main() -> ExitCode {
         }
         "serve" => {
             let paths = paths_or_default(&positional);
-            mcp::serve(&paths, all, &db, top)
+            mcp::serve(&paths, all, top)
         }
         "blocks" => {
             let paths = paths_or_default(&positional);
@@ -131,7 +130,7 @@ fn main() -> ExitCode {
             }
             let claim = positional[0];
             let paths = paths_or_default(&positional[1..]);
-            cmd_remember(claim, &paths, all, &db)
+            cmd_remember(claim, &paths, all)
         }
         other => {
             eprintln!("kb: unknown command '{other}'\n");
@@ -251,166 +250,134 @@ fn check_one(path: &Path, all: bool) -> std::io::Result<(usize, usize)> {
 // index and route
 // ---------------------------------------------------------------------------
 
-fn cmd_index(paths: &[&str], all: bool, db: &str, json: bool) -> ExitCode {
-    // Same expansion as check and retrieve. Three notions of what a path means is
-    // two more than a program can afford.
+fn cmd_index(paths: &[&str], all: bool, json: bool) -> ExitCode {
     let given: Vec<&Path> = paths.iter().map(Path::new).collect();
+    let roots = memory::expand_roots(&given);
+
     let mut bases = Vec::new();
-    for path in memory::expand_roots(&given) {
-        match Base::discover(&path, all) {
-            Ok(base) => bases.push(base),
+    for root in &roots {
+        match Base::discover(root, all) {
+            Ok(base) => bases.push((root.clone(), base)),
             Err(e) => {
-                eprintln!("kb: cannot read {}: {e}", path.display());
+                eprintln!("kb: cannot read {}: {e}", root.display());
                 return ExitCode::from(1);
             }
         }
     }
 
     if json {
-        let entries: Vec<index::Entry> = bases.iter().flat_map(index::build).collect();
+        let entries: Vec<index::Entry> = bases.iter().flat_map(|(_, b)| index::build(b)).collect();
         print!("{}", index::to_json(&entries));
         return ExitCode::SUCCESS;
     }
 
-    let mut store = match store::Store::open(&PathBuf::from(db)) {
-        Ok(s) => s,
-        Err(e) => {
-            eprintln!("kb: cannot open {db}: {e}");
-            return ExitCode::from(1);
-        }
-    };
-
-    println!("index: {db}");
-    for base in &bases {
+    // One index per agent, written beside the agent. The shared index this replaces
+    // defaulted to a path relative to the working directory, so which database you
+    // got depended on where you happened to be standing, and that cost three
+    // separate incidents in one week.
+    let mut files = 0usize;
+    let mut chunks = 0usize;
+    for (root, base) in &bases {
         let name = label(base);
+        let path = memory::index_path(root);
+
+        let mut store = match store::Store::open(&path) {
+            Ok(s) => s,
+            Err(e) => {
+                eprintln!("kb: cannot open {}: {e}", path.display());
+                return ExitCode::from(1);
+            }
+        };
         match store.sync(base, &name) {
-            Ok(r) => println!(
-                "  {name:<8} {} reindexed, {} unchanged, {} removed, {} chunks written",
-                r.reindexed, r.unchanged, r.removed, r.chunks
-            ),
+            Ok(r) => {
+                println!(
+                    "  {name:<10} {} reindexed, {} unchanged, {} removed, {} chunks",
+                    r.reindexed, r.unchanged, r.removed, r.chunks
+                );
+                chunks += r.chunks;
+            }
             Err(e) => {
                 eprintln!("kb: indexing {name} failed: {e}");
                 return ExitCode::from(1);
             }
         }
+        files += base.files.len();
     }
 
-    match store.counts() {
-        Ok((files, chunks)) => println!("  total: {files} files, {chunks} chunks"),
-        Err(e) => eprintln!("kb: cannot count: {e}"),
-    }
-
+    println!("  total: {files} files, {chunks} chunks, {} indexes", bases.len());
     ExitCode::SUCCESS
 }
 
-fn cmd_route(
-    question: &str,
-    paths: &[&str],
-    all: bool,
-    top: usize,
-    hybrid: bool,
-    db: &str,
-) -> ExitCode {
+fn cmd_route(question: &str, paths: &[&str], all: bool, top: usize, hybrid: bool) -> ExitCode {
     let given: Vec<&Path> = paths.iter().map(Path::new).collect();
-    let mut entries = Vec::new();
-    let mut aliases = Vec::new();
-    for path in memory::expand_roots(&given) {
-        match Base::discover(&path, all) {
-            Ok(base) => {
-                entries.extend(index::build(&base));
-                aliases.extend(base.aliases.clone());
-            }
-            Err(e) => {
-                eprintln!("kb: cannot read {}: {e}", path.display());
-                return ExitCode::from(1);
-            }
-        }
-    }
-
-    // One expansion, two consumers. Expanding for the keyword scorer and not for the
-    // text one was a real bug: a Portuguese question routed correctly by keyword and
-    // matched zero chunks by text.
-    let terms = index::expand_query(question, &aliases);
-
-    // Oversample each list: fusion only helps when it has more than the final answer
-    // to choose from.
-    let keyword = index::route(question, &entries, &aliases, top * retrieve::KEYWORD_OVERSAMPLE);
-
-    println!("question: {question}");
-    println!(
-        "indexed:  {} entries across {} bases, {} aliases",
-        entries.len(),
-        paths.len(),
-        aliases.len()
-    );
-
-    if !hybrid {
-        println!();
-        return report_keyword(&keyword, top);
-    }
-
-    // The same flag that narrows the file walk now narrows the query. Before this,
-    // `--all` at index time poisoned the database permanently: every later query
-    // returned private chunks whether or not it asked for them, and nothing in the
-    // file recorded that it had happened.
-    let scope = if all { store::Scope::All } else { store::Scope::Public };
-
-    let text = match store::Store::open(&PathBuf::from(db)) {
-        Ok(s) => {
-            if s.rebuilt {
-                eprintln!("kb: {db} predates the tracked column and could not say which");
-                eprintln!("    of its rows were private, so it was emptied. Run `kb index`.");
-            }
-            s.search(&terms, top * retrieve::TEXT_OVERSAMPLE, scope).unwrap_or_default()
-        }
+    let memory = match memory::Memory::open(&given, all) {
+        Ok(m) => m,
         Err(e) => {
-            eprintln!("kb: cannot open {db}: {e}. Run `kb index` first.");
+            eprintln!("kb: {e}");
             return ExitCode::from(1);
         }
     };
-    println!("full text: {} chunks matched", text.len());
+    if memory.index_was_rebuilt {
+        eprintln!("kb: an index predated the tracked column and was emptied. Run `kb index`.");
+    }
+
+    println!("question: {question}");
+    println!(
+        "indexed:  {} entries across {} agents, {} aliases",
+        memory.entry_count(),
+        memory.agents.len(),
+        memory.alias_count()
+    );
     println!();
 
-    let fused = retrieve::fuse(&keyword, &text, top);
+    if !hybrid {
+        let hits = memory.route(question, top);
+        if hits.is_empty() {
+            println!("  nothing matched. Either the base does not cover it, or the");
+            println!("  Search for lines do not carry the words a real question uses.");
+            return ExitCode::SUCCESS;
+        }
+        for (i, hit) in hits.iter().enumerate() {
+            println!(
+                "  {:>2}. {:>6.2}  {}/{}",
+                i + 1,
+                hit.score,
+                hit.entry.base,
+                hit.entry.rel
+            );
+            println!("      matched: {}", hit.matched.join(", "));
+        }
+        return ExitCode::SUCCESS;
+    }
 
-    if fused.is_empty() {
+    let found = memory.retrieve(question, top);
+    if found.is_empty() {
         println!("  nothing matched, in either scorer. Either the base does not cover");
         println!("  it, or the Search for lines do not carry the words a real question");
         println!("  uses.");
         return ExitCode::SUCCESS;
     }
 
-    for f in &fused {
+    // Agreement between the two scorers is the signal, not the magnitude. Measured on
+    // three real questions: the two that routed correctly had both scorers voting and
+    // the one that returned marketing psychology for "quem e voce?" had one.
+    if memory.no_agreement(&found) {
+        println!("  NOTE: only one scorer ranked any of these, so this is a guess rather");
+        println!("  than an answer. The base may not cover the question at all.");
+        println!();
+    }
+
+    for f in &found {
         println!("  {:>5.3}  {:<8} {:<44} {}", f.score, f.base, f.path, f.why.join(" + "));
         if let Some(p) = f.passages.first() {
-            println!("         {}: {}", p.heading_path, p.excerpt.replace('\n', " ").trim());
+            println!("         {}: {}", p.heading_path, p.excerpt.replace("
+", " ").trim());
         }
     }
 
     ExitCode::SUCCESS
 }
 
-fn report_keyword(hits: &[index::Hit], top: usize) -> ExitCode {
-    if hits.is_empty() {
-        // Saying so plainly is the point. A router that always returns something
-        // teaches you to trust a guess.
-        println!("  nothing matched. Either the base does not cover it, or the");
-        println!("  Search for lines do not carry the words a real question uses.");
-        return ExitCode::SUCCESS;
-    }
-
-    for hit in hits.iter().take(top) {
-        println!(
-            "  {:>6.1}  {:<8} {:<44} {}",
-            hit.score,
-            hit.entry.base,
-            if hit.entry.rel.is_empty() { hit.entry.stem.clone() } else { hit.entry.rel.clone() },
-            hit.entry.title
-        );
-        println!("       matched: {}", hit.matched.join(", "));
-    }
-    ExitCode::SUCCESS
-}
 
 // ---------------------------------------------------------------------------
 // blocks
@@ -478,68 +445,46 @@ fn cmd_blocks(path: &str, emit: bool) -> ExitCode {
 // remember
 // ---------------------------------------------------------------------------
 
-fn cmd_remember(claim: &str, paths: &[&str], all: bool, db: &str) -> ExitCode {
+fn cmd_remember(claim: &str, paths: &[&str], all: bool) -> ExitCode {
     let given: Vec<&Path> = paths.iter().map(Path::new).collect();
-    let mut aliases = Vec::new();
-    for path in memory::expand_roots(&given) {
-        match Base::discover(&path, all) {
-            Ok(base) => aliases.extend(base.aliases.clone()),
-            Err(e) => {
-                eprintln!("kb: cannot read {}: {e}", path.display());
-                return ExitCode::from(1);
-            }
-        }
-    }
-
-    let terms = index::expand_query(claim, &aliases);
-
-    let scope = if all { store::Scope::All } else { store::Scope::Public };
-
-    let hits = match store::Store::open(&PathBuf::from(db)) {
-        Ok(s) => {
-            if s.rebuilt {
-                eprintln!("kb: {db} predates the tracked column and could not say which");
-                eprintln!("    of its rows were private, so it was emptied. Run `kb index`.");
-            }
-            s.search(&terms, remember::EVIDENCE_WIDTH, scope).unwrap_or_default()
-        }
+    let memory = match memory::Memory::open(&given, all) {
+        Ok(m) => m,
         Err(e) => {
-            eprintln!("kb: cannot open {db}: {e}. Run `kb index` first.");
+            eprintln!("kb: {e}");
             return ExitCode::from(1);
         }
     };
+    if memory.index_was_rebuilt {
+        eprintln!("kb: an index predated the tracked column and was emptied. Run `kb index`.");
+    }
 
-    let assessment = remember::assess(claim, &terms, &hits);
+    let a = memory.remember(claim);
 
     println!("claim: {claim}");
-    println!("terms: {}", terms.join(", "));
-    println!();
+    println!("proposal: {}", a.outcome.label());
+    println!("reason: {}", a.reason);
 
-    if assessment.evidence.is_empty() {
-        println!("closest in the base: nothing matched.");
+    if a.evidence.is_empty() {
+        println!();
+        println!("  nothing in the base overlaps this claim.");
     } else {
-        println!("closest in the base:");
-        for e in &assessment.evidence {
+        println!();
+        println!("evidence, closest first:");
+        for e in &a.evidence {
             println!();
-            println!("  {:.2}  {:<8} {}", e.containment, e.base, e.path);
-            println!("        {}", e.heading_path);
-            println!("        \"{}\"", e.excerpt.replace('\n', " ").trim());
-            println!("        shared:  {}", e.shared.join(", "));
-            println!(
-                "        missing: {}",
-                if e.missing.is_empty() { "nothing".to_string() } else { e.missing.join(", ") }
-            );
+            println!("  {:.2} contained  {}/{}  {}", e.containment, e.base, e.path, e.heading_path);
+            println!("    shared: {}", if e.shared.is_empty() { "-".into() } else { e.shared.join(", ") });
+            println!("    new:    {}", if e.missing.is_empty() { "-".into() } else { e.missing.join(", ") });
+            println!("    {}", e.excerpt.replace("
+", " ").trim());
         }
     }
 
     println!();
-    println!("proposal: {}", assessment.outcome.label());
-    println!("  {}", assessment.reason);
-    println!();
+    println!("---");
     for line in remember::DISCLAIMER.lines() {
-        println!("  {line}");
+        println!("{line}");
     }
-
     ExitCode::SUCCESS
 }
 

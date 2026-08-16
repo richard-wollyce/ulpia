@@ -52,7 +52,7 @@ struct Server {
     top: usize,
 }
 
-pub fn serve(paths: &[&str], all: bool, db: &str, top: usize) -> ExitCode {
+pub fn serve(paths: &[&str], all: bool, top: usize) -> ExitCode {
     let owned: Vec<PathBuf> = paths.iter().map(PathBuf::from).collect();
     let refs: Vec<&Path> = owned.iter().map(|p| p.as_path()).collect();
 
@@ -60,7 +60,7 @@ pub fn serve(paths: &[&str], all: bool, db: &str, top: usize) -> ExitCode {
     // refusal when git could not be consulted. Rebuilding the pipeline here is how a
     // second caller ends up expanding aliases for one scorer and not the other, which
     // has already happened once in this codebase.
-    let memory = match Memory::open(&refs, all, Path::new(db)) {
+    let memory = match Memory::open(&refs, all) {
         Ok(m) => m,
         Err(e) => {
             eprintln!("kb serve: {e}");
@@ -69,14 +69,15 @@ pub fn serve(paths: &[&str], all: bool, db: &str, top: usize) -> ExitCode {
     };
 
     if memory.index_was_rebuilt {
-        eprintln!("kb serve: {db} predated the tracked column and was emptied.");
+        eprintln!("kb serve: an index predated the tracked column and was emptied.");
         eprintln!("    Run `kb index` before relying on retrieval.");
     }
 
-    for base in &memory.bases {
+    for agent in &memory.agents {
         eprintln!(
-            "kb serve: {}{}",
-            base.display(),
+            "kb serve: {} ({}){}",
+            agent.name,
+            agent.root.display(),
             if all { "  (private layer INCLUDED)" } else { "" }
         );
     }

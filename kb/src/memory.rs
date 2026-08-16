@@ -22,15 +22,36 @@ use crate::remember::{self, Assessment};
 use crate::retrieve::{self, Retrieved};
 use crate::store::{Scope, Store};
 
+/// Where an agent's index lives: with the agent, never anywhere else.
+///
+/// The shared index it replaces defaulted to `.kb/index.db` **relative to the
+/// working directory**, so which database you got depended on where you happened to
+/// be standing. That cost three separate incidents in one week: a benchmark that
+/// measured an index holding one base while reporting on three, an MCP server that
+/// opened an empty index and answered "nothing matched", and a routing diagnosis
+/// run against the wrong file and believed.
+///
+/// One index per agent also makes the privacy property structural rather than
+/// enforced: **a missing predicate cannot leak a file that is not in the database
+/// you opened.** That argument was accepted twice before it was applied here.
+pub fn index_path(base_root: &Path) -> PathBuf {
+    base_root.join(".kb").join("index.db")
+}
+
+/// One agent, with its own index.
+pub struct Agent {
+    pub name: String,
+    pub root: PathBuf,
+    store: Store,
+}
+
 pub struct Memory {
     entries: Vec<Entry>,
     aliases: Vec<(String, String)>,
-    store: Store,
     scope: Scope,
-    /// The bases actually opened, after any fleet root was expanded. Reported so a
-    /// caller can say what it is serving rather than what it was asked for.
-    pub bases: Vec<PathBuf>,
-    /// True when the index had to be discarded on open. The caller has to surface
+    /// One per base, each with its own index, in the order the fleet was expanded.
+    pub agents: Vec<Agent>,
+    /// True when any index had to be discarded on open. The caller has to surface
     /// this: an emptied index answers "nothing matched", which reads as "the base
     /// does not cover this".
     pub index_was_rebuilt: bool,
@@ -69,39 +90,45 @@ impl Memory {
     /// a particular arrangement would be an assumption about the user's filesystem,
     /// and ADR-0008 says the base is addressed by path and never assumed. A tidy
     /// layout is then a convenience the user may adopt, not a shape we impose.
-    pub fn open(paths: &[&Path], private: bool, db: &Path) -> Result<Memory, OpenError> {
+    pub fn open(paths: &[&Path], private: bool) -> Result<Memory, OpenError> {
         let mut entries = Vec::new();
         let mut aliases = Vec::new();
-        let mut bases = Vec::new();
+        let mut agents = Vec::new();
+        let mut index_was_rebuilt = false;
 
-        for path in expand_roots(paths) {
-            let base = Base::discover(&path, private)
-                .map_err(|e| OpenError::Unreadable(path.clone(), e))?;
+        for root in expand_roots(paths) {
+            let base = Base::discover(&root, private)
+                .map_err(|e| OpenError::Unreadable(root.clone(), e))?;
 
             if !private && !base.tracked_only {
-                return Err(OpenError::PrivacyUnknowable(path));
+                return Err(OpenError::PrivacyUnknowable(root));
             }
+
+            let store =
+                Store::open(&index_path(&root)).map_err(|e| OpenError::Store(e.to_string()))?;
+            index_was_rebuilt |= store.rebuilt;
 
             entries.extend(index::build(&base));
             aliases.extend(base.aliases.clone());
-            bases.push(path);
+            agents.push(Agent { name: name_of(&root), root, store });
         }
-
-        let store = Store::open(db).map_err(|e| OpenError::Store(e.to_string()))?;
-        let index_was_rebuilt = store.rebuilt;
 
         Ok(Memory {
             entries,
             aliases,
-            store,
             scope: if private { Scope::All } else { Scope::Public },
-            bases,
+            agents,
             index_was_rebuilt,
         })
     }
 
     pub fn scope(&self) -> Scope {
         self.scope
+    }
+
+    /// The roots actually opened, after any fleet root was expanded.
+    pub fn roots(&self) -> Vec<&Path> {
+        self.agents.iter().map(|a| a.root.as_path()).collect()
     }
 
     pub fn entry_count(&self) -> usize {
@@ -136,22 +163,50 @@ impl Memory {
             &self.aliases,
             top * retrieve::KEYWORD_OVERSAMPLE,
         );
-        let text = self
-            .store
-            .search(&terms, top * retrieve::TEXT_OVERSAMPLE, self.scope)
-            .unwrap_or_default();
+        let text = self.search_all(&terms, top * retrieve::TEXT_OVERSAMPLE);
 
         retrieve::fuse(&keyword, &text, top)
+    }
+
+    /// Searches every agent's index and merges the results **by rank**.
+    ///
+    /// BM25 scores are not comparable across indexes: the value depends on the term
+    /// statistics of the corpus that produced it, so a 4.2 from Yaron's eighteen
+    /// files means something different from a 4.2 from Steve's fifty-eight. Sorting
+    /// the union by score would silently favour whichever corpus happens to make its
+    /// numbers larger.
+    ///
+    /// Ranks need no conversion, which is the same reason RRF fuses the keyword and
+    /// text lists by position. Round robin therefore treats each agent's best hit as
+    /// comparable to every other agent's best hit, which is exactly the assumption
+    /// already load bearing one level up.
+    fn search_all(&self, terms: &[String], limit: usize) -> Vec<crate::store::Hit> {
+        let per_agent: Vec<Vec<crate::store::Hit>> = self
+            .agents
+            .iter()
+            .map(|a| a.store.search(terms, limit, self.scope).unwrap_or_default())
+            .collect();
+
+        let mut merged = Vec::new();
+        let deepest = per_agent.iter().map(|l| l.len()).max().unwrap_or(0);
+        'outer: for rank in 0..deepest {
+            for list in &per_agent {
+                if let Some(hit) = list.get(rank) {
+                    merged.push(hit.clone());
+                    if merged.len() == limit {
+                        break 'outer;
+                    }
+                }
+            }
+        }
+        merged
     }
 
     /// Measures a claim against what the base already says and proposes ADD, UPDATE
     /// or NOOP with the evidence. **Writes nothing and decides nothing.**
     pub fn remember(&self, claim: &str) -> Assessment {
         let terms = index::expand_query(claim, &self.aliases);
-        let hits = self
-            .store
-            .search(&terms, remember::EVIDENCE_WIDTH, self.scope)
-            .unwrap_or_default();
+        let hits = self.search_all(&terms, remember::EVIDENCE_WIDTH);
         remember::assess(claim, &terms, &hits)
     }
 
@@ -256,6 +311,13 @@ pub fn expand_roots(paths: &[&Path]) -> Vec<PathBuf> {
 
 /// Immediate subdirectories that are bases, sorted so the order a fleet opens in
 /// does not depend on the order the filesystem happens to hand back.
+/// The directory name, which is the agent's name by ADR-0011's convention.
+fn name_of(root: &Path) -> String {
+    root.file_name()
+        .map(|n| n.to_string_lossy().to_string())
+        .unwrap_or_else(|| root.display().to_string())
+}
+
 fn bases_in(dir: &Path) -> Vec<PathBuf> {
     let mut found: Vec<PathBuf> = match std::fs::read_dir(dir) {
         Ok(entries) => entries
@@ -333,8 +395,7 @@ mod tests {
 
         let m = Memory {
             entries: vec![], aliases: vec![],
-            store: Store::open(&scratch("agree").join("i.db")).expect("store"),
-            scope: Scope::Public, bases: vec![], index_was_rebuilt: false,
+            scope: Scope::Public, agents: vec![], index_was_rebuilt: false,
         };
 
         assert!(m.no_agreement(&[one.clone()]), "one scorer alone is a guess");
@@ -454,16 +515,14 @@ mod tests {
     fn opening_a_base_outside_git_is_refused_unless_the_private_layer_was_asked_for() {
         let root = scratch("nogit");
         let base = make_base(&root, "loose");
-        let db = root.join("i.db");
-
-        match Memory::open(&[&base], false, &db) {
+        match Memory::open(&[&base], false) {
             Err(OpenError::PrivacyUnknowable(p)) => assert_eq!(p, base),
             Err(e) => panic!("expected a privacy refusal, got {e}"),
             Ok(_) => panic!("a base outside git must not open read only: privacy is unknowable"),
         }
 
         // Asking for it explicitly is allowed: that is the deliberate act.
-        let m = Memory::open(&[&base], true, &db).expect("private open");
+        let m = Memory::open(&[&base], true).expect("private open");
         assert_eq!(m.scope(), Scope::All);
     }
 }
