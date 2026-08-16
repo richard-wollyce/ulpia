@@ -6,7 +6,7 @@
 
 
 use kb::checks::{Finding, Level};
-use kb::{base, blocks, checks, index, mcp, remember, retrieve, store};
+use kb::{base, blocks, checks, index, mcp, memory, remember, retrieve, store};
 use base::Base;
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
@@ -147,17 +147,23 @@ fn cmd_check(paths: &[&str], all: bool, strict: bool) -> ExitCode {
     let mut errors = 0usize;
     let mut warnings = 0usize;
 
-    for (i, path) in paths.iter().enumerate() {
+    // A fleet root expands into its agents here exactly as it does for retrieval.
+    // When it did not, `kb check` on a fleet read three clean bases as one soup and
+    // reported 18 errors and 276 warnings.
+    let given: Vec<&Path> = paths.iter().map(Path::new).collect();
+    let bases = memory::expand_roots(&given);
+
+    for (i, path) in bases.iter().enumerate() {
         if i > 0 {
             println!();
         }
-        match check_one(Path::new(path), all) {
+        match check_one(path, all) {
             Ok((e, w)) => {
                 errors += e;
                 warnings += w;
             }
             Err(e) => {
-                eprintln!("kb: cannot read {path}: {e}");
+                eprintln!("kb: cannot read {}: {e}", path.display());
                 errors += 1;
             }
         }
@@ -207,12 +213,15 @@ fn check_one(path: &Path, all: bool) -> std::io::Result<(usize, usize)> {
 // ---------------------------------------------------------------------------
 
 fn cmd_index(paths: &[&str], all: bool, db: &str, json: bool) -> ExitCode {
+    // Same expansion as check and retrieve. Three notions of what a path means is
+    // two more than a program can afford.
+    let given: Vec<&Path> = paths.iter().map(Path::new).collect();
     let mut bases = Vec::new();
-    for path in paths {
-        match Base::discover(Path::new(path), all) {
+    for path in memory::expand_roots(&given) {
+        match Base::discover(&path, all) {
             Ok(base) => bases.push(base),
             Err(e) => {
-                eprintln!("kb: cannot read {path}: {e}");
+                eprintln!("kb: cannot read {}: {e}", path.display());
                 return ExitCode::from(1);
             }
         }

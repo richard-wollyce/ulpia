@@ -163,12 +163,36 @@ impl Memory {
     }
 }
 
-/// Expands any fleet root into the bases under it, leaving real bases alone.
+/// The directory a fleet keeps its agents in, per ADR-0011.
 ///
-/// A directory is a fleet root when it holds no map file of its own but has immediate
-/// children that do. Anything else is passed through untouched, including a path that
-/// is neither, so the error comes from `Base::discover` where it can say why.
-fn expand_roots(paths: &[&Path]) -> Vec<PathBuf> {
+/// Everything inside it is an agent, which is why no configuration says so: a
+/// convention cannot be wrong about itself, and a list can.
+const AGENTS_DIR: &str = "agents";
+
+/// The manifest, for what convention cannot express.
+const MANIFEST: &str = "fleet.txt";
+
+/// Expands fleet roots into the bases under them, leaving real bases alone.
+///
+/// Three shapes are recognised, in this order:
+///
+/// 1. **A base.** It holds a map file. Returned untouched, even if it contains other
+///    bases, because expanding it would silently drop the parent's own notes.
+/// 2. **A fleet root**, ADR-0011's layout: it holds an `agents/` directory. Every
+///    directory in there is an agent, plus anything the manifest attaches, minus
+///    anything it disables.
+/// 3. **A loose directory of bases**, whose immediate children hold maps. Kept
+///    because a directory of bases is a reasonable thing to point at and refusing it
+///    would buy nothing.
+///
+/// Anything else passes through so `Base::discover` reports it, where the error can
+/// name the path and say what was wrong with it.
+///
+/// **This is public because `check` and `index` need the same answer as `retrieve`.**
+/// It was private, and the CLI consequently treated a whole fleet as a single base:
+/// 18 errors and 276 warnings from three bases that are individually clean. Two
+/// notions of what a path means is one more than a program can afford.
+pub fn expand_roots(paths: &[&Path]) -> Vec<PathBuf> {
     let mut out = Vec::new();
 
     for path in paths {
@@ -177,27 +201,77 @@ fn expand_roots(paths: &[&Path]) -> Vec<PathBuf> {
             continue;
         }
 
-        let mut children: Vec<PathBuf> = match std::fs::read_dir(path) {
-            Ok(entries) => entries
-                .filter_map(|e| e.ok())
-                .map(|e| e.path())
-                .filter(|p| p.is_dir() && crate::base::has_map(p))
-                .collect(),
-            Err(_) => Vec::new(),
+        let agents_dir = path.join(AGENTS_DIR);
+        let mut found = if agents_dir.is_dir() {
+            bases_in(&agents_dir)
+        } else {
+            bases_in(path)
         };
 
-        if children.is_empty() {
-            // Not a base and not a root. Pass it through so discover reports it.
+        if found.is_empty() {
             out.push(path.to_path_buf());
-        } else {
-            // Sorted, so the order a fleet is opened in does not depend on the order
-            // the filesystem happens to hand back.
-            children.sort();
-            out.append(&mut children);
+            continue;
         }
+
+        let (attach, disable) = manifest(&path.join(MANIFEST));
+        found.retain(|p| {
+            p.file_name()
+                .map(|n| !disable.iter().any(|d| d == &n.to_string_lossy()))
+                .unwrap_or(true)
+        });
+        for rel in attach {
+            // Relative to the fleet root, because ADR-0011 forbids absolute paths
+            // inside the fleet: that rule is what makes moving it a directory move.
+            let joined = path.join(&rel);
+            found.push(if joined.exists() { joined } else { PathBuf::from(rel) });
+        }
+
+        out.append(&mut found);
     }
 
     out
+}
+
+/// Immediate subdirectories that are bases, sorted so the order a fleet opens in
+/// does not depend on the order the filesystem happens to hand back.
+fn bases_in(dir: &Path) -> Vec<PathBuf> {
+    let mut found: Vec<PathBuf> = match std::fs::read_dir(dir) {
+        Ok(entries) => entries
+            .filter_map(|e| e.ok())
+            .map(|e| e.path())
+            .filter(|p| p.is_dir() && crate::base::has_map(p))
+            .collect(),
+        Err(_) => Vec::new(),
+    };
+    found.sort();
+    found
+}
+
+/// Reads `attach` and `disable` from the manifest. Same shape as `kb-aliases.txt`,
+/// and for the same reason: the person editing it just watched something go wrong,
+/// and a format they have to look up is a format they will not use.
+fn manifest(path: &Path) -> (Vec<String>, Vec<String>) {
+    let text = match std::fs::read_to_string(path) {
+        Ok(t) => t,
+        Err(_) => return (Vec::new(), Vec::new()),
+    };
+
+    let mut attach = Vec::new();
+    let mut disable = Vec::new();
+    for line in text.lines() {
+        let line = line.split('#').next().unwrap_or("").trim();
+        let Some((key, value)) = line.split_once('=') else { continue };
+        let value = value.trim().to_string();
+        if value.is_empty() {
+            continue;
+        }
+        match key.trim() {
+            "attach" => attach.push(value),
+            "disable" => disable.push(value),
+            _ => {}
+        }
+    }
+    (attach, disable)
 }
 
 #[cfg(test)]
@@ -246,6 +320,63 @@ mod tests {
 
         assert_eq!(names, vec!["steve", "yaron", "zed"], "sorted, not filesystem order");
         assert!(!names.contains(&"not-an-agent".to_string()), "a directory with no map is not a base");
+    }
+
+    /// ADR-0011's actual layout, which the first version of this function missed:
+    /// it looked one level down and the ADR puts agents two levels down, under
+    /// `agents/`. Written before the ADR existed and not revisited when the ADR
+    /// landed, so the code and the decision disagreed until a real fleet was built.
+    #[test]
+    fn a_fleet_root_finds_the_agents_directory() {
+        let root = scratch("agents-dir");
+        let agents = root.join("agents");
+        std::fs::create_dir_all(&agents).expect("mkdir");
+        make_base(&agents, "zed");
+        make_base(&agents, "yaron");
+        std::fs::create_dir_all(root.join("outbox")).expect("mkdir");
+
+        let names: Vec<String> = expand_roots(&[&root])
+            .iter()
+            .map(|p| p.file_name().unwrap().to_string_lossy().to_string())
+            .collect();
+        assert_eq!(names, vec!["yaron", "zed"], "outbox is not an agent");
+    }
+
+    /// `disable` in the manifest, which is the only way to switch an agent off
+    /// without deleting it.
+    #[test]
+    fn the_manifest_can_disable_an_agent() {
+        let root = scratch("disable");
+        let agents = root.join("agents");
+        std::fs::create_dir_all(&agents).expect("mkdir");
+        make_base(&agents, "zed");
+        make_base(&agents, "steve");
+        std::fs::write(root.join("fleet.txt"), "# a comment\ndisable = steve\n").expect("write");
+
+        let names: Vec<String> = expand_roots(&[&root])
+            .iter()
+            .map(|p| p.file_name().unwrap().to_string_lossy().to_string())
+            .collect();
+        assert_eq!(names, vec!["zed"]);
+    }
+
+    /// `attach` is how freedom survives structure: a base outside the fleet is not
+    /// told to move, and the attachment is recorded in one file so something always
+    /// knows where everything is.
+    #[test]
+    fn the_manifest_can_attach_a_base_from_outside() {
+        let root = scratch("attach");
+        let agents = root.join("agents");
+        std::fs::create_dir_all(&agents).expect("mkdir");
+        make_base(&agents, "zed");
+        make_base(&root, "outside");
+        std::fs::write(root.join("fleet.txt"), "attach = outside\n").expect("write");
+
+        let names: Vec<String> = expand_roots(&[&root])
+            .iter()
+            .map(|p| p.file_name().unwrap().to_string_lossy().to_string())
+            .collect();
+        assert_eq!(names, vec!["zed", "outside"]);
     }
 
     /// A base that happens to contain other bases is still a base. Expanding it would
