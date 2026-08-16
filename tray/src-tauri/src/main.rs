@@ -60,10 +60,39 @@ fn read_fleet_root(app: &AppHandle) -> Option<PathBuf> {
     if path.is_dir() { Some(path) } else { None }
 }
 
+/// How many files one drop may carry.
+///
+/// **Not a context window limit.** Each file is distilled on its own per the
+/// ingestion protocol, so they never share a prompt and the window is never the
+/// binding constraint.
+///
+/// The limit exists because ADR-0007 makes every write a proposal a human approves,
+/// and a queue of thirty proposals is a queue nobody reads. Someone facing thirty
+/// decisions approves all thirty, which is the same as having no gate at all. The
+/// bound is the reviewer, not the machine.
+const MAX_INGEST_BATCH: usize = 10;
+
+/// What the panel draws, and it lives here rather than in the webview because the
+/// panel is dismissed constantly and work outlives it. Closing the panel mid ingest
+/// and reopening it has to show where the work got to, which is only possible if the
+/// panel is a view over this rather than the owner of it.
+#[derive(Clone, Default, Serialize)]
+struct Progress {
+    /// The named step, rendered as rising text. `None` means nothing is running.
+    stage: Option<String>,
+    /// Only meaningful for ingestion. `total` of zero means draw no bar, which is
+    /// the honest rendering for generation: tokens per second is knowable and the
+    /// total is not, and a percentage that guesses is a percentage that lies.
+    done: usize,
+    total: usize,
+    problem: Option<String>,
+}
+
 #[derive(Default)]
 struct Fleet {
     memory: Mutex<Option<Memory>>,
     root: Mutex<Option<PathBuf>>,
+    progress: Mutex<Progress>,
 }
 
 #[derive(Serialize)]
@@ -183,25 +212,31 @@ fn ask(app: AppHandle, state: State<Fleet>, question: String) -> Result<Vec<Answ
         return Err("Type a question first.".into());
     }
 
-    progress(&app, 20);
+    stage(&app, &state, "Roteando para o agente…");
 
     let guard = state.memory.lock().unwrap();
-    let memory = guard.as_ref().ok_or("No fleet is open.")?;
+    let memory = match guard.as_ref() {
+        Some(m) => m,
+        None => {
+            failed(&app, &state, "Nenhuma frota aberta.");
+            return Err("Nenhuma frota aberta.".into());
+        }
+    };
 
-    progress(&app, 60);
+    stage(&app, &state, "Lendo a base…");
     let found = memory.retrieve(&question, 5);
-    progress(&app, 100);
 
     if found.is_empty() {
-        // The icon has to come back to idle here too. Leaving it at a full progress
-        // bar is what made a 283 ms "nothing matched" look like an unbounded wait:
-        // the panel said so in small text while the tray still showed work in
-        // progress, and the tray is what the eye goes to. A failure that looks like
-        // slowness is worse than a failure that looks like a failure.
-        idle(&app);
+        // Every exit has to clear the progress. Leaving the tray on a full bar is
+        // what made a 283 ms "nothing matched" look like an unbounded wait: the panel
+        // explained itself in small text while the tray still showed work running,
+        // and the eye goes to the tray. A failure that looks like slowness is worse
+        // than a failure that looks like a failure.
+        let message = format!("Nada casou com \"{question}\".");
+        failed(&app, &state, &message);
         // Said plainly on purpose. A router that always returns something teaches
         // you to trust a guess.
-        return Err(format!("Nada casou com \"{question}\"."));
+        return Err(message);
     }
 
     let stale = memory.looks_stale(&found);
@@ -225,10 +260,14 @@ fn ask(app: AppHandle, state: State<Fleet>, question: String) -> Result<Vec<Answ
         .collect();
 
     if stale {
-        notify(&app, "Index looks stale", "Files ranked but no passages. Run kb index.");
+        notify(
+            &app,
+            "Índice desatualizado",
+            "Arquivos ranqueados sem passagens. Rode kb index.",
+        );
     }
 
-    idle(&app);
+    done(&app, &state);
     Ok(answers)
 }
 
@@ -254,36 +293,128 @@ fn ask_from_compose(app: AppHandle, question: String) {
 /// Files dropped on the panel. They are reported, not ingested: distillation is a
 /// judgement call and ADR-0007 keeps the write side a proposal.
 #[tauri::command]
-fn accept_files(app: AppHandle, paths: Vec<String>) -> String {
-    let n = paths.len();
+fn accept_files(app: AppHandle, state: State<Fleet>, paths: Vec<String>) -> Result<String, String> {
+    if paths.len() > MAX_INGEST_BATCH {
+        let message = format!(
+            "{} arquivos de uma vez. O limite é {MAX_INGEST_BATCH}, porque cada um vira uma \
+             proposta que você aprova, e uma fila longa demais é uma fila que ninguém lê.",
+            paths.len()
+        );
+        failed(&app, &state, &message);
+        return Err(message);
+    }
+
+    let total = paths.len();
+    stage(&app, &state, "Identificando arquivos…");
+
+    // This checks and reports; it does not distil. Ingestion is a model call per file
+    // and a proposal per result, and neither exists yet. The bar is over the work
+    // actually being done rather than over work being pretended.
+    let mut ok = 0usize;
+    let mut missing = Vec::new();
+    for (i, path) in paths.iter().enumerate() {
+        counted(&app, &state, "Identificando arquivos…", i, total);
+        match std::fs::metadata(path) {
+            Ok(m) if m.is_file() => ok += 1,
+            _ => missing.push(
+                PathBuf::from(path)
+                    .file_name()
+                    .map(|n| n.to_string_lossy().to_string())
+                    .unwrap_or_else(|| path.clone()),
+            ),
+        }
+    }
+
+    done(&app, &state);
+
+    if !missing.is_empty() {
+        let message = format!("Não consegui ler: {}", missing.join(", "));
+        notify(&app, "Alguns arquivos falharam", &message);
+        return Err(message);
+    }
+
     notify(
         &app,
-        "Files received",
-        &format!("{n} file{} queued for the inbox.", if n == 1 { "" } else { "s" }),
+        "Arquivos recebidos",
+        &format!("{ok} arquivo{} pronto{} para a inbox.", plural(ok), plural(ok)),
     );
-    format!("{n} received")
+    Ok(format!("{ok} arquivo{} recebido{}", plural(ok), plural(ok)))
+}
+
+fn plural(n: usize) -> &'static str {
+    if n == 1 { "" } else { "s" }
 }
 
 // ---------------------------------------------------------------------------
 // Tray feedback
 // ---------------------------------------------------------------------------
 
-fn progress(app: &AppHandle, percent: u8) {
-    let frame = (percent.min(100) / 10) as usize;
+/// Writes the new state, then emits it with the lock already released.
+///
+/// Emitting while holding the lock invites a listener that calls back in to wait on
+/// a lock its own caller holds, which is a deadlock that only shows up under timing.
+fn publish(app: &AppHandle, state: &Fleet, next: Progress) {
+    {
+        *state.progress.lock().unwrap() = next.clone();
+    }
+
+    // The tray icon follows the bar when there is one and goes idle otherwise. It is
+    // the only progress visible once the panel is dismissed, and leaving it showing
+    // work that finished is what made a 283 ms failure look like an endless wait.
     if let Some(tray) = app.tray_by_id("fleet") {
-        if let Ok(icon) = Image::from_bytes(PROGRESS_FRAMES[frame]) {
+        let bytes = if next.total > 0 && next.done < next.total {
+            let frac = next.done as f64 / next.total as f64;
+            PROGRESS_FRAMES[((frac * 10.0).round() as usize).min(10)]
+        } else if next.stage.is_some() {
+            // Work with no countable total still deserves a mark that says "busy".
+            PROGRESS_FRAMES[5]
+        } else {
+            IDLE_ICON
+        };
+        if let Ok(icon) = Image::from_bytes(bytes) {
             let _ = tray.set_icon(Some(icon));
         }
     }
-    let _ = app.emit("progress", percent);
+
+    let _ = app.emit("progress", next);
 }
 
-fn idle(app: &AppHandle) {
-    if let Some(tray) = app.tray_by_id("fleet") {
-        if let Ok(icon) = Image::from_bytes(IDLE_ICON) {
-            let _ = tray.set_icon(Some(icon));
-        }
-    }
+/// A named step, with no bar. This is the whole feedback for a question: the stages
+/// are knowable and the duration is not.
+fn stage(app: &AppHandle, state: &Fleet, text: &str) {
+    publish(
+        app,
+        state,
+        Progress { stage: Some(text.into()), done: 0, total: 0, problem: None },
+    );
+}
+
+/// A counted step. Ingestion is the only thing that has a real denominator.
+fn counted(app: &AppHandle, state: &Fleet, text: &str, done: usize, total: usize) {
+    publish(
+        app,
+        state,
+        Progress { stage: Some(text.into()), done, total, problem: None },
+    );
+}
+
+fn done(app: &AppHandle, state: &Fleet) {
+    publish(app, state, Progress::default());
+}
+
+fn failed(app: &AppHandle, state: &Fleet, why: &str) {
+    publish(
+        app,
+        state,
+        Progress { stage: None, done: 0, total: 0, problem: Some(why.into()) },
+    );
+}
+
+/// The panel asks for this when it opens, which is what lets work survive the panel
+/// being dismissed. Without it the tray would know and the panel would not.
+#[tauri::command]
+fn progress_now(state: State<Fleet>) -> Progress {
+    state.progress.lock().unwrap().clone()
 }
 
 fn notify(app: &AppHandle, title: &str, body: &str) {
@@ -357,7 +488,8 @@ fn main() {
             ask,
             accept_files,
             open_compose,
-            ask_from_compose
+            ask_from_compose,
+            progress_now
         ])
         .setup(move |app| {
             let handle = app.handle().clone();

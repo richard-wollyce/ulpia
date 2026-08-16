@@ -92,3 +92,37 @@ footer {
 footer .hint { color: var(--fg-2); font-size: 12px; margin-right: auto; }
 footer button { flex: 0 0 auto; text-align: center; }
 footer button.send { background: var(--accent); color: #06281c; border-color: var(--accent); }
+
+/* Progress. Named stages rise; the bar appears only when there is a real
+   denominator to draw, which is ingestion and nothing else. */
+.progress { margin-top: 10px; }
+.progress.idle { display: none; }
+
+.stage {
+  position: relative;
+  height: 18px;
+  overflow: hidden;
+  font-size: 12px;
+  color: var(--fg-2);
+}
+.stage span {
+  position: absolute; left: 0; right: 0; top: 0;
+  animation: rise .26s cubic-bezier(.2, .7, .3, 1) both;
+}
+.stage span.leaving { animation: fall .26s cubic-bezier(.4, 0, .8, .4) both; }
+
+@keyframes rise { from { transform: translateY(105%); opacity: 0; } to { transform: none; opacity: 1; } }
+@keyframes fall { from { transform: none; opacity: 1; } to { transform: translateY(-105%); opacity: 0; } }
+
+.bar {
+  margin-top: 7px; height: 3px;
+  background: var(--line); border-radius: 2px; overflow: hidden;
+}
+.bar.hidden { display: none; }
+.bar i { display: block; height: 100%; background: var(--accent); width: 0; transition: width .18s linear; }
+
+/* Motion is decoration here; the text is the information. */
+@media (prefers-reduced-motion: reduce) {
+  .stage span, .stage span.leaving { animation: none; }
+  .bar i { transition: none; }
+}
