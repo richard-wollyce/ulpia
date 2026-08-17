@@ -16,7 +16,6 @@
 use std::fs;
 use std::io;
 use std::path::{Path, PathBuf};
-use std::process::Command;
 
 /// Directories every agent has. Empty ones are kept with a `.gitkeep`, because a
 /// shape that only appears once it is used is a shape nobody discovers.
@@ -130,7 +129,7 @@ pub fn agent(fleet: &Path, name: &str, at: Option<&Path>) -> Result<Created, Ini
 /// so the first real commit uses whoever the machine says the author is. A generated
 /// identity that outlives generation is an author nobody chose.
 fn run_git(root: &Path, args: &[&str]) -> bool {
-    Command::new("git")
+    crate::base::quiet("git")
         .args(args)
         .current_dir(root)
         .status()

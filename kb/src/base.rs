@@ -165,13 +165,33 @@ impl Base {
     }
 }
 
+
+/// Spawns a child process without letting Windows open a console window for it.
+///
+/// A GUI process has no console, so Windows creates one for any console child it
+/// spawns. That is why the tray flashed a terminal on every fleet open, three times,
+/// once per `git ls-files`, and why one of them surfaced as ERROR_BROKEN_PIPE
+/// (0x800700e8) when the window it created went away underneath the pipe.
+///
+/// `CREATE_NO_WINDOW` is 0x08000000. Named rather than imported so this file keeps
+/// its zero dependency property, and behind cfg so nothing changes elsewhere.
+pub fn quiet(program: &str) -> Command {
+    let mut cmd = Command::new(program);
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        cmd.creation_flags(0x0800_0000);
+    }
+    cmd
+}
+
 /// The set of paths git tracks in this base, relative and slash separated.
 ///
 /// Returns None when git is missing or the directory is not a repository, in
 /// which case the caller keeps every file and says so in the report. A filter
 /// that quietly does nothing is worse than no filter.
 fn tracked_files(root: &Path) -> Option<HashSet<String>> {
-    let output = Command::new("git")
+    let output = quiet("git")
         .arg("-C")
         .arg(root)
         .arg("ls-files")
