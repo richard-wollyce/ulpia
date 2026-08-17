@@ -1,0 +1,16 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "default",
+  "description": "What the two windows are allowed to do. Tauri v2 denies by default, so anything absent here is unavailable rather than merely unused.",
+  "windows": ["panel", "compose"],
+  "permissions": [
+    "core:default",
+    "core:window:allow-hide",
+    "core:window:allow-show",
+    "core:window:allow-set-focus",
+    "core:window:allow-start-dragging",
+    "core:event:default",
+    "dialog:allow-open",
+    "notification:default"
+  ]
+}

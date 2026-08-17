@@ -1,0 +1,39 @@
+[package]
+name = "kb"
+version = "0.1.0"
+edition = "2024"
+description = "A linter for file based knowledge bases"
+
+# One dependency, taken deliberately in ADR-0007 and not before.
+#
+# Everything else here is std: directory walking, string scanning, the wikilink
+# parser, the IDF scorer. That was the right call for a linter that matches
+# brackets, where a regex crate would have bought a supply chain against parsing a
+# bracket pair.
+#
+# It stops being the right call at the index. SQLite brings FTS5 with BM25 built
+# in, holds the chunks and their metadata in the same file, and stays readable with
+# any `sqlite3` binary, which is the property the whole design rests on. Writing a
+# B-tree and a full text index by hand to avoid this would be the same mistake in
+# the opposite direction.
+#
+# `bundled` compiles SQLite from the amalgamation, so there is no system package to
+# install and nothing to run.
+# A library target as well as a binary, so the Tauri backend can link the memory
+# instead of shelling out to the CLI and parsing its stdout. ADR-0009 chose Tauri
+# partly for this; it was not possible while the crate was bin only.
+[lib]
+name = "kb"
+path = "src/lib.rs"
+
+[[bin]]
+name = "kb"
+path = "src/main.rs"
+
+[dependencies]
+rusqlite = { version = "0.37", features = ["bundled"] }
+
+[profile.release]
+opt-level = "z"
+lto = true
+strip = true
