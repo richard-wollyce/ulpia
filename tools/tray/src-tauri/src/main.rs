@@ -166,7 +166,7 @@ fn open_fleet(_app: &AppHandle, state: &Fleet, root: PathBuf) -> Status {
                 agents,
                 entries: memory.entry_count(),
                 problem: if memory.index_was_rebuilt {
-                    Some("Um índice era anterior à correção de privacidade e foi esvaziado. Rode kb index.".into())
+                    Some("An index predated the privacy fix and was emptied. Run kb index.".into())
                 } else {
                     None
                 },
@@ -232,7 +232,7 @@ fn ask(app: AppHandle, state: State<Fleet>, question: String) -> Result<Vec<Answ
         return Err("Type a question first.".into());
     }
 
-    stage(&app, &state, "Roteando para o agente…");
+    stage(&app, &state, "Routing to the agent…");
 
     let guard = state.memory.lock().unwrap();
     let memory = match guard.as_ref() {
@@ -291,8 +291,8 @@ fn ask(app: AppHandle, state: State<Fleet>, question: String) -> Result<Vec<Answ
     if stale {
         notify(
             &app,
-            "Índice desatualizado",
-            "Arquivos ranqueados sem passagens. Rode kb index.",
+            "Index out of date",
+            "Files ranked with no passages. Run kb index.",
         );
     }
 
@@ -305,8 +305,8 @@ fn ask(app: AppHandle, state: State<Fleet>, question: String) -> Result<Vec<Answ
                 done: 0,
                 total: 0,
                 problem: Some(
-                    "Só um dos dois buscadores encontrou isso, então é palpite e não \
-                     resposta. Talvez a base não cubra a pergunta."
+                    "Only one of the two scorers found this, so it is a guess rather \
+                     than an answer. The base may not cover the question."
                         .into(),
                 ),
             },
@@ -342,8 +342,8 @@ fn ask_from_compose(app: AppHandle, question: String) {
 fn accept_files(app: AppHandle, state: State<Fleet>, paths: Vec<String>) -> Result<String, String> {
     if paths.len() > MAX_INGEST_BATCH {
         let message = format!(
-            "{} arquivos de uma vez. O limite é {MAX_INGEST_BATCH}, porque cada um vira uma \
-             proposta que você aprova, e uma fila longa demais é uma fila que ninguém lê.",
+            "{} files at once. The limit is {MAX_INGEST_BATCH}, because each one becomes a \
+             proposal you approve, and a queue too long is a queue nobody reads.",
             paths.len()
         );
         failed(&app, &state, &message);
@@ -351,7 +351,7 @@ fn accept_files(app: AppHandle, state: State<Fleet>, paths: Vec<String>) -> Resu
     }
 
     let total = paths.len();
-    stage(&app, &state, "Identificando arquivos…");
+    stage(&app, &state, "Identifying files…");
 
     // This checks and reports; it does not distil. Ingestion is a model call per file
     // and a proposal per result, and neither exists yet. The bar is over the work
@@ -359,7 +359,7 @@ fn accept_files(app: AppHandle, state: State<Fleet>, paths: Vec<String>) -> Resu
     let mut ok = 0usize;
     let mut missing = Vec::new();
     for (i, path) in paths.iter().enumerate() {
-        counted(&app, &state, "Identificando arquivos…", i, total);
+        counted(&app, &state, "Identifying files…", i, total);
         match std::fs::metadata(path) {
             Ok(m) if m.is_file() => ok += 1,
             _ => missing.push(
@@ -374,17 +374,17 @@ fn accept_files(app: AppHandle, state: State<Fleet>, paths: Vec<String>) -> Resu
     done(&app, &state);
 
     if !missing.is_empty() {
-        let message = format!("Não consegui ler: {}", missing.join(", "));
-        notify(&app, "Alguns arquivos falharam", &message);
+        let message = format!("Could not read: {}", missing.join(", "));
+        notify(&app, "Some files failed", &message);
         return Err(message);
     }
 
     notify(
         &app,
-        "Arquivos recebidos",
-        &format!("{ok} arquivo{} pronto{} para a inbox.", plural(ok), plural(ok)),
+        "Files received",
+        &format!("{ok} file{} ready for the inbox.", plural(ok)),
     );
-    Ok(format!("{ok} arquivo{} recebido{}", plural(ok), plural(ok)))
+    Ok(format!("{ok} file{} received", plural(ok)))
 }
 
 fn plural(n: usize) -> &'static str {

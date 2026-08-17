@@ -160,7 +160,7 @@ mod tests {
         }
     }
 
-    fn shit(base: &str, path: &str, heading: &str, text: &str) -> store::Hit {
+    fn store_hit(base: &str, path: &str, heading: &str, text: &str) -> store::Hit {
         store::Hit {
             base: base.into(),
             path: path.into(),
@@ -178,10 +178,10 @@ mod tests {
     #[test]
     fn a_file_contributes_to_the_score_once_however_many_chunks_match() {
         let text = vec![
-            shit("yaron", "protocols/safety.md", "Limits", "the calorie floor is 1500"),
-            shit("yaron", "recipes/long.md", "A", "calorie"),
-            shit("yaron", "recipes/long.md", "B", "calorie"),
-            shit("yaron", "recipes/long.md", "C", "calorie"),
+            store_hit("yaron", "protocols/safety.md", "Limits", "the calorie floor is 1500"),
+            store_hit("yaron", "recipes/long.md", "A", "calorie"),
+            store_hit("yaron", "recipes/long.md", "B", "calorie"),
+            store_hit("yaron", "recipes/long.md", "C", "calorie"),
         ];
         let out = fuse(&[], &text, 5);
 
@@ -195,9 +195,9 @@ mod tests {
     #[test]
     fn every_matching_chunk_still_comes_back_as_a_passage() {
         let text = vec![
-            shit("yaron", "recipes/long.md", "A", "first matching section"),
-            shit("yaron", "recipes/long.md", "B", "second matching section"),
-            shit("yaron", "recipes/long.md", "C", "third matching section"),
+            store_hit("yaron", "recipes/long.md", "A", "first matching section"),
+            store_hit("yaron", "recipes/long.md", "B", "second matching section"),
+            store_hit("yaron", "recipes/long.md", "C", "third matching section"),
         ];
         let out = fuse(&[], &text, 5);
 
@@ -209,7 +209,7 @@ mod tests {
 
     #[test]
     fn provenance_travels_with_the_passage() {
-        let out = fuse(&[], &[shit("zed", "knowledge/a.md", "H", "vulkan")], 5);
+        let out = fuse(&[], &[store_hit("zed", "knowledge/a.md", "H", "vulkan")], 5);
         assert_eq!(out[0].passages[0].provenance.as_deref(), Some("agent"));
         assert_eq!(out[0].passages[0].stage.as_deref(), Some("distilled"));
     }
@@ -235,7 +235,7 @@ mod tests {
             index::Hit { entry: &entries[1], score: 9.0, matched: vec!["a".into()] },
             index::Hit { entry: &entries[0], score: 1.0, matched: vec!["a".into()] },
         ];
-        let text = vec![shit("zed", "knowledge/both.md", "H", "a")];
+        let text = vec![store_hit("zed", "knowledge/both.md", "H", "a")];
 
         let out = fuse(&keyword, &text, 5);
         assert_eq!(out[0].path, "knowledge/both.md");
