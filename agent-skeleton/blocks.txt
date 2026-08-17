@@ -1,0 +1,23 @@
+# The constitution, as blocks. See zed/decisions/0007-memory-architecture.md.
+#
+# Order is by how often a block changes, most stable first, and it is not cosmetic.
+# Prefix caching reuses the KV state of a prompt only up to the first token that
+# differs, so a change invalidates its own block and everything after it. Put a
+# frequently changing block early and every switch pays to recompute the stable ones
+# behind it, for nothing.
+#
+# Run `kb blocks .` to see what each one costs and what changing it costs.
+
+# Who the agent is and how it works. Changes rarely.
+[identity]
+CLAUDE.md
+index.md
+
+# What exists in the base. Changes whenever a note is added, so it goes last among
+# the resident blocks, and it leaves the resident set once routing happens outside
+# the model.
+[map]
+MAP.md
+
+# What is open right now. Fetched only when the question needs it.
+[session] on-demand

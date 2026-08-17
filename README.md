@@ -1,53 +1,185 @@
 # Vesta
 
-A local first fleet of agents, each with its own knowledge base, and one memory layer
-that serves all of them.
+**A fleet of agents, each with its own knowledge base, and one memory layer under all
+of them. Everything on your machine.**
 
-Your files stay on your machine. `kb` reads plain markdown, derives an index it can
-throw away, and answers which files a question should open. There is no model inside
-it, and there never will be: retrieval that depends on a model is retrieval you cannot
-run offline, cannot audit, and cannot explain when it is wrong.
+Vesta answers *which of your files a question should open*, across every agent you
+have, in about a millisecond, without sending anything anywhere and without a model in
+the loop.
 
-## What is here
+Then you hand those files to whatever model you like. Yours, locally. Claude, through
+MCP. Something else next year. The memory outlives the model.
 
-| Path | What it is |
-|---|---|
-| `tools/kb` | The memory layer. Lints, indexes, routes, and serves MCP. One dependency. |
-| `tools/tray` | A Windows tray app over the same library. |
-| `agents/` | Your agents. **Not in this repository**, by design. |
-| `fleet.txt` | The fleet's name, and the manifest for what convention cannot express. |
+---
 
-## Your knowledge is not in here
+## Why this exists
 
-`agents/` is ignored by this repository and is a separate one of its own. That is
-structural, not a convention: `git add -A` at this root cannot descend into it, so
-publishing a note is not a mistake you are able to make.
+Most memory layers for agents put an embedding model in the retrieval path. That buys
+semantic matching and costs you four things: you cannot run it offline, you cannot
+explain a bad result, you cannot reproduce yesterday's answer, and your notes have been
+somewhere you did not choose.
 
-To start a fleet of your own:
+Vesta takes the other trade. **Retrieval is plain software.** Same question, same
+answer, forever, and when it is wrong it tells you why in words you can act on.
 
 ```
-kb init myagent
+$ kb route "quantas calorias posso comer hoje" .
+
+  0.032  yaron    protocols/checkin.md          keywords #2 + text #5
+  0.016  yaron    calculations/formulas.md      text #1
+```
+
+Two independent scorers rank every file: a keyword index built from your own map, and
+SQLite full text search over the content. Their results are fused with Reciprocal Rank
+Fusion.
+
+**The signal is not the score, it is the agreement.** A file both scorers found is a
+hit. A file only one found is a guess, and Vesta says so instead of dressing it up.
+That distinction was not designed, it was measured: the two questions that routed
+correctly had both scorers voting, and the one that returned nonsense had one.
+
+---
+
+## Quickstart
+
+Requires Rust. One dependency, no build scripts, no network at runtime.
+
+```
+git clone <this repo> && cd vesta
+cargo build --release --manifest-path tools/kb/Cargo.toml
+```
+
+Create your first agent:
+
+```
+kb init yaron
 ```
 
 That writes the full agent shape, initialises git, and makes the first commit, so the
-agent it creates can be opened by the system that created it.
-
-## Using it
+agent it creates can be opened by the system that created it. Drop markdown into
+`agents/yaron/knowledge/`, list it in `MAP.md`, then:
 
 ```
-kb check .            lint every agent
-kb index .            build one index per agent
-kb route "question" . which files should this open
-kb fleet .            who is in the fleet
-kb serve .            speak MCP over stdio, for Claude Desktop and others
+kb index .                      build one index per agent
+kb route "your question" .      which files should this open
+kb check .                      lint every agent
+kb fleet .                      who is in the fleet
 ```
 
-## Design record
+---
 
-Decisions that outlive a conversation are written down as ADRs, with the mechanism that
-makes each one work and the cost it accepts. They live with the architect agent rather
-than here, for now.
+## Your files are the source of truth
 
-## Licence
+Markdown, in folders, in git. Nothing else is authoritative.
 
-Not chosen yet.
+The index is **derived and disposable**: delete `.kb/` and you have lost a rebuild, not
+a fact. That is not a slogan, it is what makes the whole thing portable. Move the
+directory and everything moves with it, because **no absolute path exists anywhere
+inside a fleet.** Backup, sync, and moving to a new machine are all the same operation.
+
+---
+
+## Privacy is a property of the layout, not a promise
+
+Vesta reads git to know what is private. **A file git does not track is a file Vesta
+will not serve** unless you ask for it explicitly, and if git cannot be consulted at all
+it refuses to open the base rather than guessing:
+
+```
+refusing to open <path>: git could not be consulted, so there is no way to tell
+which files are private.
+```
+
+`agents/` is a separate repository and is gitignored by this one, so `git add -A` here
+cannot descend into it. Publishing a note is not a mistake you are able to make.
+
+---
+
+## What an agent is
+
+Browse [`agent-skeleton/`](agent-skeleton/) to see the exact shape, or run `kb init`.
+They cannot disagree: the skeleton in this repository is generated by `kb init` and a
+test fails if the two ever differ.
+
+```
+agents/<name>/
+  CLAUDE.md         who the agent is
+  index.md          its operating instructions
+  MAP.md            what exists in its base, and the words a question would use
+  agent.txt         name and role, read by the orchestrator
+  blocks.txt        the constitution, ordered by how often each block changes
+  kb-aliases.txt    a record of real questions that missed
+  knowledge/        the distillations. The brain
+  inbox/            raw material awaiting distillation
+  decisions/  protocols/  templates/
+```
+
+`MAP.md` is doing more work than it looks. Every entry carries a `Search for:` line with
+the words a real question would use, and that line is what the keyword scorer matches.
+An entry without one is an entry nothing can reach.
+
+`kb-aliases.txt` is a record of misses, not a dictionary. Add a line **only after a real
+question failed to find something.** Expansion is additive, so a wrong line can add
+noise and can never remove signal. It is also how a fleet answers questions in one
+language over a base written in another.
+
+---
+
+## Use it from Claude, or anything else that speaks MCP
+
+```
+kb serve .
+```
+
+Four read-only tools over stdio: `kb_route`, `kb_retrieve`, `kb_remember`, `kb_fleet`.
+The server speaks both the current stateless revision and the older handshake era, and
+answers `initialize` when asked without ever requiring it.
+
+For Claude Desktop, in `claude_desktop_config.json`:
+
+```json
+{
+  "mcpServers": {
+    "vesta": {
+      "command": "/path/to/kb",
+      "args": ["serve", "/path/to/your/fleet"]
+    }
+  }
+}
+```
+
+**There is deliberately no write tool.** `kb_remember` measures a claim against what the
+base already says and proposes ADD, UPDATE or NOOP with its evidence. It writes nothing
+and decides nothing. A write tool reachable by a model is a different security surface
+and gets built deliberately, not as an afterthought while the retrieval side is still
+warm.
+
+---
+
+## Status
+
+Early, used daily, and honest about which is which.
+
+| | |
+|---|---|
+| `tools/kb` | Works. 114 tests. One dependency. |
+| `tools/tray` | Windows only, and young. |
+| Local model routing | Not built. |
+| Voice | Not built. |
+| Licence | **Not chosen yet.** Until it is, this is source-available rather than open source. |
+
+---
+
+## Contributing
+
+The house rules, which apply to issues and pull requests as much as to code:
+
+- **Name the mechanism.** A change without the reason it works does not land.
+- **Two options and their consequences**, or it is a preference, not a decision.
+- **Mark what is unverified.** Ran it, read the source, read the docs, or guessing. Say
+  which.
+- **Never claim something works without running it.**
+
+Run `cargo test` in `tools/kb` before opening anything. If you are changing what an
+agent looks like, the skeleton test will tell you to regenerate `agent-skeleton/`, and
+it is right.

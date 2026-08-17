@@ -1,0 +1,7 @@
+# The derived index. Disposable by ADR-0003: deleting it costs a rebuild.
+.kb/
+
+# The private layer. Gitignored by design, because it is nobody's to publish.
+profile/
+records/
+projects/

@@ -1,0 +1,8 @@
+# Read by the orchestrator to name and route.
+#
+# Separate from index.md on purpose: blocks.txt orders the constitution by stability
+# and index.md sits in the most stable block, so a field drawn in a menu does not
+# belong inside it.
+
+name = Skeleton
+role = 

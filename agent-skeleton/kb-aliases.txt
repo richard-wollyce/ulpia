@@ -1,0 +1,7 @@
+# alias = canonical, one per line, # starts a comment.
+#
+# Expansion is additive: the original words always survive, so a wrong line can add
+# noise and can never remove signal.
+#
+# **Only add a line after a real question missed.** This is a record of misses, not a
+# dictionary, and a dictionary is what makes it unmaintainable.
