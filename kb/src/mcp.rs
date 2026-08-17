@@ -234,12 +234,16 @@ impl Server {
                 ),
                 tool(
                     "kb_fleet",
-                    "Describe the fleet itself: its name, its role, and every agent in it \
-                     with that agent's role. This is a lookup over the fleet's own files, not \
-                     a search, so it cannot be ranked wrong. Use it before kb_route or \
-                     kb_retrieve whenever the question is about who is answering or what \
-                     agents exist, because searching the base for that returns whichever \
-                     agent happens to write about identity.",
+                    "Look up the fleet's own name and roster: the fleet's name and role, and \
+                     every agent in it with that agent's role and directory. This is a read \
+                     of fleet.txt and each agent.txt, not a search, so nothing here is \
+                     ranked and nothing here is a passage from a knowledge file. Call it \
+                     when the question is about who you are, what agents exist, or which \
+                     agent covers a subject, and then answer in your own words: these are \
+                     facts to answer with, not an answer. Do not use kb_route or \
+                     kb_retrieve for this, because the fleet's name is not written in any \
+                     knowledge file and searching for it returns whichever agent happens to \
+                     write about identity.",
                     vec![],
                 ),
             ]),
@@ -255,29 +259,16 @@ impl Server {
         let args = params.get("arguments").cloned().unwrap_or_else(Value::obj);
 
         let text = match name {
-            "kb_fleet" => self.fleet(),
-            // Both search tools try the identity tier first, and say when it answered.
-            //
-            // A client is free to never call kb_fleet, and the tool description cannot
-            // make it. If "quem é você?" reaches kb_retrieve it has to come back right,
-            // because the alternative is what actually happened: the index ranked
-            // marketing psychology and nothing in the reply said the question had been
-            // misunderstood. Short circuiting is only safe because it announces itself.
+            "kb_fleet" => self.memory.describe().to_text(),
             "kb_route" => {
                 let q = string_arg(&args, "question")?;
                 let top = args.get("top").and_then(|t| t.as_usize()).unwrap_or(self.top);
-                match self.memory.identify(&q) {
-                    Some(a) => answered_by_lookup(&a),
-                    None => self.route(&q, top),
-                }
+                self.route(&q, top)
             }
             "kb_retrieve" => {
                 let q = string_arg(&args, "question")?;
                 let top = args.get("top").and_then(|t| t.as_usize()).unwrap_or(self.top);
-                match self.memory.identify(&q) {
-                    Some(a) => answered_by_lookup(&a),
-                    None => self.retrieve(&q, top),
-                }
+                self.retrieve(&q, top)
             }
             "kb_remember" => {
                 let claim = string_arg(&args, "claim")?;
@@ -290,31 +281,6 @@ impl Server {
     }
 
     // -- the tools themselves ------------------------------------------------
-
-    /// The fleet describing itself. No index is touched.
-    fn fleet(&self) -> String {
-        let fleet = self.memory.fleet_card();
-        let agents = self.memory.agent_cards();
-
-        let mut out = format!("FLEET: {}\n", fleet.name);
-        if let Some(role) = &fleet.role {
-            out.push_str(&format!("ROLE: {role}\n"));
-        }
-        out.push_str(&format!("AGENTS: {}\n", agents.len()));
-        for (agent, card) in self.memory.agents.iter().zip(&agents) {
-            out.push_str(&format!(
-                "\n- {} ({})\n  role: {}\n",
-                card.name,
-                agent.root.display(),
-                card.role.as_deref().unwrap_or("not set in agent.txt")
-            ));
-        }
-        out.push_str(
-            "\nRead from fleet.txt, each agent.txt, and the directories under agents/. \
-             No search ran, so this cannot be ranked wrong.\n",
-        );
-        out
-    }
 
     fn route(&self, question: &str, top: usize) -> String {
         let hits = self.memory.route(question, top);
@@ -476,20 +442,6 @@ fn tool(name: &str, description: &str, args: Vec<(&str, &str, &str, bool)>) -> V
     // clients, which shows up as a tool that exists and never accepts an argument.
     t.set("inputSchema", schema);
     t
-}
-
-/// A search tool's reply when the identity tier answered instead.
-///
-/// The header is not decoration. A model that asked for passages and got prose has to
-/// be able to tell that the pipeline changed under it, or it will quote this as though
-/// it came from a file in the base.
-fn answered_by_lookup(a: &crate::intent::Answer) -> String {
-    format!(
-        "ANSWERED WITHOUT SEARCHING. This question is about the fleet itself, so it was \
-         read from fleet.txt and agent.txt rather than ranked against the index. No \
-         passage below comes from a knowledge file.\n\n{}\n",
-        a.text
-    )
 }
 
 /// A tools/call result. Content is a list of typed parts, which is also the shape

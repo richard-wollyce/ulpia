@@ -243,25 +243,11 @@ fn ask(app: AppHandle, state: State<Fleet>, question: String) -> Result<Vec<Answ
         }
     };
 
-    // Before the base is touched. A question about the fleet itself is a lookup, and
-    // it stays a lookup: "quem é você?" reduces to the single term `quem` once
-    // `normalise` drops the stopwords, and that one term ranked Steve's notes on
-    // audience research. Nothing about that was a ranking problem to tune.
-    if let Some(a) = memory.identify(&question) {
-        done(&app, &state);
-        return Ok(vec![Answer {
-            agent: memory.fleet_card().name,
-            path: "fleet.txt".into(),
-            title: String::new(),
-            why: "lido da estrutura da frota".into(),
-            passages: vec![Passage {
-                heading: String::new(),
-                text: a.text,
-                provenance: Some("fleet.txt, agent.txt, agents/".into()),
-            }],
-        }]);
-    }
-
+    // No identity shortcut here, deliberately. This surface has no model yet, so a
+    // question like "quem é você?" reaches the index and comes back wrong. That is
+    // the honest state of the tray rather than a regression to paper over: the
+    // orchestrator answers it once it exists, and until then a canned string would
+    // only hide which half is missing.
     stage(&app, &state, "Lendo a base…");
     let found = memory.retrieve(&question, 5);
 

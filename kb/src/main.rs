@@ -20,6 +20,7 @@ usage:
     kb route <question> [path]... [--top N] [--hybrid] [--all]
     kb remember <claim> [path]... [--all]
     kb init <name> [fleet-root]
+    kb fleet [path]... [--all]
     kb blocks [path] [--emit]
     kb serve [path]... [--top N] [--all]
 
@@ -118,6 +119,7 @@ fn main() -> ExitCode {
             let paths = paths_or_default(&positional);
             mcp::serve(&paths, all, top)
         }
+        "fleet" => cmd_fleet(&paths_or_default(&positional), all),
         "blocks" => {
             let paths = paths_or_default(&positional);
             cmd_blocks(paths[0], args.iter().any(|a| a == "--emit"))
@@ -153,6 +155,22 @@ fn paths_or_default<'a>(given: &[&'a str]) -> Vec<&'a str> {
 // ---------------------------------------------------------------------------
 // check
 // ---------------------------------------------------------------------------
+
+/// Prints the fleet's own name and roster. The same text `kb_fleet` returns over MCP,
+/// so what a model sees and what a person sees cannot drift apart.
+fn cmd_fleet(paths: &[&str], all: bool) -> ExitCode {
+    let given: Vec<&Path> = paths.iter().map(Path::new).collect();
+    match memory::Memory::open(&given, all) {
+        Ok(m) => {
+            print!("{}", m.describe().to_text());
+            ExitCode::SUCCESS
+        }
+        Err(e) => {
+            eprintln!("kb: {e}");
+            ExitCode::from(1)
+        }
+    }
+}
 
 /// Creates an agent in the shape ADR-0011 defines, under `<fleet>/agents/<name>`.
 fn cmd_init(name: &str, fleet: &Path) -> ExitCode {
@@ -329,18 +347,6 @@ fn cmd_route(question: &str, paths: &[&str], all: bool, top: usize, hybrid: bool
         memory.alias_count()
     );
     println!();
-
-    // Before either scorer runs. A question about the fleet itself is answered from
-    // the fleet's own files, because ranking it against the base already went wrong
-    // once: "quem é você?" survives `normalise` as the single term `quem`.
-    if let Some(a) = memory.identify(question) {
-        println!("answered by lookup, no scorer ran:");
-        println!();
-        for line in a.text.lines() {
-            println!("  {line}");
-        }
-        return ExitCode::SUCCESS;
-    }
 
     if !hybrid {
         let hits = memory.route(question, top);

@@ -15,9 +15,9 @@
 pub mod base;
 pub mod blocks;
 pub mod checks;
+pub mod fleet;
 pub mod index;
 pub mod init;
-pub mod intent;
 pub mod json;
 pub mod mcp;
 pub mod memory;

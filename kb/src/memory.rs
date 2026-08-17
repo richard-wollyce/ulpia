@@ -127,34 +127,32 @@ impl Memory {
         })
     }
 
-    /// Answers the questions that are about the fleet rather than about the base.
+    /// The fleet describing itself: its name, its role, and every agent with theirs.
     ///
-    /// **Tried before retrieval, and it declines by default.** `None` means the
-    /// question is about the base, which is the common case and not a failure.
+    /// **A lookup, not a verb.** It answers nothing; it hands over the roster so
+    /// whoever is orchestrating can answer. That split is deliberate and was arrived at
+    /// the hard way: an earlier version classified questions here and replied with
+    /// strings we had written, which is code doing a model's job badly.
     ///
-    /// This runs first for a reason that is not speed, though it is instant: the
-    /// fleet's name and roster are facts about the running system, and searching for
-    /// them can be wrong. It already was. "quem é você?" reduced to the single term
-    /// `quem`, because `index::normalise` drops `voce`, `e` and `qual` as stopwords,
-    /// and the one surviving term matched Steve's notes on audience research.
-    pub fn identify(&self, question: &str) -> Option<crate::intent::Answer> {
-        let (intent, lang) = crate::intent::classify(question)?;
-        Some(crate::intent::compose(intent, lang, &self.fleet_card(), &self.agent_cards()))
-    }
-
-    /// The fleet's own name and role, from `fleet.txt` at the first opened path that
-    /// has one. Falls back to that path's directory name.
-    pub fn fleet_card(&self) -> crate::intent::Card {
+    /// What stays is the half retrieval genuinely cannot do. The fleet's name lives in
+    /// `fleet.txt`, not in any knowledge file, so ranking a base for it is searching
+    /// the wrong corpus. That is why "quem é você?" came back with marketing
+    /// psychology: `index::normalise` drops `voce`, `e` and `qual` as stopwords, the
+    /// question survived as the single term `quem`, and `quem` is common in notes about
+    /// audience research. No amount of tuning fixes a question aimed at the wrong file.
+    pub fn describe(&self) -> crate::fleet::Description {
         let root = self.opened.first().cloned().unwrap_or_default();
-        crate::intent::card(&root, MANIFEST, &name_of(&root))
-    }
-
-    /// One card per agent, in roster order.
-    pub fn agent_cards(&self) -> Vec<crate::intent::Card> {
-        self.agents
-            .iter()
-            .map(|a| crate::intent::card(&a.root, "agent.txt", &a.name))
-            .collect()
+        crate::fleet::Description {
+            fleet: crate::fleet::card(&root, MANIFEST, &name_of(&root)),
+            members: self
+                .agents
+                .iter()
+                .map(|a| crate::fleet::Member {
+                    card: crate::fleet::card(&a.root, "agent.txt", &a.name),
+                    root: a.root.clone(),
+                })
+                .collect(),
+        }
     }
 
     pub fn scope(&self) -> Scope {
