@@ -326,6 +326,27 @@ fn cmd_index(paths: &[&str], all: bool, json: bool) -> ExitCode {
     ExitCode::SUCCESS
 }
 
+/// What the base knows that looks like what was asked, printed on a miss.
+///
+/// The miss message on its own is honest and useless: it says the keyword lines may
+/// not carry the right words and gives the reader no way to find out which words
+/// they do carry. This turns the dead end into the candidate space.
+///
+/// It reaches a typo or a cognate, because trigram overlap is a measure of spelling.
+/// It never reaches a translation, and the line printed with it says so, because a
+/// suggestion whose limits are not stated gets read as the whole answer.
+fn print_suggestions(memory: &memory::Memory, question: &str) {
+    let words = memory.suggest(question, 8);
+    if words.is_empty() {
+        return;
+    }
+    println!();
+    println!("  the base does know these, and they look like words you used:");
+    println!("    {}", words.join(", "));
+    println!("  that is spelling and not meaning, so it finds a typo or a cognate");
+    println!("  and never finds a translation.");
+}
+
 fn cmd_route(question: &str, paths: &[&str], all: bool, top: usize, hybrid: bool) -> ExitCode {
     let given: Vec<&Path> = paths.iter().map(Path::new).collect();
     let memory = match memory::Memory::open(&given, all) {
@@ -353,6 +374,7 @@ fn cmd_route(question: &str, paths: &[&str], all: bool, top: usize, hybrid: bool
         if hits.is_empty() {
             println!("  nothing matched. Either the base does not cover it, or the");
             println!("  Search for lines do not carry the words a real question uses.");
+            print_suggestions(&memory, question);
             return ExitCode::SUCCESS;
         }
         for (i, hit) in hits.iter().enumerate() {
@@ -373,6 +395,7 @@ fn cmd_route(question: &str, paths: &[&str], all: bool, top: usize, hybrid: bool
         println!("  nothing matched, in either scorer. Either the base does not cover");
         println!("  it, or the Search for lines do not carry the words a real question");
         println!("  uses.");
+        print_suggestions(&memory, question);
         return ExitCode::SUCCESS;
     }
 

@@ -267,6 +267,111 @@ fn idf(term: &str, df: &HashMap<String, usize>, total: usize) -> f32 {
     (1.0 + (total as f32 / (1.0 + seen))).ln()
 }
 
+// ---------------------------------------------------------------------------
+// Suggesting, which is what the base says when it matched nothing
+// ---------------------------------------------------------------------------
+
+/// How alike two words have to look before the base offers one for the other.
+///
+/// Measured against the real pairs of 2026-08-17, not chosen: `publico` against
+/// `public` scores 0.89 and `repositorio` against `repository` 0.74, which are the
+/// cognates this exists to catch. The floor sits at 0.65 because of what a lower
+/// one let through: at 0.5, `quando` reached `K-quant` with 0.571 on a shared
+/// prefix, and a single noisy suggestion offered on its own reads as an answer
+/// rather than as a candidate.
+///
+/// **This is tuned against a handful of pairs from one session and is the weakest
+/// number in the file.** Boundary padding, the usual fix for short word noise, was
+/// tried on paper and is wrong here: it rewards a shared prefix, which is exactly
+/// what the false positive had, taking `quando` against `K-quant` up to 0.615.
+const SUGGEST_FLOOR: f32 = 0.65;
+
+/// Character trigrams, with the whole word kept when it is too short to have any.
+fn trigrams(word: &str) -> Vec<String> {
+    let chars: Vec<char> = word.chars().collect();
+    if chars.len() < 3 {
+        return vec![word.to_string()];
+    }
+    chars.windows(3).map(|w| w.iter().collect()).collect()
+}
+
+/// Dice coefficient over character trigrams: how alike two words *look*.
+///
+/// Deliberately a measure of spelling and not of meaning. It is what separates the
+/// half of expansion that is plain software from the half that needs a model, and
+/// each half should say which one it is rather than blur into the other.
+fn look_alike(a: &str, b: &str) -> f32 {
+    let (ta, tb) = (trigrams(a), trigrams(b));
+    if ta.is_empty() || tb.is_empty() {
+        return 0.0;
+    }
+    let mut unmatched = tb.clone();
+    let mut shared = 0usize;
+    for g in &ta {
+        if let Some(pos) = unmatched.iter().position(|h| h == g) {
+            unmatched.remove(pos);
+            shared += 1;
+        }
+    }
+    (2 * shared) as f32 / (ta.len() + tb.len()) as f32
+}
+
+/// The words the base actually knows that look like the words the question used.
+///
+/// **This is the base answering a miss with its own vocabulary instead of with a
+/// dead end.** The old miss message said the keyword lines might not carry the
+/// words a real question uses, which is true and leaves the caller nothing to act
+/// on: a model reading it can only guess new words blind, and a person cannot see
+/// the keyword space at all.
+///
+/// It closes exactly one of the two halves of [[0006-language-architecture]]'s step
+/// 2, and closes it without a model. A typo and a cognate are *orthographic*
+/// distance, which trigrams measure directly: `repositorio` reaches `repository`
+/// here, and so does `repositry`. A real translation is *semantic* distance, which
+/// no string measure reaches, so `nunca` will never find `never` in this function
+/// and is not supposed to. That half belongs to whatever model is in the loop, and
+/// what this returns is the candidate space it expands against.
+///
+/// Scored on the **best single alignment**, not on every word of a term finding a
+/// partner. The strict version was written first and was wrong: `ingestao` scores
+/// 0.80 against `ingest` and nothing against `source`, so requiring both took the
+/// term `ingest a source` down to 0.40 and hid the one suggestion the question
+/// deserved.
+///
+/// The rule that produced that mistake was borrowed from matching, where precision
+/// is what matters because the result is presented as an answer. **Suggesting is the
+/// opposite trade**: the reader filters, so a term worth looking at should be shown,
+/// and the strictness belongs in the per word floor instead. `single channel`
+/// ranking on `channel` alone is the intended behaviour here.
+pub fn suggest(question: &str, entries: &[Entry], limit: usize) -> Vec<String> {
+    let asked = normalise(question);
+    if asked.is_empty() {
+        return Vec::new();
+    }
+
+    let mut scored: Vec<(String, f32)> = Vec::new();
+    for entry in entries {
+        for keyword in &entry.keywords {
+            let score = normalise(keyword)
+                .iter()
+                .flat_map(|part| asked.iter().map(move |w| look_alike(w, part)))
+                .fold(0.0f32, f32::max);
+
+            if score >= SUGGEST_FLOOR && !scored.iter().any(|(k, _)| k == keyword) {
+                scored.push((keyword.clone(), score));
+            }
+        }
+    }
+
+    scored.sort_by(|a, b| {
+        b.1.partial_cmp(&a.1)
+            .unwrap_or(std::cmp::Ordering::Equal)
+            .then(a.0.cmp(&b.0))
+    });
+    scored.truncate(limit);
+    scored.into_iter().map(|(k, _)| k).collect()
+}
+
 /// Expands a question with canonical terms from the alias table.
 ///
 /// Additive on purpose: the original words are always kept, so a wrong alias can
@@ -540,6 +645,48 @@ mod tests {
 
         let hits = route("meu anuncio tem atributos pessoais", &entries, &aliases, 5);
         assert_eq!(hits[0].entry.stem, "compliance");
+    }
+
+    /// The case this exists for, taken from a real miss: a Portuguese question
+    /// reaching an English keyword that no alias covers, with no model involved.
+    #[test]
+    fn a_cognate_reaches_the_keyword_it_looks_like() {
+        let entries = vec![entry("ingestion", "Ingestion", &["ingest a source", "distill"])];
+        let out = suggest("o que e um protocolo de ingestao", &entries, 5);
+        assert_eq!(out, vec!["ingest a source"]);
+    }
+
+    #[test]
+    fn a_typo_reaches_the_word_it_meant() {
+        let entries = vec![entry("layout", "Fleet layout", &["repository", "tenancy"])];
+        let out = suggest("onde fica o repositry", &entries, 5);
+        assert_eq!(out, vec!["repository"]);
+    }
+
+    /// The boundary that has to hold, because the reply claims it.
+    ///
+    /// `nunca` and `never` mean the same thing and look nothing alike. If a
+    /// spelling measure ever returned this pair it would be by accident, and the
+    /// message printed alongside would become a lie.
+    #[test]
+    fn a_translation_is_never_suggested() {
+        let entries = vec![entry("limits", "Limits", &["never", "stop and ask"])];
+        assert!(suggest("o que voce nunca faz", &entries, 5).is_empty());
+    }
+
+    /// A shared prefix on short words is the noise this floor exists to exclude.
+    /// Measured at 0.571, which is why the floor is not 0.5.
+    #[test]
+    fn a_shared_prefix_on_short_words_is_not_a_suggestion() {
+        let entries = vec![entry("quant", "Quantization", &["K-quant"])];
+        assert!(suggest("o que acontece quando falha", &entries, 5).is_empty());
+    }
+
+    #[test]
+    fn a_term_ranks_on_its_best_word_rather_than_on_all_of_them() {
+        let entries = vec![entry("ram", "RAM", &["single channel"])];
+        let out = suggest("o que e um channel", &entries, 5);
+        assert_eq!(out, vec!["single channel"], "one word aligning is enough to offer it");
     }
 
     #[test]

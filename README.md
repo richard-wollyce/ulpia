@@ -38,6 +38,26 @@ hit. A file only one found is a guess, and Vesta says so instead of dressing it 
 That distinction was not designed, it was measured: the two questions that routed
 correctly had both scorers voting, and the one that returned nonsense had one.
 
+**And when nothing matches, the base answers with its own vocabulary.**
+
+```
+$ kb route "o que e um protocolo de ingestao" .
+
+  nothing matched. Either the base does not cover it, or the
+  Search for lines do not carry the words a real question uses.
+
+  the base does know these, and they look like words you used:
+    ingest a source
+  that is spelling and not meaning, so it finds a typo or a cognate
+  and never finds a translation.
+```
+
+A miss that offers nothing back teaches you to stop asking. That comparison is
+character trigram overlap, so it reaches a typo and a cognate across languages and
+it **never** reaches a translation, which is why the reply says which kind of help
+it is. The other half of the problem belongs to whatever model is reading, and this
+is the candidate space it works from instead of guessing.
+
 ---
 
 ## Quickstart

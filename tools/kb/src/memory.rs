@@ -172,6 +172,15 @@ impl Memory {
         self.aliases.len()
     }
 
+    /// What the base knows that looks like what was asked, for when nothing matched.
+    ///
+    /// Belongs on the contract rather than at each call site for the same reason the
+    /// three verbs do: `mcp.rs` and `main.rs` both have a miss path, and two callers
+    /// building the same answer separately is how they came to disagree before.
+    pub fn suggest(&self, question: &str, limit: usize) -> Vec<String> {
+        index::suggest(question, &self.entries, limit)
+    }
+
     /// Which files a question should open. No text is read, so this is cheap and can
     /// be asked speculatively.
     pub fn route(&self, question: &str, top: usize) -> Vec<index::Hit<'_>> {

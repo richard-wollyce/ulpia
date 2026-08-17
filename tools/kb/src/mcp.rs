@@ -205,7 +205,12 @@ impl Server {
                     "Ask which files in the knowledge base a question should open. Returns \
                      ranked file paths with the words that matched, so a bad ranking can be \
                      diagnosed rather than guessed at. Cheap and does not return file contents. \
-                     Use it to decide what to read; use kb_retrieve when you want the text.",
+                     Use it to decide what to read; use kb_retrieve when you want the text. \
+                     When nothing matches it offers back terms the base does know that look \
+                     like the words you used, which is a spelling comparison and not a \
+                     semantic one: it reaches a typo or a cognate and never reaches a \
+                     translation. Ask again with those terms, or with the canonical ones you \
+                     expect, before concluding the base does not cover the subject.",
                     vec![
                         ("question", "string", "The question, in any language. An alias table maps common terms.", true),
                         ("top", "integer", "How many files to return. Default 5.", false),
@@ -285,7 +290,7 @@ impl Server {
     fn route(&self, question: &str, top: usize) -> String {
         let hits = self.memory.route(question, top);
         if hits.is_empty() {
-            return no_match(question);
+            return no_match(question, &self.memory.suggest(question, SUGGEST_LIMIT));
         }
 
         let mut out = format!("Files to open for: {question}\n\n");
@@ -306,7 +311,7 @@ impl Server {
     fn retrieve(&self, question: &str, top: usize) -> String {
         let found = self.memory.retrieve(question, top);
         if found.is_empty() {
-            return no_match(question);
+            return no_match(question, &self.memory.suggest(question, SUGGEST_LIMIT));
         }
 
         let mut out = format!("Passages for: {question}\n\n");
@@ -400,13 +405,39 @@ impl Server {
 // Wire helpers
 // ---------------------------------------------------------------------------
 
-fn no_match(question: &str) -> String {
-    format!(
+/// How many candidate terms a miss offers back.
+///
+/// Small on purpose. The whole keyword space is 849 terms and about 12 KB on this
+/// fleet, and handing all of it over on every miss would make the failure path the
+/// most expensive reply the server produces. A shortlist is what a caller can act
+/// on; a dump is something it has to route through a second time.
+const SUGGEST_LIMIT: usize = 8;
+
+fn no_match(question: &str, suggestions: &[String]) -> String {
+    let mut out = format!(
         "Nothing matched \"{question}\".\n\n\
          Either the base does not cover it, or its keyword lines do not carry the words \
          a real question uses. Saying so plainly is deliberate: a router that always \
          returns something teaches you to trust a guess."
-    )
+    );
+
+    if suggestions.is_empty() {
+        return out;
+    }
+
+    // The candidate space, so the caller expands against what exists rather than
+    // guessing. Trigrams reach a typo or a cognate and never reach a translation,
+    // so the reply says which kind of help this is and leaves the other kind to
+    // whoever is reading it.
+    out.push_str(&format!(
+        "\n\nThe base does know these, and they look like words you used: {}.\n\n\
+         That comparison is spelling, not meaning, so it finds a typo or a cognate and \
+         never finds a translation. If the question was asked in one language and the \
+         base was written in another, rewrite it with the terms above or with the \
+         canonical ones you expect, and ask again.",
+        suggestions.join(", ")
+    ));
+    out
 }
 
 fn string_arg(args: &Value, key: &str) -> Result<String, String> {
