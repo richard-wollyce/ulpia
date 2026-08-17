@@ -172,6 +172,38 @@ impl Memory {
         self.aliases.len()
     }
 
+    /// True when there is nothing to search, as opposed to nothing found.
+    ///
+    /// **These are different answers and the difference is the whole first run.** A
+    /// base with no map entries cannot match anything, so telling its owner that the
+    /// keyword lines may not carry the words a real question uses blames them for a
+    /// library they have not written yet. Measured on a fresh `kb init` on
+    /// 2026-08-17: the header printed `0 entries` and the next line blamed the
+    /// question.
+    pub fn is_empty(&self) -> bool {
+        self.entries.is_empty()
+    }
+
+    /// Records a question the free stage could not answer. See [`crate::misses`].
+    ///
+    /// On the contract rather than at each call site, for the reason the module
+    /// header gives: `mcp.rs` and `main.rs` both have a miss path, and two callers
+    /// building the same behaviour separately is how they came to disagree twice
+    /// before. Writing is confined to this one method and touches nothing a query
+    /// reads.
+    ///
+    /// **An empty base is never recorded.** A miss with nothing to search is not a
+    /// recall loss, and counting it would corrupt the only number the log exists to
+    /// produce.
+    pub fn record_miss(&self, question: &str, looked_like: &[String]) {
+        if self.is_empty() {
+            return;
+        }
+        if let Some(root) = self.opened.first() {
+            crate::misses::record(root, question, looked_like, &crate::misses::today());
+        }
+    }
+
     /// What the base knows that looks like what was asked, for when nothing matched.
     ///
     /// Belongs on the contract rather than at each call site for the same reason the

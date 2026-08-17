@@ -290,7 +290,12 @@ impl Server {
     fn route(&self, question: &str, top: usize) -> String {
         let hits = self.memory.route(question, top);
         if hits.is_empty() {
-            return no_match(question, &self.memory.suggest(question, SUGGEST_LIMIT));
+            if self.memory.is_empty() {
+                return nothing_to_search();
+            }
+            let looked_like = self.memory.suggest(question, SUGGEST_LIMIT);
+            self.memory.record_miss(question, &looked_like);
+            return no_match(question, &looked_like);
         }
 
         let mut out = format!("Files to open for: {question}\n\n");
@@ -311,7 +316,12 @@ impl Server {
     fn retrieve(&self, question: &str, top: usize) -> String {
         let found = self.memory.retrieve(question, top);
         if found.is_empty() {
-            return no_match(question, &self.memory.suggest(question, SUGGEST_LIMIT));
+            if self.memory.is_empty() {
+                return nothing_to_search();
+            }
+            let looked_like = self.memory.suggest(question, SUGGEST_LIMIT);
+            self.memory.record_miss(question, &looked_like);
+            return no_match(question, &looked_like);
         }
 
         let mut out = format!("Passages for: {question}\n\n");
@@ -412,6 +422,29 @@ impl Server {
 /// most expensive reply the server produces. A shortlist is what a caller can act
 /// on; a dump is something it has to route through a second time.
 const SUGGEST_LIMIT: usize = 8;
+
+/// The answer when there is nothing to search, which is not the answer when
+/// something was searched and missed.
+///
+/// A fresh `kb init` has a full constitution and an empty library, so this is the
+/// reply a first question gets. It has to say the library is empty and what fills
+/// it, because the alternative, measured on 2026-08-17, is a new user being told
+/// that their phrasing did not match keyword lines that do not exist.
+///
+/// It also names the tool that **does** work on an empty base, since identity is a
+/// lookup over `fleet.txt` and `agent.txt` and never needed the index at all.
+fn nothing_to_search() -> String {
+    "This base has no knowledge files yet, so nothing could have matched. That is a \
+     fact about the base and not about the question.\n\n\
+     A base is filled by putting markdown in the agent's knowledge/ folder, listing \
+     each file in MAP.md with a `Search for:` line naming the words a real question \
+     would use, and running `kb index`. An entry without that line is an entry \
+     nothing can reach.\n\n\
+     kb_fleet works regardless: who this fleet is and which agents exist is read \
+     from fleet.txt and each agent.txt, not from the index, so identity is \
+     answerable before a single note is written."
+        .to_string()
+}
 
 fn no_match(question: &str, suggestions: &[String]) -> String {
     let mut out = format!(

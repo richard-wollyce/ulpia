@@ -40,12 +40,30 @@ pub struct Hit<'a> {
 }
 
 /// Words too common to carry meaning, in both languages the fleet uses.
+///
+/// **The interrogatives are here as a complete set, and that was a bug fix.** The
+/// list carried `qual`, `quais`, `como`, `what` and `how` but not `quem`, `quanto`,
+/// `quando`, `onde`, `who`, `when` or `why`, which is half a category and the half
+/// that was missing cost real answers twice.
+///
+/// `memory.rs` already documented the first one without fixing its cause: "quem é
+/// você?" survived normalisation as the single term `quem`, and `quem` is common in
+/// notes about audience research, so the question came back with marketing
+/// psychology. The second was found by the miss log on the day it was built, where
+/// `quanto` reached the keyword `K-quant` at 0.857 and would have fired on every
+/// question beginning "quanto custa" or "quanto tempo".
+///
+/// **No threshold separates that pair**, which is why the fix belongs here. A word
+/// that opens a question tells you nothing about which file answers it, in either
+/// language.
 const STOPWORDS: &[&str] = &[
     "the", "a", "an", "of", "to", "in", "on", "for", "and", "or", "is", "are", "it", "that", "this",
     "with", "what", "how", "do", "does", "i", "we", "my", "our", "be", "as", "at", "by", "from",
+    "who", "when", "where", "why", "which",
     "o", "os", "as", "um", "uma", "de", "da", "do", "das", "dos", "em", "no", "na", "nos", "nas",
     "para", "por", "com", "que", "qual", "quais", "como", "e", "ou", "se", "sobre", "eu", "voce",
     "meu", "minha", "nosso", "nossa", "ser", "esta", "isso", "sem", "ao", "aos",
+    "quem", "quanto", "quanta", "quantos", "quantas", "quando", "onde", "porque",
 ];
 
 // ---------------------------------------------------------------------------
@@ -680,6 +698,25 @@ mod tests {
     fn a_shared_prefix_on_short_words_is_not_a_suggestion() {
         let entries = vec![entry("quant", "Quantization", &["K-quant"])];
         assert!(suggest("o que acontece quando falha", &entries, 5).is_empty());
+    }
+
+    /// Found by the miss log on the day it was built. `quanto` against `K-quant`
+    /// scores 0.857, which no floor excludes without excluding real cognates too,
+    /// so the fix is that a word opening a question is not a routing term at all.
+    #[test]
+    fn an_interrogative_never_becomes_a_suggestion() {
+        let entries = vec![entry("quant", "Quantization", &["K-quant"])];
+        for question in [
+            "quanto custa hospedar isso na nuvem",
+            "quanto tempo devo esperar",
+            "quando isso acontece",
+            "quem e voce",
+        ] {
+            assert!(
+                suggest(question, &entries, 5).is_empty(),
+                "an interrogative carries no signal: {question}"
+            );
+        }
     }
 
     #[test]

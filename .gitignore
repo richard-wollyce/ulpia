@@ -20,3 +20,9 @@ target/
 
 # The derived index, wherever it lands. Disposable by ADR-0003.
 .kb/
+
+# The recall loss log. Ignored because it holds the user's real questions,
+# verbatim, and a question can be as private as an answer: a miss against a
+# health base is a health question. What gets committed is the alias line a miss
+# eventually earns, never the miss.
+kb-misses.txt

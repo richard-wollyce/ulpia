@@ -337,6 +337,7 @@ fn cmd_index(paths: &[&str], all: bool, json: bool) -> ExitCode {
 /// suggestion whose limits are not stated gets read as the whole answer.
 fn print_suggestions(memory: &memory::Memory, question: &str) {
     let words = memory.suggest(question, 8);
+    memory.record_miss(question, &words);
     if words.is_empty() {
         return;
     }
@@ -345,6 +346,27 @@ fn print_suggestions(memory: &memory::Memory, question: &str) {
     println!("    {}", words.join(", "));
     println!("  that is spelling and not meaning, so it finds a typo or a cognate");
     println!("  and never finds a translation.");
+}
+
+/// Printed instead of a miss when there is nothing to search.
+///
+/// Returns true when it handled the case, so the caller stops. See
+/// [`memory::Memory::is_empty`] for why these are different answers.
+fn print_if_nothing_to_search(memory: &memory::Memory) -> bool {
+    if !memory.is_empty() {
+        return false;
+    }
+    println!("  this base has no knowledge files yet, so nothing could have matched.");
+    println!("  That is a fact about the base, not about the question.");
+    println!();
+    println!("  Put markdown in the agent's knowledge/ folder, list each file in");
+    println!("  MAP.md with a `Search for:` line naming the words a real question");
+    println!("  would use, then run `kb index`. An entry without that line is an");
+    println!("  entry nothing can reach.");
+    println!();
+    println!("  `kb fleet` works regardless: identity is read from fleet.txt and");
+    println!("  agent.txt, never from the index.");
+    true
 }
 
 fn cmd_route(question: &str, paths: &[&str], all: bool, top: usize, hybrid: bool) -> ExitCode {
@@ -372,9 +394,11 @@ fn cmd_route(question: &str, paths: &[&str], all: bool, top: usize, hybrid: bool
     if !hybrid {
         let hits = memory.route(question, top);
         if hits.is_empty() {
-            println!("  nothing matched. Either the base does not cover it, or the");
-            println!("  Search for lines do not carry the words a real question uses.");
-            print_suggestions(&memory, question);
+            if !print_if_nothing_to_search(&memory) {
+                println!("  nothing matched. Either the base does not cover it, or the");
+                println!("  Search for lines do not carry the words a real question uses.");
+                print_suggestions(&memory, question);
+            }
             return ExitCode::SUCCESS;
         }
         for (i, hit) in hits.iter().enumerate() {
@@ -392,10 +416,12 @@ fn cmd_route(question: &str, paths: &[&str], all: bool, top: usize, hybrid: bool
 
     let found = memory.retrieve(question, top);
     if found.is_empty() {
-        println!("  nothing matched, in either scorer. Either the base does not cover");
-        println!("  it, or the Search for lines do not carry the words a real question");
-        println!("  uses.");
-        print_suggestions(&memory, question);
+        if !print_if_nothing_to_search(&memory) {
+            println!("  nothing matched, in either scorer. Either the base does not cover");
+            println!("  it, or the Search for lines do not carry the words a real question");
+            println!("  uses.");
+            print_suggestions(&memory, question);
+        }
         return ExitCode::SUCCESS;
     }
 
