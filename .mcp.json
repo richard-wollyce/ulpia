@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "vesta": {
+      "command": "./agents/zed/tools/kb/target/release/kb.exe",
+      "args": ["serve", "."]
+    }
+  }
+}
