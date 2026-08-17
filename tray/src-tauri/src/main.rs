@@ -243,6 +243,25 @@ fn ask(app: AppHandle, state: State<Fleet>, question: String) -> Result<Vec<Answ
         }
     };
 
+    // Before the base is touched. A question about the fleet itself is a lookup, and
+    // it stays a lookup: "quem é você?" reduces to the single term `quem` once
+    // `normalise` drops the stopwords, and that one term ranked Steve's notes on
+    // audience research. Nothing about that was a ranking problem to tune.
+    if let Some(a) = memory.identify(&question) {
+        done(&app, &state);
+        return Ok(vec![Answer {
+            agent: memory.fleet_card().name,
+            path: "fleet.txt".into(),
+            title: String::new(),
+            why: "lido da estrutura da frota".into(),
+            passages: vec![Passage {
+                heading: String::new(),
+                text: a.text,
+                provenance: Some("fleet.txt, agent.txt, agents/".into()),
+            }],
+        }]);
+    }
+
     stage(&app, &state, "Lendo a base…");
     let found = memory.retrieve(&question, 5);
 
@@ -300,7 +319,8 @@ fn ask(app: AppHandle, state: State<Fleet>, question: String) -> Result<Vec<Answ
                 done: 0,
                 total: 0,
                 problem: Some(
-                    "Só um dos dois buscadores encontrou isso, então é palpite e não                      resposta. Talvez a base não cubra a pergunta."
+                    "Só um dos dois buscadores encontrou isso, então é palpite e não \
+                     resposta. Talvez a base não cubra a pergunta."
                         .into(),
                 ),
             },

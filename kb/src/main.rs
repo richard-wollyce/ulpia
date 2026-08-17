@@ -330,6 +330,18 @@ fn cmd_route(question: &str, paths: &[&str], all: bool, top: usize, hybrid: bool
     );
     println!();
 
+    // Before either scorer runs. A question about the fleet itself is answered from
+    // the fleet's own files, because ranking it against the base already went wrong
+    // once: "quem é você?" survives `normalise` as the single term `quem`.
+    if let Some(a) = memory.identify(question) {
+        println!("answered by lookup, no scorer ran:");
+        println!();
+        for line in a.text.lines() {
+            println!("  {line}");
+        }
+        return ExitCode::SUCCESS;
+    }
+
     if !hybrid {
         let hits = memory.route(question, top);
         if hits.is_empty() {

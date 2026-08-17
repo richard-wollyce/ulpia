@@ -51,6 +51,10 @@ pub struct Memory {
     scope: Scope,
     /// One per base, each with its own index, in the order the fleet was expanded.
     pub agents: Vec<Agent>,
+    /// The paths as given, before expansion. Kept because the fleet root is where
+    /// `fleet.txt` lives, and the identity tier reads it: after expansion only the
+    /// agent directories remain, and the fleet's own name is not in any of them.
+    pub opened: Vec<PathBuf>,
     /// True when any index had to be discarded on open. The caller has to surface
     /// this: an emptied index answers "nothing matched", which reads as "the base
     /// does not cover this".
@@ -118,8 +122,39 @@ impl Memory {
             aliases,
             scope: if private { Scope::All } else { Scope::Public },
             agents,
+            opened: paths.iter().map(|p| p.to_path_buf()).collect(),
             index_was_rebuilt,
         })
+    }
+
+    /// Answers the questions that are about the fleet rather than about the base.
+    ///
+    /// **Tried before retrieval, and it declines by default.** `None` means the
+    /// question is about the base, which is the common case and not a failure.
+    ///
+    /// This runs first for a reason that is not speed, though it is instant: the
+    /// fleet's name and roster are facts about the running system, and searching for
+    /// them can be wrong. It already was. "quem é você?" reduced to the single term
+    /// `quem`, because `index::normalise` drops `voce`, `e` and `qual` as stopwords,
+    /// and the one surviving term matched Steve's notes on audience research.
+    pub fn identify(&self, question: &str) -> Option<crate::intent::Answer> {
+        let (intent, lang) = crate::intent::classify(question)?;
+        Some(crate::intent::compose(intent, lang, &self.fleet_card(), &self.agent_cards()))
+    }
+
+    /// The fleet's own name and role, from `fleet.txt` at the first opened path that
+    /// has one. Falls back to that path's directory name.
+    pub fn fleet_card(&self) -> crate::intent::Card {
+        let root = self.opened.first().cloned().unwrap_or_default();
+        crate::intent::card(&root, MANIFEST, &name_of(&root))
+    }
+
+    /// One card per agent, in roster order.
+    pub fn agent_cards(&self) -> Vec<crate::intent::Card> {
+        self.agents
+            .iter()
+            .map(|a| crate::intent::card(&a.root, "agent.txt", &a.name))
+            .collect()
     }
 
     pub fn scope(&self) -> Scope {
@@ -395,7 +430,7 @@ mod tests {
 
         let m = Memory {
             entries: vec![], aliases: vec![],
-            scope: Scope::Public, agents: vec![], index_was_rebuilt: false,
+            scope: Scope::Public, agents: vec![], opened: vec![], index_was_rebuilt: false,
         };
 
         assert!(m.no_agreement(&[one.clone()]), "one scorer alone is a guess");
