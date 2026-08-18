@@ -25,3 +25,4 @@ pub mod misses;
 pub mod remember;
 pub mod retrieve;
 pub mod store;
+pub mod write;

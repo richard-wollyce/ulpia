@@ -6,7 +6,7 @@
 
 
 use kb::checks::{Finding, Level};
-use kb::{base, blocks, checks, index, init, mcp, memory, remember, store};
+use kb::{base, blocks, checks, index, init, mcp, memory, remember, store, write};
 use base::Base;
 use std::path::Path;
 use std::process::ExitCode;
@@ -20,6 +20,7 @@ usage:
     kb route <question> [path]... [--top N] [--hybrid] [--all]
     kb remember <claim> [path]... [--all]
     kb init <name> [fleet-root]
+    kb write <agent> <slug> [fleet-root] --keys <a, b> --summary <one line> [--folder F]
     kb fleet [path]... [--all]
     kb blocks [path] [--emit]
     kb serve [path]... [--top N] [--all]
@@ -29,6 +30,13 @@ usage:
     --strict    check: count warnings toward the exit code
     --all       include files git does not track, normally the private layer
     --top N     route: how many candidates to print, default 5
+    --keys      write: the words a real question would use. Required, no way to skip
+    --summary   write: one line for the map, saying what the note is about
+    --folder    write: where under the agent it lands, default knowledge
+
+write reads the note body from stdin and creates the file and its MAP entry in one
+act. A note the map does not list is a note no question can reach, so there is no
+flag that writes one without the other.
 
 Each agent keeps its own index at <agent>/.kb/index.db. There is no shared index
 and no --db flag: which database you get used to depend on where you were standing,
@@ -58,7 +66,7 @@ exit code is 1 when check finds errors, or when --strict and it finds warnings.
 const LINES_SHOWN: usize = 3;
 
 /// Flags that consume the argument after them.
-const VALUE_FLAGS: &[&str] = &["--top"];
+const VALUE_FLAGS: &[&str] = &["--top", "--keys", "--summary", "--folder", "--provenance", "--stage"];
 
 fn main() -> ExitCode {
     let args: Vec<String> = std::env::args().skip(1).collect();
@@ -119,6 +127,16 @@ fn main() -> ExitCode {
             let paths = paths_or_default(&positional);
             mcp::serve(&paths, all, top)
         }
+        "write" => {
+            if positional.len() < 2 {
+                eprintln!("kb: write needs an agent and a name for the note
+");
+                print!("{USAGE}");
+                return ExitCode::from(2);
+            }
+            let fleet = positional.get(2).copied().unwrap_or(".");
+            cmd_write(positional[0], positional[1], Path::new(fleet), &args)
+        }
         "fleet" => cmd_fleet(&paths_or_default(&positional), all),
         "blocks" => {
             let paths = paths_or_default(&positional);
@@ -163,6 +181,71 @@ fn cmd_fleet(paths: &[&str], all: bool) -> ExitCode {
     match memory::Memory::open(&given, all) {
         Ok(m) => {
             print!("{}", m.describe().to_text());
+            ExitCode::SUCCESS
+        }
+        Err(e) => {
+            eprintln!("kb: {e}");
+            ExitCode::from(1)
+        }
+    }
+}
+
+/// Writes a note and the map entry that makes it reachable, as one act.
+///
+/// The body comes from stdin rather than a flag, because a note is markdown with
+/// blank lines and headings in it and a shell argument is the wrong shape for that.
+/// The keys come from a flag and are required: see `write.rs` for why there is no
+/// way to skip them.
+fn cmd_write(agent: &str, slug: &str, fleet: &Path, args: &[String]) -> ExitCode {
+    use std::io::Read;
+
+    let keys: Vec<String> = flag_value(args, "--keys")
+        .unwrap_or_default()
+        .split(',')
+        .map(|k| k.trim().trim_matches('`').to_string())
+        .filter(|k| !k.is_empty())
+        .collect();
+
+    let mut body = String::new();
+    if let Err(e) = std::io::stdin().read_to_string(&mut body) {
+        eprintln!("kb: cannot read the note from stdin: {e}");
+        return ExitCode::from(1);
+    }
+
+    let spec = write::Note {
+        summary: flag_value(args, "--summary").unwrap_or_default(),
+        keys,
+        folder: flag_value(args, "--folder").unwrap_or_else(|| "knowledge".to_string()),
+        provenance: flag_value(args, "--provenance").unwrap_or_else(|| "agent".to_string()),
+        stage: flag_value(args, "--stage").unwrap_or_else(|| "derived".to_string()),
+        body,
+    };
+
+    match write::note(fleet, agent, slug, &spec) {
+        Ok(made) => {
+            println!("wrote {}", made.note.display());
+            println!("  listed in {} under {}", made.map.display(), made.section);
+            if made.section_created {
+                println!("  that section did not exist and was created");
+            }
+            match made.staged {
+                write::Staged::Yes => println!("  staged, so the router can serve it"),
+                write::Staged::Ignored => println!(
+                    "  a .gitignore rule covers it, so it stays private and the public
+                       scope will not serve it. That is the private layer working."
+                ),
+                write::Staged::NoGit => eprintln!(
+                    "  NOT staged: no git here, so nothing can tell which files are
+                       private, and kb refuses to open such a base at all. Run `git init`."
+                ),
+                write::Staged::Failed(ref e) => eprintln!("  NOT staged: {e}"),
+            }
+            // Said rather than done. The index is derived and rebuilding it is cheap,
+            // but a command that quietly rewrote a database while you were writing a
+            // note is a command that does two things under one name.
+            println!();
+            println!("Next: `kb index` to make it findable, then `kb check` to be sure");
+            println!("the note says what the entry claims it says.");
             ExitCode::SUCCESS
         }
         Err(e) => {
