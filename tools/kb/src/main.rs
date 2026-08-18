@@ -255,7 +255,7 @@ fn cmd_write(agent: &str, slug: &str, fleet: &Path, args: &[String]) -> ExitCode
     }
 }
 
-/// Creates an agent in the shape ADR-0011 defines, under `<fleet>/agents/<name>`.
+/// Creates an agent in the shape ADR-0011 defines, under `<root>/fleet/<name>`.
 fn cmd_init(name: &str, fleet: &Path) -> ExitCode {
     match init::agent(fleet, name, None) {
         Ok(made) => {

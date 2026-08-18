@@ -1,12 +1,13 @@
 # Everything an agent knows is private, and it is private structurally rather than
 # by remembering to check before a commit.
 #
-# `agents/` is its own git repository, and this line makes it invisible to this one.
+# `fleet/` is its own git repository, and this line makes it invisible to this one.
+# The old name `agents/` stays listed so a half-renamed checkout can never leak it.
 # Nothing under it can be staged here: `git add -A` at this root does not descend into
 # an ignored directory, so there is no version of "I forgot" that publishes a note.
 #
 # The privacy gate in `kb` still works, and that is not an accident. It asks
-# `git ls-files` from inside each agent, which resolves to the repository at `agents/`
+# `git ls-files` from inside each agent, which resolves to the repository at `fleet/`
 # and answers with paths relative to the agent. Measured before this layout was
 # adopted, because the previous version of this rule was asserted without being run and
 # was wrong.
@@ -14,6 +15,7 @@
 # What this repository publishes: the system in `tools/`, and the shape an agent has,
 # which `kb init` generates. Not one line of what anybody fed their agents.
 /agents/
+/fleet/
 
 # Build output.
 target/

@@ -1,6 +1,6 @@
 # The fleet. See zed/decisions/0011-fleet-layout.md.
 #
-# Everything under agents/ is an agent, found by shape rather than declared here,
+# Everything under fleet/ is an agent, found by shape rather than declared here,
 # so no configuration can be wrong about it. This file is only for what convention
 # cannot express.
 #

@@ -108,7 +108,7 @@ impl Description {
 
         out.push_str(
             "\nSOURCE: fleet.txt, each agent's agent.txt, and the directory names under \
-             agents/. No index was queried and no ranking took place, so none of the above \
+             fleet/. No index was queried and no ranking took place, so none of the above \
              is a retrieved passage and none of it can be attributed to a knowledge file.\n",
         );
         out
@@ -154,11 +154,11 @@ mod tests {
             members: vec![
                 Member {
                     card: Card { name: "Steve".into(), role: Some("marketing".into()) },
-                    root: PathBuf::from("/f/agents/steve"),
+                    root: PathBuf::from("/f/fleet/steve"),
                 },
                 Member {
                     card: Card { name: "Zed".into(), role: None },
-                    root: PathBuf::from("/f/agents/zed"),
+                    root: PathBuf::from("/f/fleet/zed"),
                 },
             ],
         };

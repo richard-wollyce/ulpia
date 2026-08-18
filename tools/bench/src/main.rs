@@ -108,7 +108,7 @@ struct Doc {
 /// real index uses. Tracked only, because that is what `kb` serves in the public
 /// scope, and measuring text the router would refuse to serve measures nothing.
 fn body_chunks(root: &Path) -> Result<Vec<Doc>, String> {
-    let agents_dir = root.join("agents");
+    let agents_dir = root.join("fleet");
     let mut agents: Vec<PathBuf> = std::fs::read_dir(&agents_dir)
         .map_err(|e| format!("cannot read {}: {e}", agents_dir.display()))?
         .flatten()
@@ -143,7 +143,7 @@ fn body_chunks(root: &Path) -> Result<Vec<Doc>, String> {
 /// Map entries in the same composition the Python benchmark used, so the two
 /// instruments stay comparable: title, the Search for terms, then the summary.
 fn entry_docs(root: &Path) -> Result<Vec<Doc>, String> {
-    let agents_dir = root.join("agents");
+    let agents_dir = root.join("fleet");
     let mut agents: Vec<PathBuf> = std::fs::read_dir(&agents_dir)
         .map_err(|e| format!("cannot read {}: {e}", agents_dir.display()))?
         .flatten()

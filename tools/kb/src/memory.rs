@@ -318,7 +318,7 @@ impl Memory {
 ///
 /// Everything inside it is an agent, which is why no configuration says so: a
 /// convention cannot be wrong about itself, and a list can.
-const AGENTS_DIR: &str = "agents";
+const AGENTS_DIR: &str = "fleet";
 
 /// The manifest, for what convention cannot express.
 const MANIFEST: &str = "fleet.txt";
@@ -329,7 +329,7 @@ const MANIFEST: &str = "fleet.txt";
 ///
 /// 1. **A base.** It holds a map file. Returned untouched, even if it contains other
 ///    bases, because expanding it would silently drop the parent's own notes.
-/// 2. **A fleet root**, ADR-0011's layout: it holds an `agents/` directory. Every
+/// 2. **A fleet root**, ADR-0011's layout: it holds a `fleet/` directory. Every
 ///    directory in there is an agent, plus anything the manifest attaches, minus
 ///    anything it disables.
 /// 3. **A loose directory of bases**, whose immediate children hold maps. Kept
@@ -510,12 +510,12 @@ mod tests {
 
     /// ADR-0011's actual layout, which the first version of this function missed:
     /// it looked one level down and the ADR puts agents two levels down, under
-    /// `agents/`. Written before the ADR existed and not revisited when the ADR
+    /// the agents directory. Written before the ADR existed and not revisited when the ADR
     /// landed, so the code and the decision disagreed until a real fleet was built.
     #[test]
     fn a_fleet_root_finds_the_agents_directory() {
         let root = scratch("agents-dir");
-        let agents = root.join("agents");
+        let agents = root.join("fleet");
         std::fs::create_dir_all(&agents).expect("mkdir");
         make_base(&agents, "zed");
         make_base(&agents, "yaron");
@@ -533,7 +533,7 @@ mod tests {
     #[test]
     fn the_manifest_can_disable_an_agent() {
         let root = scratch("disable");
-        let agents = root.join("agents");
+        let agents = root.join("fleet");
         std::fs::create_dir_all(&agents).expect("mkdir");
         make_base(&agents, "zed");
         make_base(&agents, "steve");
@@ -552,7 +552,7 @@ mod tests {
     #[test]
     fn the_manifest_can_attach_a_base_from_outside() {
         let root = scratch("attach");
-        let agents = root.join("agents");
+        let agents = root.join("fleet");
         std::fs::create_dir_all(&agents).expect("mkdir");
         make_base(&agents, "zed");
         make_base(&root, "outside");

@@ -227,7 +227,7 @@ fn stage(root: &Path, note: &Path, map: &Path) -> Staged {
 /// The agent's directory, accepting both shapes ADR-0011 and ADR-0008 leave open:
 /// a fleet with agents under it, or a base addressed directly.
 fn agent_root(fleet: &Path, agent: &str) -> PathBuf {
-    let under_agents = fleet.join("agents").join(agent);
+    let under_agents = fleet.join("fleet").join(agent);
     if under_agents.is_dir() {
         return under_agents;
     }
@@ -344,9 +344,9 @@ mod tests {
     fn base(name: &str) -> PathBuf {
         let dir = std::env::temp_dir().join(format!("kb-write-{name}"));
         let _ = std::fs::remove_dir_all(&dir);
-        std::fs::create_dir_all(dir.join("agents/zed/knowledge")).expect("mkdir");
+        std::fs::create_dir_all(dir.join("fleet/zed/knowledge")).expect("mkdir");
         std::fs::write(
-            dir.join("agents/zed/MAP.md"),
+            dir.join("fleet/zed/MAP.md"),
             "# Map\n\n### knowledge/\n\n- **[[old]]** Already here.\n  Search for: `old`.\n\n### templates/\n\n- **[[t]]** A template.\n  Search for: `template`.\n",
         )
         .expect("write map");
@@ -372,7 +372,7 @@ mod tests {
         let dir = base("section");
         note(&dir, "zed", "new-thing", &spec()).expect("written");
 
-        let map = std::fs::read_to_string(dir.join("agents/zed/MAP.md")).expect("map");
+        let map = std::fs::read_to_string(dir.join("fleet/zed/MAP.md")).expect("map");
         let at_new = map.find("[[new-thing]]").expect("present");
         let at_templates = map.find("### templates/").expect("present");
         assert!(at_new < at_templates, "it belongs under knowledge/:\n{map}");
@@ -398,7 +398,7 @@ mod tests {
         let mut s = spec();
         s.keys.clear();
         assert!(matches!(note(&dir, "zed", "x", &s), Err(WriteError::NoKeys)));
-        assert!(!dir.join("agents/zed/knowledge/x.md").exists(), "nothing left behind");
+        assert!(!dir.join("fleet/zed/knowledge/x.md").exists(), "nothing left behind");
     }
 
     #[test]
@@ -418,7 +418,7 @@ mod tests {
                 "{bad}"
             );
         }
-        let map = std::fs::read_to_string(dir.join("agents/zed/MAP.md")).expect("map");
+        let map = std::fs::read_to_string(dir.join("fleet/zed/MAP.md")).expect("map");
         assert!(!map.contains("New Thing"), "the map was not touched");
     }
 

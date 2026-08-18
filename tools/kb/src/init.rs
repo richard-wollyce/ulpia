@@ -63,7 +63,7 @@ impl std::fmt::Display for InitError {
     }
 }
 
-/// Creates an agent under `fleet/agents/<name>`, or directly at `at` when given.
+/// Creates an agent under `<root>/fleet/<name>`, or directly at `at` when given.
 ///
 /// The fleet root is where ADR-0011 says agents live. Passing an explicit path is
 /// still allowed, because the library accepts any path even though the product has
@@ -75,7 +75,7 @@ pub fn agent(fleet: &Path, name: &str, at: Option<&Path>) -> Result<Created, Ini
 
     let root = match at {
         Some(p) => p.to_path_buf(),
-        None => fleet.join("agents").join(name),
+        None => fleet.join("fleet").join(name),
     };
 
     if root.exists() {

@@ -14,6 +14,17 @@
 ### decisions/
 
 
+- **[[0019-the-system-is-ulpia]]** 🟢 accepted 2026-08-18. **The system is Ulpia, the librarian
+  stays Vesta, and the agents live in `fleet/`.** Named through Steve's process: Wollner's rule kills
+  the literal words everyone converges on, a collision search killed six of eight candidates, and the
+  survivor is the Bibliotheca Ulpia, Trajan's library, which was Rome's public reading room and its
+  record office in one building, knowledge plus decision records, which is this software. Sealed by
+  `ulpia.io`. Supersedes ADR-0012's system name and its no-new-domain position; Vesta and its
+  reasoning survive untouched. Records the layout that follows: root takes the product name, agents/
+  becomes fleet/.
+  Search for: `Ulpia`, `ulpia.io`, `name`, `product name`, `system name`, `rename`, `fleet folder`,
+  `library metaphor`, `librarian`, `Bibliotheca Ulpia`, `nome do sistema`, `biblioteca`.
+
 - **[[0001-repository-shape]]** ✅ accepted. Zed is built on Yaron's three file split, extended with
   `decisions/`, `records/sessions/`, `fleet/` and a staleness aware evidence ruler. Rejects copying
   Steve's combined boot file (grows without limit, paid on every question) and rejects building a
