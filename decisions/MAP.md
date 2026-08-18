@@ -1,0 +1,234 @@
+# MAP: the decision records
+
+> The system's architecture decision records: what was decided, when, and the reason it beat the
+> alternatives. They live at the repository root rather than inside any agent because a decision
+> about the software binds every agent, and reaching them through one agent's folder made no sense.
+> Attached to the fleet as a routable base by `attach = decisions` in `fleet.txt`, so a question
+> like "why is it called Vesta" finds its answer here without a model.
+>
+> Numbered, dated, never edited after acceptance: a decision that changes gets a **new** ADR that
+> supersedes the old one. Every ADR carries a revisit trigger.
+
+## Current contents
+
+### decisions/
+
+
+- **[[0001-repository-shape]]** ✅ accepted. Zed is built on Yaron's three file split, extended with
+  `decisions/`, `records/sessions/`, `fleet/` and a staleness aware evidence ruler. Rejects copying
+  Steve's combined boot file (grows without limit, paid on every question) and rejects building a
+  code first retrieval system before the manual procedure has proven its shape.
+  Search for: `repository shape`, `three file split`, `boot path`, `ADR`, `embeddings`.
+
+- **[[0002-evidence-ruler]]** ✅ accepted 2026-08-13. Why software needs its own ruler rather than
+  adopting Yaron's unchanged, and the rule that matters most in it: a model's output, including Zed's
+  own, is tier D until confirmed. Resolves how the ruler is applied: tier on the note plus a per claim
+  tag only when a claim diverges, recheck on major version or on use and never on a calendar, tier D
+  recorded in the discard log only.
+  Search for: `evidence ruler`, `tier D`, `model output`, `recheck trigger`, `discard log`.
+
+- **[[0003-knowledge-storage]]** ✅ accepted 2026-08-13. Answers whether the agents should move from markdown
+  to a database, Neo4j specifically, as they expand. **Files stay the source of truth and any index is
+  derived, rebuildable and disposable.** The argument: the runtime reads files natively so a database
+  turns every read into a tool call that can fail or be skipped, git is already the audit trail, a
+  graph is bad at storing long prose, the real pain is validation rather than retrieval, and the two
+  options are not equally reversible. Separates the knowledge base from the orchestrator GUI's own
+  storage, which is genuine database work and gets its own decision.
+  Search for: `source of truth`, `derived index`, `Neo4j`, `graph`, `database`, `reversibility`,
+  `validator`, `projection`, `GUI storage`.
+
+- **[[0004-local-first-inference]]** ⏳ **proposed.** What it costs to run a local model on this
+  machine, and the architecture that follows. The mechanism nobody mentions: **generation is memory
+  bandwidth bound and prefill is compute bound**, and on four cores with no GPU the prefill dominates,
+  so reading a 21,000 token boot path costs minutes of silence per question and no smaller model fixes
+  it. The answer is to retrieve instead of read, and to split the jobs by what each model is good at,
+  with speech, routing and extraction local and judgement on a frontier model when online. Carries the
+  consequences for how notes must be written, and the four measurements that have to replace its own
+  estimates before anything is built.
+  Search for: `local model`, `llama.cpp`, `prefill`, `memory bandwidth`, `tokens per second`,
+  `quantized`, `role split`, `retrieval`, `prompt cache`, `offline`, `hardware`.
+
+- **[[0005-wake-with-the-constitution]]** ⏳ **proposed.** Answers whether the agents should read their
+  whole base once at startup. The technique is real and is called prefix caching, and it costs three
+  things: **KV cache RAM at about 144 KB per token**, so three agents holding their full bases would
+  need 9 GB; an attention tax paid on every generated token forever, not once at boot; and silent
+  recall failure, because a small model with 21,000 tokens in front of it does not know the base, it
+  has it nearby. The split: the **constitution** stays resident (identity, rules, thin map, budget of
+  4,000 tokens) and the **library** is indexed by code at startup and retrieved per query. Routing
+  starts as a keyword lookup against the `Search for:` lines with no model at all.
+  Search for: `prefix caching`, `KV cache`, `resident context`, `constitution`, `token budget`,
+  `routing`, `retrieval`, `lost in the middle`, `wake up`, `startup`.
+
+- **[[0006-language-architecture]]** ⏳ **proposed.** Whether the fleet should be one language or many,
+  for software meant to be used by people in other cultures. Separates the three things that get called
+  "the language": the **core** prose, the **keys** the router matches, and the **edge** conversation.
+  Same pattern as UTC for time and minor units for money: **normalise at the boundary, one canonical
+  representation in the core.** English as canonical, per base rather than per fleet, because the
+  jargon is already English and does not translate, which makes mixed language input an advantage
+  rather than a problem. The keys become multilingual by a **cascade**: free alias lookup, then local
+  query expansion only on a miss, then embeddings only when keywords stop covering it, with the
+  expansion log as the worklist for fixing the keys.
+  Search for: `language`, `multilingual`, `canonical`, `alias table`, `query expansion`, `embeddings`,
+  `cascade`, `i18n`, `jargon`, `normalise at the boundary`.
+
+- **[[0007-memory-architecture]]** ✅ accepted 2026-08-13. The write pipeline, taken from what mem0,
+  Letta and Zep do well and refusing what they do badly. **Four named outcomes on every write, ADD,
+  UPDATE, DELETE and NOOP**, where NOOP is the branch whose absence produced 52.7% of the junk in the
+  mem0 audit. **The agent may delete**, because a delete gate produces hoarding and git makes deletion
+  visible, attributable and recoverable, so the constraint is disclosure rather than permission. Then
+  **provenance and stage as front matter**, orthogonal on purpose, with the rule that an `agent` claim
+  is never promoted to `human` or `external` without a human act. Plus labelled constitution blocks
+  ordered by stability so prefix caching survives a project switch, content hash reindexing, and the
+  first dependency taken deliberately with the reason recorded.
+  Search for: `ADD UPDATE DELETE NOOP`, `NOOP`, `provenance`, `stage`, `write gate`, `delete`,
+  `hoarding`, `memory blocks`, `content hash`, `SQLite`, `first dependency`.
+
+- **[[0008-single-user-open-source]]** ✅ accepted 2026-08-13. Build for exactly one self hosted user,
+  release it open source, and keep the paid hosted service possible without building any of it now.
+  **A is a directory and B is a database**, so files now and a service later is an afternoon, while a
+  service now and files later is an export and an apology. Lists what building for one user actually
+  means (no accounts, no tenancy, no telemetry, config as a file) and the three things done now that
+  keep the service cheap later, each of which is good practice for the single user case anyway. Ends on
+  the position that **the paid product is convenience, not capability**, because anyone who wants what
+  we built can clone it.
+  Search for: `open source`, `self hosted`, `single user`, `multi tenant`, `hosted service`,
+  `kb init`, `no telemetry`, `one way door`, `convenience not capability`.
+
+- **[[0009-gui-runtime-boundary]]** ✅ accepted 2026-08-16 for the stack, proposed for the contract.
+  Tauri confirmed, but **the boundary is the API contract, not the framework**, which is what makes the
+  hosted service a second implementation instead of a rewrite. Records the finding that **no third
+  party application can hold a consumer subscription credential**, and the three runtimes that follow
+  from it: local, frontier by API key, and driving an agent client the user authenticated themselves.
+  Shows that `blocks.txt` pays twice, because the Anthropic API caches on the same prefix rule as the
+  local model, cutting the per question cost roughly in half, and turns that into a requirement on the
+  contract. Voice deferred with the seam built: typed content parts and one empty trait.
+  Search for: `GUI`, `Tauri`, `API contract`, `subscription`, `API key`, `runtime`, `prompt caching`,
+  `cost per question`, `keychain`, `voice`, `STT`, `TTS`.
+
+- **[[0010-memory-as-mcp-server]]** 🟡 proposed 2026-08-16. `kb` gains an **MCP server mode**, so any
+  MCP capable client can call our routing and memory while the user's own subscription pays for the
+  model. **Answers the subscription problem sideways**: the credential never comes near us because it
+  never needs to. Names the tool surface, makes `reason` a required parameter on the write tool so
+  ADR-0007's disclosure rule is enforced by the schema, and confines the server to the base path it was
+  launched with, because tool arguments arrive from a model. Redefines what the GUI is for: local model
+  management, the write review loop, provenance made visible, agent switching and voice, not the chat.
+  Search for: `MCP`, `MCP server`, `tool surface`, `third party client`, `distribution`, `wedge`,
+  `path confinement`, `kb_route`, `kb_retrieve`, `kb_remember`, `kb_write`.
+
+- **[[0011-fleet-layout]]** 🟡 proposed 2026-08-16. **The least reversible decision so far**, because
+  every agent created from now on has this shape and the hosted service inherits it as its tenancy
+  model. Separates two layers that ADR-0009 collapsed: **what the library accepts** (any path) from
+  **where the product creates and looks** (one defined place). The argument that settles it is that an
+  orchestrator able to create an agent has to know where to put it, and "anywhere" is not an answer.
+  Defines the fleet tree, the agent shape taken from what the three already converged on, `agent.txt`
+  kept out of the constitution because `blocks.txt` orders by stability, and **one index per agent**
+  because a missing predicate cannot leak a file that is not in the database you opened. The load
+  bearing rule is that **no absolute path exists inside the fleet**, which is what makes moving, backup,
+  sync and one-tenant-one-directory all the same operation.
+  Search for: `fleet`, `fleet root`, `agent shape`, `layout`, `agents/`, `fleet.txt`, `attach`,
+  `kb init`, `per agent index`, `tenancy`, `no absolute paths`, `structure`, `repository`,
+  `two repositories`, `public repository`, `private`, `gitignored`, `repositorio`, `publico`.
+
+- **[[0012-naming-and-hosting]]** 🟢 accepted 2026-08-17. **The system and its orchestrator are both
+  called Vesta**, and everything ships under Richard's own name at `richardwollyce.com`, one
+  subdomain per system. Named by Steve from his own base, which is the first time an agent here
+  answered a real question with its own distilled material rather than with general model knowledge.
+  Two findings drove it: **Wollner's rule** that a mark must be abstract and never literal, which
+  kills Router, Hub, Conductor and Nexus on sight, and the discovery that the mythological namespace
+  for AI orchestrators is already occupied. Vesta is the Roman deity who had **no statue**, being
+  represented by the fire itself, and whose Vestals guarded Rome's wills: the index is the fire, the
+  markdown is the wills, which is [[0003-knowledge-storage]] restated as a name. A personal name is
+  the umbrella because **a civil name has no third party who can hold prior rights to it**, which
+  puts trademark spending after there is something worth defending rather than before. Records three
+  accepted costs, including that the brand does not transfer on a sale and that Vesta is one phoneme
+  from *besta*.
+  Search for: `Vesta`, `name`, `naming`, `brand`, `branding`, `Wollyce`, `richardwollyce.com`,
+  `domain`, `subdomain`, `trademark`, `INPI`, `orchestrator name`, `Wollner`.
+
+- **[[0013-retrieval-precedes-classification]]** 🟢 accepted 2026-08-17. **The base is read before the
+  model is allowed to decide it was not needed.** Routing is a reflex rather than a decision, because
+  it costs microseconds and reads no text, and the model classifies only after seeing what came back.
+  Rejects putting a model in front of retrieval on the ground that **whether it needs the base is the
+  one decision a model is worst at**: it does not know what it does not know, and a question with a
+  good generic answer and a different house answer comes back generic with full confidence. Carries
+  the measurement that forced it: twenty real questions went **10 hits, 3 weak, 7 misses** before
+  repair and **17, 1, 2** after, with the fused scorer rescuing zero of the seven, so the defect was
+  never the ranking. Names the treadmill honestly, since the repair was twelve alias lines and twenty
+  keywords matching the exact phrasings tested, and admits the second number is tuned against its own
+  test set. **Blocks taking the map out of the resident set** until the expansion step exists.
+  Search for: `routing`, `router`, `classification`, `cascade`, `recall`, `recall loss`, `silent
+  miss`, `expansion`, `orchestrator`, `Vesta routing`, `who answers`, `general knowledge`, `typo`,
+  `roteamento`, `classificar`.
+
+- **[[0014-english-system-any-language-conversation]]** 🟢 accepted 2026-08-17. **The system is
+  written in English and the conversation is not.** One language for identifiers, comments, markdown,
+  commits and interface copy; whatever the user types stays in the language they typed it. Beat the
+  split rule because the cost of a split is not the translation, it is **the boundary**, and a rule
+  that needs a judgement per string drifts, which it already had between two decisions four days
+  apart. Records what the audit found: `tools/kb` was already clean because its Portuguese is *data
+  about Portuguese*, the tray was not, `fn shit` existed, and Steve's quoted creative stays Portuguese
+  because the exact wording is the evidence. Private layers deliberately untouched.
+  Search for: `language`, `English`, `idioma`, `normalise`, `interface copy`, `UI strings`,
+  `translation`, `language audit`, `traduzir`, `one language`.
+
+- **[[0015-expansion-split-by-distance]]** 🟢 accepted 2026-08-17. **Step 2 of the cascade, split by
+  what kind of distance a miss actually is.** Orthographic distance, a typo or a cognate, is plain
+  software: character trigram overlap against the 849 keyword terms the base already holds, in
+  microseconds with no dependency. Semantic distance, a real translation, needs a model, and one is
+  already in the loop, so **a miss now returns the candidate vocabulary instead of a dead end** and
+  the model expands against words that exist rather than guessing. Rejects building the local model
+  version first on a measurement: generation here is 5.55 to 5.88 t/s, so the specified 20 to 40 token
+  expansion costs **3.4 to 7.2 seconds against 4.43 ms for the whole of `kb_retrieve`**, paid on the
+  path where the question already failed, and it would cost the README's one dependency claim. The
+  deciding argument is honesty rather than cost: trigrams can state their own limit exactly and a
+  model's expansion cannot. Demonstrated by `ingestao` reaching `ingest a source` with no alias line.
+  Carries the wrong turn: requiring every word of a multi word key to align was borrowed from matching
+  and is wrong for suggesting, where the reader filters.
+  Search for: `expansion`, `step 2`, `suggestion`, `suggest`, `trigram`, `fuzzy`, `typo`, `cognate`,
+  `miss`, `nothing matched`, `candidate terms`, `local model`, `expansao`, `sugestao`, `erro de
+  digitacao`.
+
+- **[[0016-writing-a-note-includes-its-entry]]** 🟢 accepted 2026-08-17. **A note and the map
+  entry that makes it reachable are one write, and there is no flag that does one without the other.**
+  Closes the bootstrap: ADR-0007 built the proposing half and nothing ever turned an approved proposal
+  into a file, so the base could only grow by hand and did not. Richard named the consequence, that a
+  fast retrieval over a corpus nothing fills is optimising the empty case. Rejects letting the linter
+  catch the missing entry, because a note with no entry cannot be ranked by the keyword scorer at all
+  and "the meantime" is unbounded, and rejects generating keys from the note text, because keys exist
+  to bridge how somebody **asks** to how the file was **written** and deriving them from the file
+  guarantees the half we already have. Carries the defect the end to end test caught: writing was not
+  enough, because `kb` reads `git ls-files` and an untracked note is one the router refuses to serve,
+  so the write stages and does not commit.
+  Search for: `write`, `kb write`, `escrever`, `gravar`, `new note`, `create a note`, `bootstrap`,
+  `empty base`, `staging`, `git add`, `map entry`, `unreachable note`.
+
+- **[[0017-no-dense-scorer-yet]]** 🟢 accepted 2026-08-17. **BGE-M3 measured against twenty real
+  questions and not adopted, because fusing it made the system worse.** Head to head it got 13 right
+  against roughly 16 for the keyword scorer, embedding note bodies chunked the way `store.rs` chunks
+  them. That alone would not disqualify it, since **RRF does not need a second scorer to win, it needs
+  it to be wrong about different questions**, so the fusion was computed directly: nineteen of twenty
+  answers unchanged, the one that changes moves off the correct file onto a marketing reel, and the
+  question the keyword scorer honestly does not answer starts returning a carousel about business
+  terminology. **An honest abstention became a confident wrong answer.** Carries the finding that
+  outlives it: the keyword scorer's one error scored 3.82 while every correct answer scored 9.55 or
+  more, and BGE-M3's correct and wrong answers overlap completely, so a dense scorer that never
+  abstains removes the property that separates this from mem0 and Zep. Costs measured: 2.2 GB, and
+  2,833 seconds to index 1,039 chunks on this machine.
+  Search for: `embedding`, `embeddings`, `dense`, `BGE-M3`, `bge`, `e5`, `vector search`, `semantic
+  search`, `fastembed`, `ONNX`, `hybrid retrieval`, `RRF`, `fusion`, `abstention`, `busca semantica`,
+  `vetorial`.
+
+- **[[0018-no-model-in-the-retrieval-path]]** 🟢 accepted 2026-08-18. **No model enters the
+  retrieval path, and the keyword score floor becomes the abstention mechanism.** The full table:
+  keyword 16/19 and the only scorer whose score separates hit from miss; BGE-M3 dense 8 and 13,
+  sparse 10 on entries collapsing to **4 on bodies** where the largest file absorbs other agents'
+  questions; both cross encoder rerankers **degraded the 16-correct ranking they were handed**, BGE
+  v2-m3 to 11 at 2,571 ms per pair, Jina v2 to 14 at 647 ms with a non-commercial licence. A skeptic
+  commissioned against the reranker plan predicted zero marginal gain before the numbers existed, and
+  the reality was negative. Orders the next code change: carry the keyword score and runner-up margin
+  through retrieval instead of discarding them at fusion, and gate on the floor. Instrument is
+  `tools/bench`, one Rust command, re-run at 1,000 files.
+  Search for: `reranker`, `rerank`, `cross encoder`, `abstention`, `score floor`, `confidence gate`,
+  `no model`, `retrieval path`, `kb-bench`, `jina`, `bge-reranker`, `sparse head`, `measurement`,
+  `modelo na busca`, `limiar`.
+

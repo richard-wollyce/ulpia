@@ -16,4 +16,7 @@
 name = Vesta
 role = Keeper of the fleet: knows who is here, routes what arrives, and holds the fleet's memory
 
-# Nothing else below yet.
+# The decision records, attached as a routable base so questions about the
+# system's own design find their answers without a model.
+attach = decisions
+
