@@ -1,0 +1,24 @@
+[package]
+name = "kb-bench"
+version = "0.1.0"
+edition = "2024"
+description = "Measures retrieval candidates against a real fleet, in Rust, so the review needs no Python"
+
+# This crate exists so that `kb` does not have to carry these dependencies.
+#
+# ADR-0017 declined a dense scorer partly because fastembed pulls ort, tokenizers
+# and hf-hub against the one dependency the README advertises for `kb`. The
+# measuring instrument still has to exist, and its revisit triggers have to be
+# checkable without rebuilding a Python environment every time, so the instrument
+# lives here and pays its own costs. Nothing in `kb` links this crate.
+#
+# It links `kb` the library for one reason that matters: the corpus is loaded and
+# chunked by the exact code the real index uses, so a measurement here is a
+# measurement of the system rather than of a reimplementation of it.
+
+[dependencies]
+kb = { path = "../kb" }
+fastembed = "5"
+
+[profile.release]
+opt-level = 3
