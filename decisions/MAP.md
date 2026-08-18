@@ -263,3 +263,24 @@
   Search for: `routing`, `agent selection`, `which agent`, `coordinator`, `orchestrator`,
   `kb eval`, `gold set`, `evaluation`, `score floor`, `abstention`, `confidence gate`, `margin`,
   `RRF`, `fusion`, `top-1`, `hardcoded`, `boot`, `qual agente`, `roteamento`, `medicao`.
+
+- **[[0021-committing-under-concurrency]]** 🟢 accepted 2026-08-18. **A commit names the paths
+  it commits, and proves afterwards that it took nothing else.** Written because more than one
+  agent session writes these repositories daily and commit `cdc0e52` already carried two
+  sessions' unrelated work under one message, staged by `git add -A` while the other was mid
+  write. The damage is not lost work, it is an audit trail that lies. The primitive, verified in
+  a scratch repository rather than recalled: **`git commit -- <paths>` builds the commit from only
+  those paths and ignores the rest of the index**, so a pathspec closes the race instead of
+  guarding it and no lock is needed. Also measured: an untracked path fails a pathspec commit and
+  needs `git add` first, a deleted path does not, and index contention is exit 128 with
+  `Unable to create ... index.lock`, which is a bounded retry. Ships `kb commit`, which resolves
+  the repository from the paths, refuses a list spanning two repositories, refuses an empty list
+  because that one affordance is what reintroduces the bug, and **reads the commit back** to
+  report anything it absorbed plus every path it left dirty. Plus a tracked `pre-commit` hook that
+  refuses raw commits, with a deliberately visible `KB_ALLOW_RAW_COMMIT` escape hatch. Rejected
+  per session worktrees, the industrial answer, because isolating the sessions isolates the fleet
+  the router is supposed to read across. Does **not** solve two sessions editing one file, and
+  says so.
+  Search for: `commit`, `git commit`, `concurrency`, `concurrent sessions`, `multiple agents`,
+  `git add -A`, `pathspec`, `index.lock`, `pre-commit`, `hook`, `core.hooksPath`, `kb commit`,
+  `sweep`, `audit trail`, `worktree`, `lease`, `commitar`, `sessoes simultaneas`.

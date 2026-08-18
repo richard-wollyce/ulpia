@@ -6,7 +6,7 @@
 
 
 use kb::checks::{Finding, Level};
-use kb::{base, blocks, checks, eval, index, init, mcp, memory, remember, store, write};
+use kb::{base, blocks, checks, commit, eval, index, init, mcp, memory, remember, store, write};
 use base::Base;
 use std::path::Path;
 use std::process::ExitCode;
@@ -24,6 +24,7 @@ usage:
     kb fleet [path]... [--all]
     kb blocks [path] [--emit]
     kb eval <gold.tsv> [path]... [--top N] [--all]
+    kb commit <path>... -m <message>
     kb serve [path]... [--top N] [--all]
 
     path        base to work on, defaults to the current directory
@@ -34,6 +35,12 @@ usage:
     --keys      write: the words a real question would use. Required, no way to skip
     --summary   write: one line for the map, saying what the note is about
     --folder    write: where under the agent it lands, default knowledge
+    -m          commit: the message. Required, and so is at least one path
+
+commit exists because more than one session writes these repositories at once.
+It commits exactly the paths you name and then reads the commit back to prove it,
+so another session's in-flight work cannot be swept into your message. There is
+deliberately no flag meaning everything.
 
 write reads the note body from stdin and creates the file and its MAP entry in one
 act. A note the map does not list is a note no question can reach, so there is no
@@ -67,7 +74,8 @@ exit code is 1 when check finds errors, or when --strict and it finds warnings.
 const LINES_SHOWN: usize = 3;
 
 /// Flags that consume the argument after them.
-const VALUE_FLAGS: &[&str] = &["--top", "--keys", "--summary", "--folder", "--provenance", "--stage"];
+const VALUE_FLAGS: &[&str] =
+    &["--top", "--keys", "--summary", "--folder", "--provenance", "--stage", "-m"];
 
 fn main() -> ExitCode {
     let args: Vec<String> = std::env::args().skip(1).collect();
@@ -81,21 +89,8 @@ fn main() -> ExitCode {
     let strict = args.iter().any(|a| a == "--strict");
     let top = flag_value(&args, "--top").and_then(|v| v.parse().ok()).unwrap_or(5);
 
-    // Flags that take a value swallow the argument after them, otherwise that
-    // value gets read as a path and the error message blames the wrong thing.
-    let mut positional: Vec<&str> = Vec::new();
-    let mut skip_next = false;
-    for arg in &args[1..] {
-        if skip_next {
-            skip_next = false;
-            continue;
-        }
-        if arg.starts_with("--") {
-            skip_next = VALUE_FLAGS.contains(&arg.as_str());
-            continue;
-        }
-        positional.push(arg.as_str());
-    }
+    let rest: Vec<&str> = args[1..].iter().map(|a| a.as_str()).collect();
+    let positional = positionals(&rest);
 
     let json = args.iter().any(|a| a == "--json");
     let hybrid = args.iter().any(|a| a == "--hybrid");
@@ -138,6 +133,10 @@ fn main() -> ExitCode {
             let fleet = positional.get(2).copied().unwrap_or(".");
             cmd_write(positional[0], positional[1], Path::new(fleet), &args)
         }
+        "commit" => {
+            let message = flag_value(&args, "-m").unwrap_or_default();
+            cmd_commit(&positional, &message)
+        }
         "eval" => {
             if positional.is_empty() {
                 eprintln!("kb: eval needs a gold file\n");
@@ -169,6 +168,36 @@ fn main() -> ExitCode {
             ExitCode::from(2)
         }
     }
+}
+
+
+/// The arguments that are not flags and not a flag's value.
+///
+/// Extracted and tested because the comment that used to sit here predicted its own
+/// bug and did not prevent it. It said: a flag that takes a value swallows the argument
+/// after it, otherwise that value gets read as a path and the error message blames the
+/// wrong thing. The guard then tested `starts_with("--")` only, so adding the short
+/// `-m` to `VALUE_FLAGS` did nothing, and `kb commit ... -m "long message"` reported
+/// the entire commit message as a path that is not inside a git repository.
+fn positionals<'a>(args: &[&'a str]) -> Vec<&'a str> {
+    let mut out = Vec::new();
+    let mut skip_next = false;
+    for arg in args {
+        if skip_next {
+            skip_next = false;
+            continue;
+        }
+        // Long flags, and any short flag that is known to take a value. A bare short
+        // flag that takes no value is still a positional to this function, which is
+        // wrong in principle and has no instance today; the day one exists it belongs
+        // in a list beside VALUE_FLAGS rather than in a new prefix rule.
+        if arg.starts_with("--") || VALUE_FLAGS.contains(arg) {
+            skip_next = VALUE_FLAGS.contains(arg);
+            continue;
+        }
+        out.push(*arg);
+    }
+    out
 }
 
 /// The value after a flag, as in `--top 8`. Returns None when the flag is absent.
@@ -539,6 +568,39 @@ fn cmd_route(question: &str, paths: &[&str], all: bool, top: usize, hybrid: bool
     ExitCode::SUCCESS
 }
 
+
+// ---------------------------------------------------------------------------
+// commit
+// ---------------------------------------------------------------------------
+
+fn cmd_commit(paths: &[&str], message: &str) -> ExitCode {
+    let owned: Vec<String> = paths.iter().map(|p| p.to_string()).collect();
+    match commit::commit(&owned, message) {
+        Ok(done) => {
+            println!("committed {}", done.sha);
+            for f in &done.files {
+                println!("  {f}");
+            }
+            // Printed on every success, because "I did not take your files" is a claim
+            // that should arrive with its evidence rather than as reassurance.
+            if done.left_alone.is_empty() {
+                println!("
+nothing else was dirty in this repository.");
+            } else {
+                println!("
+left untouched, still dirty ({}):", done.left_alone.len());
+                for f in &done.left_alone {
+                    println!("  {f}");
+                }
+            }
+            ExitCode::SUCCESS
+        }
+        Err(e) => {
+            eprintln!("kb: {e}");
+            ExitCode::from(1)
+        }
+    }
+}
 
 // ---------------------------------------------------------------------------
 // eval
@@ -915,4 +977,39 @@ fn format_group(g: &Group) -> String {
     }
 
     line
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// The bug this function was extracted for: a multi line commit message reaching
+    /// `kb commit` as a path, because the flag guard only recognised `--` prefixes.
+    #[test]
+    fn a_short_flags_value_is_not_a_path() {
+        let args = ["commit", "a.md", "-m", "a message
+
+with a body"];
+        assert_eq!(positionals(&args[1..]), vec!["a.md"]);
+    }
+
+    #[test]
+    fn a_long_flags_value_is_not_a_path() {
+        let args = ["route", "question", "--top", "8", "."];
+        assert_eq!(positionals(&args[1..]), vec!["question", "."]);
+    }
+
+    /// A flag that takes no value must not swallow the argument after it, or the last
+    /// path on every `--all` command line quietly disappears.
+    #[test]
+    fn a_valueless_flag_swallows_nothing() {
+        let args = ["check", "--all", "fleet/zed"];
+        assert_eq!(positionals(&args[1..]), vec!["fleet/zed"]);
+    }
+
+    #[test]
+    fn several_value_flags_in_a_row_are_all_consumed() {
+        let args = ["write", "zed", "note", "--keys", "a, b", "--summary", "one line", "."];
+        assert_eq!(positionals(&args[1..]), vec!["zed", "note", "."]);
+    }
 }

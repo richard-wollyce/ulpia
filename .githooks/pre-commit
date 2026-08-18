@@ -1,0 +1,42 @@
+#!/bin/sh
+# Concurrency guard. See decisions/0021-committing-under-concurrency.md.
+#
+# More than one agent session writes these repositories at the same time, and the
+# damage from `git add -A` is not lost work, it is a commit message that describes
+# half of what the commit contains. Commit cdc0e52 in the private repository is the
+# worked example.
+#
+# This hook cannot tell an intended multi-area commit from a sweep: only the person
+# committing knows which paths were theirs. So it does not guess. It enforces that
+# the decision was made deliberately, by requiring commits to come through
+# `kb commit`, which takes an explicit pathspec and reads the commit back.
+#
+# The escape hatch is one environment variable and it is not hidden, because a guard
+# with no way past it gets disabled entirely and then guards nothing.
+
+if [ -n "$KB_COMMIT" ]; then
+    exit 0
+fi
+
+if [ -n "$KB_ALLOW_RAW_COMMIT" ]; then
+    echo "kb: raw git commit allowed by KB_ALLOW_RAW_COMMIT." >&2
+    echo "kb: staging exactly these paths:" >&2
+    git diff --cached --name-only | sed 's/^/kb:   /' >&2
+    exit 0
+fi
+
+cat >&2 <<'MSG'
+kb: refusing a raw `git commit` in a repository more than one session writes.
+
+  Use:      kb commit <path>... -m "message"
+  Or:       KB_ALLOW_RAW_COMMIT=1 git commit ...
+
+`kb commit` takes an explicit pathspec, so another session's in-flight work cannot
+be swept into your commit, and it reads the commit back afterwards to prove that
+nothing else moved. There is deliberately no flag meaning everything.
+
+Why this is not advice: `git commit -- <paths>` builds the commit from only those
+paths and ignores the rest of the index. A plain `git commit` takes whatever is
+staged, including what another session staged one second ago.
+MSG
+exit 1

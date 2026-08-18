@@ -19,6 +19,27 @@ it holds `fleet/zed/`, **read [`fleet/zed/CLAUDE.md`](fleet/zed/CLAUDE.md) first
 follow it instead of this file.** That agent carries the operating instructions, the
 quality bar, the autonomy limits and the design record, and none of that is in here.
 
+## Committing, when more than one session is writing
+
+**More than one agent session writes these repositories at the same time. Assume another
+one is mid edit right now.**
+
+```
+kb commit <path>... -m "message"
+```
+
+Name every path. There is deliberately no flag meaning everything, and `git add -A` is how
+commit `cdc0e52` came to contain two sessions' unrelated work under one message. A raw
+`git commit` is refused by a hook.
+
+The mechanism, because the rule is useless without it: `git commit -- <paths>` builds the
+commit from only those paths and ignores the rest of the index, so whatever another session
+staged one second ago cannot land in yours. `kb commit` does that, then reads the commit
+back and prints what it left dirty, which is the step a person skips by hand. Full reasoning
+in [`decisions/0021-committing-under-concurrency.md`](decisions/0021-committing-under-concurrency.md).
+
+New clone: `git config core.hooksPath .githooks`, once, per repository.
+
 ## Rules that hold either way
 
 - **Name the mechanism.** A recommendation without the reason it works does not ship.
