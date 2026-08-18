@@ -48,6 +48,20 @@ pub struct Retrieved {
     /// the text scorer found it.
     pub title: String,
     pub score: f64,
+    /// The raw keyword score, carried through instead of discarded.
+    ///
+    /// RRF deliberately compares positions and not magnitudes, which is what lets it
+    /// fuse a BM25 value with a keyword sum without a conversion factor. The cost of
+    /// that is real and was paid for a week: **rank says which file won, and nothing
+    /// says whether winning meant anything.** A question the base does not cover still
+    /// produces a rank 1.
+    ///
+    /// This is the number that separated hit from miss in every measurement of
+    /// 2026-08-17 and 18, where the one wrong answer scored 3.82 and every right one
+    /// scored 9.55 or higher. It is not used for ranking and must not be: it is
+    /// evidence about the ranking, which is a different job. Zero when only the text
+    /// scorer ranked this file.
+    pub keyword_score: f32,
     /// Which scorer ranked this file and at what position, kept so a bad ranking can
     /// be diagnosed instead of guessed at.
     pub why: Vec<String>,
@@ -78,6 +92,7 @@ pub fn fuse(keyword: &[index::Hit], text: &[store::Hit], top: usize) -> Vec<Retr
         let key = (hit.entry.base.clone(), hit.entry.rel.clone());
         let entry = acc.entry(key.clone()).or_insert_with(|| blank(&key));
         entry.score += 1.0 / (RRF_K + rank as f64 + 1.0);
+        entry.keyword_score = hit.score;
         entry.why.push(format!("keywords #{}", rank + 1));
         entry.title = hit.entry.title.clone();
         for word in &hit.matched {
@@ -137,6 +152,7 @@ fn blank(key: &(String, String)) -> Retrieved {
         path: key.1.clone(),
         title: String::new(),
         score: 0.0,
+        keyword_score: 0.0,
         why: Vec::new(),
         matched: Vec::new(),
         passages: Vec::new(),
@@ -240,6 +256,32 @@ mod tests {
         let out = fuse(&keyword, &text, 5);
         assert_eq!(out[0].path, "knowledge/both.md");
         assert_eq!(out[0].why.len(), 2, "both scorers are recorded, so the ranking is explainable");
+    }
+
+    /// Z23, and the reason it was a red finding: the keyword scorer produced the one
+    /// number that separated a hit from a miss, and fusion dropped it on the floor
+    /// because RRF only ever looks at positions. Everything downstream then had to
+    /// treat "ranked first out of two bad options" and "ranked first out of two good
+    /// ones" as the same result.
+    #[test]
+    fn the_keyword_score_survives_fusion() {
+        let entries = vec![entry("zed", "knowledge/a.md", "A")];
+        let keyword = vec![index::Hit {
+            entry: &entries[0],
+            score: 9.55,
+            matched: vec!["vulkan".into()],
+        }];
+        let out = fuse(&keyword, &[], 5);
+        assert!((out[0].keyword_score - 9.55).abs() < 1e-6, "the magnitude reaches the caller");
+        assert!(out[0].score < 0.02, "and it is not the RRF score, which is a rank sum");
+    }
+
+    /// A file only the text scorer found has no keyword score, and zero is the honest
+    /// value rather than a missing one: the keyword scorer genuinely gave it nothing.
+    #[test]
+    fn a_text_only_file_reports_no_keyword_score() {
+        let out = fuse(&[], &[store_hit("zed", "knowledge/a.md", "H", "vulkan")], 5);
+        assert_eq!(out[0].keyword_score, 0.0);
     }
 
     #[test]

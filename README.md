@@ -9,8 +9,8 @@ library, which was Rome's public reading room and its official record office in 
 building, and that pair is exactly what this software is.
 
 Vesta answers *which of your files a question should open*, across every agent you
-have, in about a millisecond, without sending anything anywhere and without a model in
-the loop.
+have, in about ten milliseconds, without sending anything anywhere and without a model
+in the loop.
 
 Then you hand those files to whatever model you like. Yours, locally. Claude, through
 MCP. Something else next year. The memory outlives the model.
@@ -38,10 +38,30 @@ Two independent scorers rank every file: a keyword index built from your own map
 SQLite full text search over the content. Their results are fused with Reciprocal Rank
 Fusion.
 
-**The signal is not the score, it is the agreement.** A file both scorers found is a
-hit. A file only one found is a guess, and Vesta says so instead of dressing it up.
-That distinction was not designed, it was measured: the two questions that routed
-correctly had both scorers voting, and the one that returned nonsense had one.
+**Each scorer does the job it was measured to be better at, and they are not
+interchangeable.** Fusion rewards agreement, which is what you want when assembling
+passages for a person to read: a file both scorers noticed belongs in front of them. It
+is the wrong rule for picking a single winner, because a file each scorer ranks fourth
+beats a file one scorer ranks first. Measured over 19 questions: the keyword scorer
+alone picks the right file 18 times, the fusion it feeds picks it 11 times.
+
+So **the reading comes from agreement and the verdict comes from intent.** Vesta ranks
+who should answer using the keywords you wrote in your own map, and tells you when it is
+guessing:
+
+```
+$ kb eval fleet/zed/fleet/eval/gold.tsv .
+
+  GATE   flagged 1/1 of its own misses as a guess
+         demoted 0/18 correct answers to a guess
+         hit scores 9.29 to 179.24, miss scores 0.00
+         SEPARATES: every hit outscored every miss.
+```
+
+That is `kb eval`, and it ships in the tool rather than in a benchmark harness, so the
+numbers on this page are ones you can re-run. It grades against your own answer key and
+**refuses to run if the answer key points at files that have moved**, which is how the
+last stale measurement was caught.
 
 **And when nothing matches, the base answers with its own vocabulary.**
 
@@ -89,6 +109,7 @@ kb index .                      build one index per agent
 kb route "your question" .      which files should this open
 kb check .                      lint every agent
 kb fleet .                      who is in the fleet
+kb eval gold.tsv .              grade the routing against your own answer key
 ```
 
 ---
@@ -187,8 +208,9 @@ Early, used daily, and honest about which is which.
 
 | | |
 |---|---|
-| `tools/kb` | Works. 134 tests. One dependency. |
+| `tools/kb` | Works. 151 tests. One dependency. |
 | `tools/tray` | Windows only, and young. |
+| `site` | The page at [ulpia.io](https://ulpia.io). Static front, one Rust binary behind it. |
 | Local model routing | Not built. |
 | Voice | Not built. |
 | Licence | **Not chosen yet.** Until it is, this is source-available rather than open source. |

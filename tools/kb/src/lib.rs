@@ -15,6 +15,7 @@
 pub mod base;
 pub mod blocks;
 pub mod checks;
+pub mod eval;
 pub mod fleet;
 pub mod index;
 pub mod init;

@@ -243,3 +243,23 @@
   `no model`, `retrieval path`, `kb-bench`, `jina`, `bge-reranker`, `sparse head`, `measurement`,
   `modelo na busca`, `limiar`.
 
+
+- **[[0020-vesta-routes-to-the-agent]]** 🟡 proposed 2026-08-18. **Vesta chooses which agent
+  answers, and the two scorers stop being treated as two attempts at one job.** The table that
+  decides it: the keyword scorer alone picks the right file 18/19 and the right agent 16/19, the
+  RRF fusion it feeds picks 11/19 and 13/19, and the hardcoded line naming one agent picks 10/19,
+  which is the best a fixed choice can do on this set. Mechanism, and it is RRF working as
+  designed: fusion rewards agreement, so a file both scorers rank fourth beats a file one scorer
+  ranks first, which is right for assembling passages a person reads and wrong for choosing one
+  owner. So **the owner and the verdict come from intent, the reading comes from agreement**, both
+  from one call. The gate is the score floor alone at 6.0: hits 9.29 to 179.24 against misses at
+  0.00, flagging 1/1 of its own misses and demoting 0/18 correct answers. **Carries a refuted
+  prediction of mine**, that the scale free runner-up margin should be the primary gate, killed by
+  the instrument on its first run because correct answers have margins from 1.00 to 7.00 and a 1.5
+  cut threw away twelve of eighteen. Also carries the finding that the README's "about a
+  millisecond" is wrong by roughly 9x: routing costs 8.6 to 10.5 ms because `index::route` rebuilds
+  the entry list and the document frequency table on every query. Instrument is `kb eval`, in `kb`
+  and not in the bench crate, so anyone who can build the tool can re-check its numbers.
+  Search for: `routing`, `agent selection`, `which agent`, `coordinator`, `orchestrator`,
+  `kb eval`, `gold set`, `evaluation`, `score floor`, `abstention`, `confidence gate`, `margin`,
+  `RRF`, `fusion`, `top-1`, `hardcoded`, `boot`, `qual agente`, `roteamento`, `medicao`.

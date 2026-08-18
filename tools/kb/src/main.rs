@@ -6,7 +6,7 @@
 
 
 use kb::checks::{Finding, Level};
-use kb::{base, blocks, checks, index, init, mcp, memory, remember, store, write};
+use kb::{base, blocks, checks, eval, index, init, mcp, memory, remember, store, write};
 use base::Base;
 use std::path::Path;
 use std::process::ExitCode;
@@ -23,6 +23,7 @@ usage:
     kb write <agent> <slug> [fleet-root] --keys <a, b> --summary <one line> [--folder F]
     kb fleet [path]... [--all]
     kb blocks [path] [--emit]
+    kb eval <gold.tsv> [path]... [--top N] [--all]
     kb serve [path]... [--top N] [--all]
 
     path        base to work on, defaults to the current directory
@@ -136,6 +137,16 @@ fn main() -> ExitCode {
             }
             let fleet = positional.get(2).copied().unwrap_or(".");
             cmd_write(positional[0], positional[1], Path::new(fleet), &args)
+        }
+        "eval" => {
+            if positional.is_empty() {
+                eprintln!("kb: eval needs a gold file\n");
+                print!("{USAGE}");
+                return ExitCode::from(2);
+            }
+            let gold = positional[0];
+            let paths = paths_or_default(&positional[1..]);
+            cmd_eval(Path::new(gold), &paths, all, top)
         }
         "fleet" => cmd_fleet(&paths_or_default(&positional), all),
         "blocks" => {
@@ -528,6 +539,184 @@ fn cmd_route(question: &str, paths: &[&str], all: bool, top: usize, hybrid: bool
     ExitCode::SUCCESS
 }
 
+
+// ---------------------------------------------------------------------------
+// eval
+// ---------------------------------------------------------------------------
+
+fn cmd_eval(gold_path: &Path, paths: &[&str], all: bool, top: usize) -> ExitCode {
+    let rows = match eval::read_gold(gold_path) {
+        Ok(r) => r,
+        Err(e) => {
+            eprintln!("kb: {e}");
+            return ExitCode::from(2);
+        }
+    };
+
+    let given: Vec<&Path> = paths.iter().map(Path::new).collect();
+    let memory = match memory::Memory::open(&given, all) {
+        Ok(m) => m,
+        Err(e) => {
+            eprintln!("kb: {e}");
+            return ExitCode::from(1);
+        }
+    };
+    if memory.index_was_rebuilt {
+        eprintln!("kb: an index predated the tracked column and was emptied. Run `kb index`.");
+    }
+
+    // Before any grading. A gold file pointing at files that moved produces a precise
+    // and entirely wrong verdict, which is exactly what the decision records' move
+    // set up and nothing caught.
+    let stale = eval::stale_answers(&rows, &memory);
+    if !stale.is_empty() {
+        eprintln!("kb: {} gold answers name files this fleet does not have:", stale.len());
+        for path in &stale {
+            eprintln!("      {path}");
+        }
+        eprintln!("    Grading against a stale gold file reports a wrong number confidently.");
+        return ExitCode::from(1);
+    }
+
+    let graded = eval::run(&memory, &rows, top);
+    let s = eval::summarise(&graded);
+
+    println!("gold:     {} questions, {} answerable", graded.len(), s.answerable);
+    println!("indexed:  {} entries across {} agents", memory.entry_count(), memory.agents.len());
+    println!();
+
+    // File and agent are shown as separate columns on purpose. Collapsing them into
+    // one verdict hid the case that matters most here: the top file being right while
+    // the agent aggregate points elsewhere, which is a routing failure that a file
+    // level "ok" would have concealed.
+    println!("  file agent kw    score  marg verdict question");
+    for row in &graded {
+        let (file, agent_mark) = if row.expects_abstention() {
+            let ok = row.confidence.verdict != memory::Verdict::Hit;
+            (if ok { "ok" } else { "BAD" }, "-")
+        } else {
+            (
+                if row.file_hit() { "ok" } else { "MISS" },
+                if row.agent_hit() { "ok" } else { "MISS" },
+            )
+        };
+        println!(
+            "  {:<4} {:<5} {:<4} {:>6.1} {:>5.2} {:<6} {}",
+            file,
+            agent_mark,
+            if row.expects_abstention() {
+                "-"
+            } else if row.keyword_hit() {
+                "ok"
+            } else {
+                "MISS"
+            },
+            row.confidence.keyword_score,
+            row.confidence.margin,
+            match row.confidence.verdict {
+                memory::Verdict::Hit => "hit",
+                memory::Verdict::Guess => "guess",
+                memory::Verdict::Nothing => "none",
+            },
+            row.question
+        );
+    }
+    println!();
+
+    let pct = |n: usize, d: usize| if d == 0 { 0.0 } else { 100.0 * n as f64 / d as f64 };
+    println!(
+        "FILE   fused   {}/{}  ({:.0}%)",
+        s.file_hits,
+        s.answerable,
+        pct(s.file_hits, s.answerable)
+    );
+    println!(
+        "       keyword {}/{}  ({:.0}%), the same question asked of the keyword scorer alone",
+        s.keyword_hits,
+        s.answerable,
+        pct(s.keyword_hits, s.answerable)
+    );
+    println!(
+        "AGENT  fused   {}/{}  ({:.0}%)",
+        s.agent_hits,
+        s.answerable,
+        pct(s.agent_hits, s.answerable)
+    );
+    println!(
+        "       keyword {}/{}  ({:.0}%)",
+        s.keyword_agent_hits,
+        s.answerable,
+        pct(s.keyword_agent_hits, s.answerable)
+    );
+    println!(
+        "       always-{}   {}/{}  ({:.0}%), the best a fixed choice can do on this set",
+        s.baseline_agent,
+        s.baseline_hits,
+        s.answerable,
+        pct(s.baseline_hits, s.answerable)
+    );
+    let best = s.agent_hits.max(s.keyword_agent_hits);
+    let delta = best as i64 - s.baseline_hits as i64;
+    println!(
+        "       routing beats the fixed choice by {}{} question{}",
+        if delta >= 0 { "+" } else { "-" },
+        delta.abs(),
+        if delta.abs() == 1 { "" } else { "s" }
+    );
+    println!();
+
+    println!("GATE   flagged {}/{} of its own misses as a guess", s.misses_flagged, s.misses_total);
+    println!(
+        "       demoted {}/{} correct answers to a guess",
+        s.hits_demoted, s.gate_denominator
+    );
+    if s.abstention_expected {
+        println!(
+            "       the abstain question was {}",
+            if s.abstention_correct { "correctly not called a hit" } else { "WRONGLY called a hit" }
+        );
+    }
+
+    // The separation question in one line, which is what decides whether the floor is
+    // a real threshold or a number sitting in the middle of one distribution.
+    let range = |v: &[f32]| {
+        let lo = v.iter().cloned().fold(f32::INFINITY, f32::min);
+        let hi = v.iter().cloned().fold(f32::NEG_INFINITY, f32::max);
+        (lo, hi)
+    };
+    if !s.hit_scores.is_empty() && !s.miss_scores.is_empty() {
+        let (hlo, hhi) = range(&s.hit_scores);
+        let (mlo, mhi) = range(&s.miss_scores);
+        println!("       hit scores  {hlo:.2} to {hhi:.2}");
+        println!("       miss scores {mlo:.2} to {mhi:.2}");
+        if hlo > mhi {
+            println!(
+                "       SEPARATES: every hit outscored every miss. Floor {:.1} sits in the gap.",
+                memory::SCORE_FLOOR
+            );
+        } else {
+            println!("       OVERLAPS: no floor tells a hit from a miss on this set.");
+        }
+    }
+    println!();
+
+    let n = graded.len().max(1) as u128;
+    println!(
+        "SPEED  {} us per question fused, {} us keyword only. No model, no network.",
+        s.total_micros / n,
+        s.keyword_micros / n
+    );
+    println!(
+        "       {}",
+        if cfg!(debug_assertions) {
+            "MEASURED ON THE DEBUG BINARY. Release is materially faster; do not quote this."
+        } else {
+            "Release binary."
+        }
+    );
+
+    ExitCode::SUCCESS
+}
 
 // ---------------------------------------------------------------------------
 // blocks
