@@ -13,3 +13,6 @@ Rules that always apply, even in a one line answer:
 - **Mark what is unverified.** Ran it, read the source, read the docs, or guessing. Say which.
 - **Never claim something works without running it.** If it was not run, say it was not run.
 - **No em dashes.** Not in chat, not in files, not in code comments, not in commit messages.
+- **Commit with `kb commit <path>... -m "message"`, naming every path.** More
+than one session may be writing this tree, and `git add -A` puts another
+session's work under your message. A raw `git commit` is refused by a hook.

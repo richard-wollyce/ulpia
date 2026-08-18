@@ -125,6 +125,47 @@ inside a fleet.** Backup, sync, and moving to a new machine are all the same ope
 
 ---
 
+## More than one agent writes this at once
+
+Agents run in parallel, in the same working tree, all day. So committing is a verb the
+tool owns:
+
+```
+kb commit decisions/0021.md tools/kb/src/commit.rs -m "message"
+```
+
+Name every path. **There is deliberately no flag meaning everything**, because that one
+affordance is how a commit ends up carrying somebody else's half finished work under your
+message. The damage there is not lost work, it is an audit trail that lies.
+
+The mechanism: `git commit -- <paths>` builds the commit from only those paths and ignores
+the rest of the index, so whatever another session staged a second ago cannot land in
+yours. `kb commit` does that, then **reads the commit back off git and prints what it left
+alone**, which is the step a person skips by hand:
+
+```
+committed 9fe6c10
+  decisions/0021.md
+  tools/kb/src/commit.rs
+
+left untouched, still dirty (1):
+  site/
+```
+
+A tracked `pre-commit` hook refuses raw `git commit` so the safe path is the default one.
+Enable it once per clone, because git will not let a repository set its own hook path from
+tracked content, and that restriction is a security feature:
+
+```
+git config core.hooksPath .githooks
+```
+
+What this does **not** solve: two sessions editing the same file still clobber each other.
+No git technique fixes that, because the race is at the filesystem before git sees
+anything.
+
+---
+
 ## Privacy is a property of the layout, not a promise
 
 Vesta reads git to know what is private. **A file git does not track is a file Vesta
@@ -208,7 +249,7 @@ Early, used daily, and honest about which is which.
 
 | | |
 |---|---|
-| `tools/kb` | Works. 151 tests. One dependency. |
+| `tools/kb` | Works. 163 tests. One dependency. |
 | `tools/tray` | Windows only, and young. |
 | `site` | The page at [ulpia.io](https://ulpia.io). Static front, one Rust binary behind it. |
 | Local model routing | Not built. |

@@ -176,7 +176,10 @@ fn claude_md(title: &str) -> String {
          - **Two options and their consequences**, or it is a preference, not a decision.\n\
          - **Mark what is unverified.** Ran it, read the source, read the docs, or guessing. Say which.\n\
          - **Never claim something works without running it.** If it was not run, say it was not run.\n\
-         - **No em dashes.** Not in chat, not in files, not in code comments, not in commit messages.\n"
+         - **No em dashes.** Not in chat, not in files, not in code comments, not in commit messages.\n\
+         - **Commit with `kb commit <path>... -m \"message\"`, naming every path.** More\n\
+           than one session may be writing this tree, and `git add -A` puts another\n\
+           session's work under your message. A raw `git commit` is refused by a hook.\n"
     )
 }
 
