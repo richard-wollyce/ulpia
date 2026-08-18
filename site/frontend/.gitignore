@@ -1,0 +1,4 @@
+# Installed and built, both derived. ADR-0003's rule applied to the frontend:
+# the source is tracked, everything reproducible from it is not.
+node_modules/
+dist/

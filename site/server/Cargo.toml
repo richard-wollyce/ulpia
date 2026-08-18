@@ -1,0 +1,16 @@
+[package]
+name = "ulpia-site"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+axum = "0.8.9"
+tokio = { version = "1.53.1", features = ["rt-multi-thread", "net", "signal", "macros"] }
+tower-http = { version = "0.7.0", features = ["fs", "compression-gzip", "set-header"] }
+
+# The same distribution profile as tools/kb. Size over speed is the right trade for
+# a binary that spends its life waiting on the network.
+[profile.release]
+opt-level = "z"
+lto = true
+strip = true
