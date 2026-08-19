@@ -1,6 +1,12 @@
-/* ulpia.io. Spec: fleet/aldo/knowledge/ulpia-landing-design.md, 2026-08-18.
- * Implementation is translation; design decisions live in the spec and are not
- * re-made here. Deviations from the spec are marked "deviation:" with the reason. */
+/* ulpia.io. Spec: fleet/aldo/knowledge/ulpia-landing-design.md, 2026-08-18,
+ * including the section 13 Mastery amendment. Implementation is translation;
+ * design decisions live in the spec and are not re-made here.
+ *
+ * The two ground laws (13.A), the whole palette in two lines:
+ *   1. Gold exists only on cover material (the band, the terminal plate).
+ *      On paper it is 2.02:1 and forbidden as text, border and ornament alike.
+ *   2. Red exists only on paper. In dark mode nothing is paper, so dark mode
+ *      contains no red. */
 
 /* Three faces, latin subset only, ~80KB total. Weights 400 and 600 are the only
  * legal font-weight values on this page; anything else would be synthesized. */
@@ -9,22 +15,30 @@
 @import "@fontsource/eb-garamond/latin-600.css";
 
 :root {
-  color-scheme: light dark;
+  color-scheme: light;
 
-  /* color */
-  --ground: #f6f1e7; /* warm paper */
-  --ink: #241d16; /* warm near-black, 14.78:1 on ground */
-  --ink-2: #5a5044; /* secondary ink, 7.00:1 */
-  --rubric: #8a2a1a; /* rubrication red, 7.69:1 */
+  /* book body, light */
+  --ground: #f6f1e7; /* book paper */
+  --ink: #241d16; /* 14.78:1 on ground */
+  --ink-2: #5a5044; /* 7.00:1 */
+  --accent: #a63325; /* the Mastery red at ink density, 5.98:1 */
   --rule: #dacfc0; /* hairlines, decorative only */
 
-  /* terminal, mode-invariant: the machine's voice does not change with the
-   * room's light. Only the border does, and that is the mechanism that keeps
-   * the block visible on the dark ground (1.08:1 without it). */
+  /* cover material, mode-invariant. Hex values estimated from photographs of
+   * the physical book; if Richard's eye disagrees on the built page, these
+   * move first, the ground laws do not. */
+  --cover: #12100d;
+  --gold: #c9a860; /* 8.37:1 on cover */
+  --gold-sheen: #d8be82; /* hover on cover material only */
+  --gold-shadow: #a88c4e; /* borders on cover material, 5.90:1 */
+  --chrome-rule: transparent;
+
+  /* terminal, mode-invariant: the plate is cover material lying on the page.
+   * Its accent is gold in both schemes, per law 1. */
   --term-ground: #211b16;
-  --term-ink: #ede3d2; /* 13.40:1 on term ground */
+  --term-ink: #ede3d2; /* 13.40:1 */
   --term-ink-2: #ac9c87; /* 6.37:1 */
-  --term-accent: #e08a6b; /* agreement annotations, 6.50:1 */
+  --term-accent: var(--gold); /* 7.50:1 on term ground */
   --term-border: transparent;
 
   /* type, fluid from 320px to 960px viewport, saturating where the measure
@@ -38,25 +52,42 @@
   --size-mono: clamp(0.75rem, 0.688rem + 0.31vw, 0.875rem);
   --size-wordmark: clamp(1.125rem, 1rem + 0.63vw, 1.375rem);
 
-  /* layout. 32rem, not the spec's original 38: measured advance at the 20px
-   * anchor is ~0.39em, and 32rem is the value that keeps the line inside the
-   * 58 to 70 character band at every viewport, not only at 1280. Aldo's
-   * ruling, 2026-08-18, recorded in the spec's amendment block. */
+  /* layout. 32rem: measured advance at the 20px anchor is ~0.39em, and 32rem
+   * keeps the line inside the 58 to 70 character band at every viewport. */
   --measure: 32rem;
   --measure-wide: 52rem;
   --pad-page: clamp(1.25rem, 4.5vw, 2.5rem);
   --gap-section: clamp(4rem, 2rem + 6vw, 6.5rem);
 }
 
+/* The dark scheme, written twice on purpose: once for the system preference
+ * (unless the switch chose light), once for the switch choosing dark. The
+ * duplication is the entire cost of the three-state switch, and no machinery
+ * is cheaper than none. In dark the page becomes the cover, and the accent
+ * roles pass from red to gold: rubrication in the light, illumination in the
+ * dark, the manuscript tradition's own two answers. */
 @media (prefers-color-scheme: dark) {
-  :root {
-    --ground: #171310; /* lamplight */
-    --ink: #e7ddcc; /* cream ink, 13.73:1 */
-    --ink-2: #ab9e89; /* 7.02:1 */
-    --rubric: #d8896b; /* the same red, carried into lamplight, 6.78:1 */
-    --rule: #352c24;
-    --term-border: #43382e;
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --ground: #12100d;
+    --ink: #e7ddcc; /* 14.12:1 */
+    --ink-2: #ab9e89; /* 7.22:1 */
+    --accent: #c9a860; /* gold takes the hierarchy roles, 8.37:1 */
+    --rule: #3d3320;
+    --chrome-rule: #55452b;
+    --term-border: #55452b;
   }
+}
+
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --ground: #12100d;
+  --ink: #e7ddcc;
+  --ink-2: #ab9e89;
+  --accent: #c9a860;
+  --rule: #3d3320;
+  --chrome-rule: #55452b;
+  --term-border: #55452b;
 }
 
 /* ---- ground ---- */
@@ -73,7 +104,8 @@ h2,
 p,
 figure,
 ul,
-pre {
+pre,
+details {
   margin: 0;
   padding: 0;
 }
@@ -86,13 +118,16 @@ body {
   line-height: 1.5;
   font-variant-numeric: oldstyle-nums proportional-nums;
   font-feature-settings: "onum" 1, "pnum" 1;
-  padding-inline: var(--pad-page);
   text-align: left;
+}
+
+main,
+footer {
+  padding-inline: var(--pad-page);
 }
 
 /* One centered column. Children are constrained rather than the containers, so
  * the terminal plate can break out to its own wider measure. */
-header > *,
 section > *,
 footer > * {
   max-width: var(--measure);
@@ -105,24 +140,26 @@ h2 {
   text-wrap: balance;
 }
 
-/* Book convention: no gap between paragraphs, an indent instead. Sections are
- * short enough that scanning cost is nil, and the set-page texture is one of
- * the few things a developer will remark on. */
+/* Book convention: no gap between paragraphs, an indent instead. */
 section p + p {
   text-indent: 1.5em;
 }
 
+strong {
+  font-weight: 600;
+}
+
 ::selection {
-  background: var(--rubric);
+  background: var(--accent);
   color: var(--ground);
 }
 
 :focus-visible {
-  outline: 2px solid var(--rubric);
+  outline: 2px solid var(--accent);
   outline-offset: 3px;
 }
 
-/* ---- links: the underline carries the affordance, the red is quiet
+/* ---- links: the underline carries the affordance, the accent is quiet
  * rubrication. Visited is declared identical so UA purple never leaks in. ---- */
 
 a,
@@ -131,21 +168,36 @@ a:visited {
   text-decoration: underline;
   text-decoration-thickness: 1px;
   text-underline-offset: 0.2em;
-  text-decoration-color: var(--rubric);
+  text-decoration-color: var(--accent);
   transition: color 120ms ease-out, background-color 120ms ease-out;
 }
 
 a:hover,
 a:active {
-  color: var(--rubric);
+  color: var(--accent);
 }
 
-/* ---- hero: the opening of a book, not a splash screen ---- */
+/* ---- the band: a full-bleed shelf of cover material, the library's chrome
+ * above the open book. In light it separates from paper by itself (16.87:1);
+ * in dark the band and the page are one material and the hairline carries the
+ * boundary, the same mechanism as the terminal border. ---- */
 
-header {
-  text-align: center;
-  padding-top: clamp(4rem, 16vh, 9rem);
-  padding-top: clamp(4rem, 16svh, 9rem);
+.band {
+  background: var(--cover);
+  border-bottom: 1px solid var(--chrome-rule);
+  min-height: 3.75rem;
+  display: flex;
+  align-items: stretch;
+}
+
+.band-inner {
+  width: 100%;
+  max-width: var(--measure-wide);
+  margin-inline: auto;
+  padding-inline: var(--pad-page);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
 }
 
 .wordmark {
@@ -153,15 +205,59 @@ header {
   line-height: 1;
   text-transform: uppercase;
   letter-spacing: 0.3em;
-  /* letter-spacing adds a trailing space; without this the centered mark sits
-   * half a letter off-center. */
-  padding-left: 0.3em;
+  color: var(--gold);
+}
+
+/* The switch: a printed label in the chrome's material. The visible text is
+ * the state a press will apply; the page itself already displays the current
+ * one. Hidden entirely until the script marks the html element, so no-JS
+ * visitors get no dead control. */
+html:not([data-js]) .scheme-switch {
+  display: none;
+}
+
+.scheme-switch {
+  font: inherit;
+  font-weight: 600;
+  font-size: 0.8125rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--gold);
+  background: transparent;
+  border: 1px solid var(--gold-shadow);
+  border-radius: 0;
+  padding: 0.5rem 0.875rem;
+  min-height: 2.75rem;
+  min-width: 5.5em;
+  cursor: pointer;
+  transition: color 120ms ease-out, border-color 120ms ease-out,
+    background-color 120ms ease-out;
+}
+
+.scheme-switch:hover {
+  color: var(--gold-sheen);
+  border-color: var(--gold);
+}
+
+.scheme-switch:active {
+  background: color-mix(in srgb, var(--gold) 12%, transparent);
+}
+
+.scheme-switch:focus-visible {
+  outline-color: var(--gold);
+}
+
+/* ---- hero: the opening of a book, on paper, under the shelf ---- */
+
+.hero {
+  text-align: center;
+  padding-top: clamp(3.5rem, 12vh, 7rem);
+  padding-top: clamp(3.5rem, 12svh, 7rem);
 }
 
 h1 {
   font-size: var(--size-display);
   line-height: 1.15;
-  margin-top: 2rem;
 }
 
 .subhead {
@@ -179,8 +275,7 @@ h1 {
   margin-top: 2.25rem;
 }
 
-/* The printed-label idiom: a hairline-framed label, not an app button.
- * Sentence case on purpose; the frame carries the this-is-the-action signal. */
+/* The printed-label idiom: a hairline-framed label, not an app button. */
 .cta-primary,
 .cta-primary:visited {
   display: inline-flex;
@@ -188,20 +283,20 @@ h1 {
   justify-content: center;
   min-height: 2.75rem;
   padding: 0.625rem 1.375rem;
-  border: 1px solid var(--rubric);
+  border: 1px solid var(--accent);
   border-radius: 0;
-  color: var(--rubric);
+  color: var(--accent);
   font-weight: 600;
   font-size: 1.0625rem;
   text-decoration: none;
 }
 
 .cta-primary:hover {
-  background: color-mix(in srgb, var(--rubric) 8%, transparent);
+  background: color-mix(in srgb, var(--accent) 8%, transparent);
 }
 
 .cta-primary:active {
-  background: color-mix(in srgb, var(--rubric) 16%, transparent);
+  background: color-mix(in srgb, var(--accent) 16%, transparent);
 }
 
 .status-line {
@@ -212,7 +307,6 @@ h1 {
 
 /* ---- sections ---- */
 
-main > section:first-child,
 section + section {
   margin-top: var(--gap-section);
 }
@@ -220,17 +314,17 @@ section + section {
 h2 {
   font-size: var(--size-headline);
   line-height: 1.25;
-  color: var(--rubric);
+  color: var(--accent);
   margin-bottom: 1.25rem;
 }
 
-/* The one classical device: a rubricated versal, three lines deep, on the
- * paragraph that introduces the library. */
+/* The one classical device: a versal three lines deep. Rubricated in light,
+ * illuminated in dark; the color follows the accent token. */
 @supports (initial-letter: 3) or (-webkit-initial-letter: 3) {
   .opening::first-letter {
     -webkit-initial-letter: 3;
     initial-letter: 3;
-    color: var(--rubric);
+    color: var(--accent);
     font-weight: 400;
     margin-right: 0.15em;
   }
@@ -242,12 +336,12 @@ h2 {
     font-size: 5.2rem;
     line-height: 0.83;
     padding: 0.04em 0.12em 0 0;
-    color: var(--rubric);
+    color: var(--accent);
   }
 }
 
 /* The four properties: claims in a list, not headings. Lead words stay ink;
- * four red marks beside a red heading would out-shout it. */
+ * four accent marks beside an accent heading would out-shout it. */
 .properties {
   list-style: none;
   margin-top: 1.25rem;
@@ -257,13 +351,7 @@ h2 {
   margin-top: 0.75rem;
 }
 
-.properties strong,
-strong {
-  font-weight: 600;
-}
-
-/* ---- the terminal block: a plate in a book, wider than the text, framed by
- * its own ground, captioned ---- */
+/* ---- the terminal block: a plate of cover material lying on the page ---- */
 
 .terminal {
   max-width: min(var(--measure-wide), 100%);
@@ -283,8 +371,7 @@ strong {
   font-variant-numeric: normal;
   font-feature-settings: normal;
   /* Never wrap: the score and agreement columns are tabular, and wrapping
-   * destroys the alignment that makes the agreement legible. The clipped glyph
-   * at the right edge is itself the scroll cue. */
+   * destroys the alignment that makes the agreement legible. */
   white-space: pre;
   overflow-x: auto;
   scrollbar-color: var(--term-ink-2) var(--term-ground);
@@ -305,8 +392,8 @@ strong {
   margin-top: 0.75rem;
 }
 
-/* ---- footer: above the rule the page argues, below it the book states its
- * imprint. The only horizontal rule on the page. ---- */
+/* ---- footer: imprint matter. Above the rule the page argues, below it the
+ * book states its imprint. ---- */
 
 footer {
   margin-top: var(--gap-section);
@@ -325,8 +412,59 @@ footer::before {
   margin: 0 auto 2.5rem;
 }
 
-footer p + p {
+/* The disclosure boxes: the least card a box can be, a hairline frame in the
+ * plate-and-label idiom. The frame is furniture; the affordance is the text
+ * and the glyph, which pass as text. */
+details {
+  border: 1px solid var(--rule);
+  border-radius: 0;
+  text-align: left;
+}
+
+details + details {
   margin-top: 0.75rem;
+}
+
+summary {
+  font-size: var(--size-small);
+  font-weight: 600;
+  color: var(--ink);
+  padding: 0.875rem 1rem;
+  cursor: pointer;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 1rem;
+  list-style: none;
+}
+
+summary::-webkit-details-marker {
+  display: none;
+}
+
+/* Plain text affordance: a plus, and the true minus (U+2212), which sits at
+ * the plus's optical height where a hyphen does not. The state change is the
+ * glyph swap, instant, per the motion rule. */
+summary::after {
+  content: "+";
+  font-weight: 400;
+  font-size: 1rem;
+  color: var(--ink-2);
+}
+
+details[open] summary::after {
+  content: "\2212";
+}
+
+details p {
+  padding: 0 1rem 1rem;
+  font-size: var(--size-small);
+  color: var(--ink-2);
+  line-height: 1.5;
+}
+
+.address-line {
+  margin-top: 2rem;
 }
 
 footer a,
@@ -338,22 +476,21 @@ footer a:visited {
 
 footer a:hover,
 footer a:active {
-  color: var(--rubric);
+  color: var(--accent);
 }
 
 /* ---- 404: a corridor, not a room ---- */
 
 .not-found main {
   text-align: center;
-  padding-top: clamp(4rem, 16vh, 9rem);
-  padding-top: clamp(4rem, 16svh, 9rem);
+  padding-top: clamp(3.5rem, 12vh, 7rem);
+  padding-top: clamp(3.5rem, 12svh, 7rem);
 }
 
 .err-figure {
   font-size: var(--size-display);
-  color: var(--rubric);
+  color: var(--accent);
   line-height: 1;
-  margin-top: 2rem;
 }
 
 .not-found h1 {
@@ -370,8 +507,8 @@ footer a:active {
   padding: 0.625rem 0.75rem;
 }
 
-/* The page contains no motion; this rule exists so a future edit cannot
- * regress that silently. */
+/* The page's one script flips a lamp; nothing else moves. This rule exists so
+ * a future edit cannot regress that silently. */
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,

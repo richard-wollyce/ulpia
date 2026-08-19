@@ -9,8 +9,7 @@
       content="A fleet of AI agents, each with its own knowledge base, and one memory layer under all of them. On your machine, in plain files, with no model in the retrieval path."
     />
     <meta name="color-scheme" content="light dark" />
-    <meta name="theme-color" media="(prefers-color-scheme: light)" content="#F6F1E7" />
-    <meta name="theme-color" media="(prefers-color-scheme: dark)" content="#171310" />
+    <meta name="theme-color" content="#12100D" />
     <link rel="canonical" href="https://ulpia.io/" />
     <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
     <meta property="og:title" content="Ulpia" />
@@ -20,24 +19,31 @@
     />
     <meta property="og:url" content="https://ulpia.io/" />
     <meta property="og:type" content="website" />
+    <script src="/theme.js"></script>
     <link rel="stylesheet" href="/src/styles.css" />
   </head>
   <body>
-    <header>
-      <p class="wordmark">Ulpia</p>
-      <h1>The memory is yours. The&nbsp;model is a guest.</h1>
-      <p class="subhead">
-        A fleet of AI agents, each with its own knowledge base, and one memory
-        layer under all of them. On your machine, in plain files, with no model
-        in the retrieval path.
-      </p>
-      <p class="cta-row">
-        <a class="cta-primary" href="mailto:hello@ulpia.io">Write to hello@ulpia.io</a>
-      </p>
-      <p class="status-line">Pre-launch. Built daily.</p>
+    <header class="band">
+      <div class="band-inner">
+        <p class="wordmark">Ulpia</p>
+        <button type="button" class="scheme-switch" aria-label="Color scheme: auto. Press for light.">light</button>
+      </div>
     </header>
 
     <main>
+      <section class="hero" aria-label="Ulpia">
+        <h1>The memory is yours. The&nbsp;model is a guest.</h1>
+        <p class="subhead">
+          A fleet of AI agents, each with its own knowledge base, and one memory
+          layer under all of them. On your machine, in plain files, with no model
+          in the retrieval path.
+        </p>
+        <p class="cta-row">
+          <a class="cta-primary" href="mailto:hello@ulpia.io">Write to hello@ulpia.io</a>
+        </p>
+        <p class="status-line">Pre-launch. Built daily.</p>
+      </section>
+
       <section aria-labelledby="library">
         <h2 id="library">A library that lives with&nbsp;you.</h2>
         <p class="opening">
@@ -129,17 +135,24 @@ indexed:  20 entries across 1 agents, 0 aliases</span>
     </main>
 
     <footer>
-      <p>
-        <a href="mailto:hello@ulpia.io">hello@ulpia.io</a> ·
-        <a href="mailto:security@ulpia.io">security@ulpia.io</a>
-      </p>
-      <p>
-        Named for the Bibliotheca Ulpia, Trajan's library: Rome's reading room
-        and its record office in one building.
-      </p>
-      <p>
-        This page sets no cookies, runs no analytics, and calls no third party.
-        The product holds the same position.
+      <details>
+        <summary>Why Ulpia?</summary>
+        <p>
+          Named for the Bibliotheca Ulpia, Trajan's library: Rome's reading
+          room and its record office in one building.
+        </p>
+      </details>
+      <details>
+        <summary>No cookies, no analytics, no third parties.</summary>
+        <p>
+          This page sets no cookies, runs no analytics, and calls no third
+          party. If you choose a light or dark scheme, that choice is kept in
+          your browser's local storage and never leaves your machine. The
+          product holds the same position.
+        </p>
+      </details>
+      <p class="address-line">
+        <a href="mailto:hello@ulpia.io">hello@ulpia.io</a>
       </p>
     </footer>
   </body>
