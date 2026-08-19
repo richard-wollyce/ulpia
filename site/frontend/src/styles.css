@@ -150,8 +150,11 @@ h2 {
   text-wrap: balance;
 }
 
-/* Book convention: no gap between paragraphs, an indent instead. */
-section p + p {
+/* Book convention: no gap between paragraphs, an indent instead. Prose only:
+ * the hero is a title page, and its centered rows are layout, not paragraphs.
+ * Without the exclusion this indent inherits into the CTA row and pushes the
+ * button's text 30px off its own center (seen in the review screenshots). */
+section:not(.hero) p + p {
   text-indent: 1.5em;
 }
 
@@ -698,7 +701,11 @@ footer a:active {
   position: relative;
 }
 
-@media (prefers-reduced-motion: no-preference) {
+/* Screen-only on purpose: print does not scroll, so a printed page must show
+ * everything, exactly like the no-JS and reduced-motion paths. Seen in the
+ * review screenshots: a full-page capture without this gate is five headings
+ * over empty paper. */
+@media screen and (prefers-reduced-motion: no-preference) {
   /* The typing twin: the real text goes transparent while typing, keeping its
    * exact layout and its place in the accessibility tree; the aria-hidden
    * live span overlays it and types the same string in the same box. */
