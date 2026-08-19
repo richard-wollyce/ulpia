@@ -248,6 +248,13 @@ fn chat_stream(
     )?;
 
     let mut seq: u64 = 0;
+    // stream-json does not emit UserPromptSubmit hook events (verified 2026-08-19:
+    // SessionStart hooks appear, the boot hook does not, although it demonstrably
+    // runs, since it writes the routed agent under .kb/sessions/<session-id>). So
+    // the routing line is read from the hook's own record on disk, once the first
+    // real event proves the hook has already run.
+    let mut sid: Option<String> = None;
+    let mut routed_sent = false;
     let mut send = |stream: &mut TcpStream, kind: &str, text: &str| -> std::io::Result<()> {
         let mut v = Value::obj();
         v.set("seq", Value::Num(seq as f64));
@@ -314,14 +321,15 @@ fn chat_stream(
             "system" => {
                 let sub = event.get("subtype").and_then(|t| t.as_str()).unwrap_or("");
                 if sub == "init" {
-                    if let Some(sid) = event.get("session_id").and_then(|s| s.as_str()) {
+                    if let Some(sid_str) = event.get("session_id").and_then(|s| s.as_str()) {
                         // Constrained to the shape a session id has, so a hostile
                         // child could not plant a flag through the resume path.
-                        if !sid.is_empty()
-                            && sid.chars().all(|c| c.is_ascii_hexdigit() || c == '-')
+                        if !sid_str.is_empty()
+                            && sid_str.chars().all(|c| c.is_ascii_hexdigit() || c == '-')
                         {
+                            sid = Some(sid_str.to_string());
                             if let Ok(mut m) = chats.lock() {
-                                m.insert(chat.to_string(), sid.to_string());
+                                m.insert(chat.to_string(), sid_str.to_string());
                             }
                         }
                     }
@@ -340,6 +348,25 @@ fn chat_stream(
                 }
             }
             "assistant" => {
+                if !routed_sent {
+                    routed_sent = true;
+                    // The boot hook ran before the model spoke; its record is the
+                    // truth about who is answering, per ADR-0022.
+                    if let Some(sid) = &sid {
+                        if let Ok(agent) =
+                            std::fs::read_to_string(root.join(".kb/sessions").join(sid))
+                        {
+                            let agent = agent.trim();
+                            if !agent.is_empty() {
+                                let _ = send(
+                                    &mut stream,
+                                    "routed",
+                                    &format!("VESTA: answering as {agent}"),
+                                );
+                            }
+                        }
+                    }
+                }
                 let is_error = event.get("error").and_then(|e| e.as_str()).is_some();
                 let mut wrote = Ok(());
                 if let Some(Value::Arr(content)) =
@@ -767,10 +794,13 @@ mod tests {
         assert_eq!(param("", "q"), None);
     }
 
-    fn scratch_state() -> State {
+    /// Named per test, because tests in one binary run in parallel and a shared
+    /// scratch directory is a race: this exact helper without the name parameter
+    /// failed intermittently in the full run and passed alone.
+    fn scratch_state(name: &str) -> State {
         let dir = std::env::temp_dir()
             .join("kb-ui-tests")
-            .join(format!("{}", std::process::id()));
+            .join(format!("{}-{name}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         let agent = dir.join("fleet").join("probe");
         std::fs::create_dir_all(agent.join("knowledge")).expect("mkdir");
@@ -793,7 +823,7 @@ mod tests {
     /// block because there is no path resolution at all.
     #[test]
     fn a_file_outside_the_discovered_set_is_not_served_however_spelled() {
-        let state = scratch_state();
+        let state = scratch_state("allowlist");
         assert!(file_text(&state, "probe", "knowledge/real-note.md").is_some());
         assert!(file_text(&state, "probe", "../../../etc/passwd").is_none());
         assert!(file_text(&state, "probe", "..\\..\\secrets.txt").is_none());
@@ -805,7 +835,7 @@ mod tests {
     /// work, not dropped: the stacks are E01 made visible, exactly as the graph was.
     #[test]
     fn a_book_lists_its_broken_citations_rather_than_hiding_them() {
-        let state = scratch_state();
+        let state = scratch_state("broken");
         let stacks = api_stacks(&state);
         let shelves = match stacks.get("shelves") {
             Some(Value::Arr(v)) => v,
@@ -884,7 +914,7 @@ mod tests {
 
     #[test]
     fn the_fleet_projection_carries_role_and_routability() {
-        let state = scratch_state();
+        let state = scratch_state("fleetcard");
         let fleet = api_fleet(&state);
         let agents = match fleet.get("agents") {
             Some(Value::Arr(a)) => a,
