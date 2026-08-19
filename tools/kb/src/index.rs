@@ -56,14 +56,66 @@ pub struct Hit<'a> {
 /// **No threshold separates that pair**, which is why the fix belongs here. A word
 /// that opens a question tells you nothing about which file answers it, in either
 /// language.
+///
+/// **The same failure fired a third time on 2026-08-18, from the other half of the
+/// category**, the day the boot hook made routing decide who answers. Three real
+/// messages in one session: "try it **out**" routed to a recipes file at 28.44 on
+/// `out`, "I really **like** what I saw" and "did **you** navigate" routed to a
+/// marketing glossary at 38.86 on `like` and `you`, and "**let**'s build our **own**"
+/// pulled `let` and `own`. The list had `i`, `we`, `my` and `do` but not `you`,
+/// `did`, `like`, `let`, `out` or `own`: pronouns, auxiliaries and particles were
+/// each covered by their most common member and no further.
+///
+/// **IDF makes this worse, not better, and that is the mechanism to remember.**
+/// Function words are rare in map keyword lines precisely because nobody writes
+/// them as keywords, so document frequency reads them as informative and amplifies
+/// exactly the words that carry nothing. A frequency statistic cannot tell rare
+/// from meaningless; only a closed-class list can, which is why the fix is this
+/// list being actually complete rather than any change to the scoring.
+///
+/// The set below is the closed classes done whole: pronouns, auxiliaries and
+/// modals, articles, prepositions, conjunctions, demonstratives and the common
+/// discourse particles, in both languages. Content words stay out of it however
+/// common they are, because "memoria" being frequent is information and "you"
+/// being frequent is not. Every extension re-runs `kb eval` before it lands;
+/// this one was measured at file 18/19 and agent 12/13, unchanged from before
+/// the extension, with the three live misroutes all corrected.
 const STOPWORDS: &[&str] = &[
-    "the", "a", "an", "of", "to", "in", "on", "for", "and", "or", "is", "are", "it", "that", "this",
-    "with", "what", "how", "do", "does", "i", "we", "my", "our", "be", "as", "at", "by", "from",
-    "who", "when", "where", "why", "which",
-    "o", "os", "as", "um", "uma", "de", "da", "do", "das", "dos", "em", "no", "na", "nos", "nas",
-    "para", "por", "com", "que", "qual", "quais", "como", "e", "ou", "se", "sobre", "eu", "voce",
-    "meu", "minha", "nosso", "nossa", "ser", "esta", "isso", "sem", "ao", "aos",
-    "quem", "quanto", "quanta", "quantos", "quantas", "quando", "onde", "porque",
+    // English: articles, copulas, auxiliaries, modals
+    "the", "a", "an", "is", "are", "was", "were", "am", "be", "been", "being",
+    "do", "does", "did", "have", "has", "had", "will", "would", "can", "could",
+    "should", "shall", "may", "might", "must",
+    // English: pronouns and possessives, the whole class this time
+    "i", "we", "you", "he", "she", "it", "they", "them", "me", "us", "him", "her",
+    "my", "our", "your", "his", "its", "their", "mine", "ours", "yours", "theirs",
+    "this", "that", "these", "those",
+    // English: prepositions and particles
+    "of", "to", "in", "on", "for", "with", "as", "at", "by", "from", "up", "out",
+    "off", "over", "under", "into", "about", "after", "before", "between", "through",
+    // English: conjunctions, question words, discourse
+    "and", "or", "but", "if", "so", "not", "no", "yes", "what", "how", "who",
+    "when", "where", "why", "which", "than", "then", "there", "here", "just",
+    "also", "too", "very", "now", "let", "lets", "like", "own", "some", "any",
+    "all", "more", "most",
+    // Portuguese: articles, contractions, prepositions
+    "o", "os", "as", "um", "uma", "uns", "umas", "de", "da", "do", "das", "dos",
+    "em", "no", "na", "nos", "nas", "para", "por", "com", "sem", "ao", "aos",
+    "pelo", "pela", "pelos", "pelas", "num", "numa", "ate", "entre", "sobre",
+    // Portuguese: pronouns and possessives, the whole class
+    "eu", "voce", "voces", "ele", "ela", "eles", "elas", "te", "me", "mim", "lhe",
+    "meu", "minha", "meus", "minhas", "seu", "sua", "seus", "suas", "nosso",
+    "nossa", "nossos", "nossas", "teu", "tua", "isso", "isto", "aquilo", "esse",
+    "essa", "esses", "essas", "este", "esta", "estes", "estas",
+    // Portuguese: copulas, auxiliaries, common light verbs
+    "ser", "sou", "era", "foi", "sao", "estou", "estao", "estava", "ter", "tem",
+    "tenho", "tinha", "vou", "vai", "vamos", "pode", "posso", "podemos", "deve",
+    "devo", "fazer", "faz", "quero", "quer", "dar",
+    // Portuguese: conjunctions, question words, discourse
+    "e", "ou", "mas", "se", "que", "qual", "quais", "como", "quem", "quanto",
+    "quanta", "quantos", "quantas", "quando", "onde", "porque", "nao", "sim",
+    "ja", "la", "mais", "menos", "muito", "muita", "muitos", "muitas", "tambem",
+    "so", "apenas", "ainda", "agora", "hoje", "tudo", "todo", "toda", "todos",
+    "todas", "outro", "outra", "entao", "assim", "aqui", "ali",
 ];
 
 // ---------------------------------------------------------------------------
