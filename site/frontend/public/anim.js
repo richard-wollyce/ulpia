@@ -29,6 +29,16 @@
       var live = document.createElement("span");
       live.className = "type-live";
       live.setAttribute("aria-hidden", "true");
+      // Every character exists from the first frame, hidden, so the line is
+      // laid out in its final shape and typing never moves a glyph.
+      var chars = [];
+      for (var k = 0; k < text.length; k++) {
+        var ch = document.createElement("span");
+        ch.className = "ch";
+        ch.textContent = text.charAt(k);
+        live.appendChild(ch);
+        chars.push(ch);
+      }
       function finish() {
         if (finished) return;
         finished = true;
@@ -50,9 +60,10 @@
       hero.addEventListener("pointerdown", finish, { once: true });
       setTimeout(function () {
         timer = setInterval(function () {
+          if (i > 0) chars[i - 1].classList.remove("cur");
+          if (i >= chars.length) return finish();
+          chars[i].className = "ch on cur";
           i++;
-          live.textContent = text.slice(0, i);
-          if (i >= text.length) finish();
         }, TYPE_CHAR_MS);
       }, TYPE_START_MS);
     }

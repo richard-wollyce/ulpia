@@ -39,13 +39,16 @@
   --lamp-glow: #ead9a8; /* 1.24:1 on paper: ornament by law 1's first
    * amendment; the state lives in the chrome-ink stroke, never in this wash */
 
-  /* terminal, mode-invariant: the plate is cover material lying on the page.
-   * Its accent is gold in both schemes, per law 1. */
-  --term-ground: #211b16;
-  --term-ink: #ede3d2; /* 13.40:1 */
-  --term-ink-2: #ac9c87; /* 6.37:1 */
-  --term-accent: var(--gold); /* 7.50:1 on term ground */
-  --term-border: transparent;
+  /* The plate follows the page scheme (spec 20.B). Mode-invariance is retired:
+   * it was a debt from 15.A, where the band stopped being invariant and the
+   * plate kept a rule whose foundation had gone. The machine's voice is quoted
+   * in the page's own material, the way a book sets a quotation in its own
+   * type rather than pasting in a photograph. */
+  --plate: #ede5d5;
+  --plate-ink: #241d16; /* 13.28:1 */
+  --plate-ink-2: #5a5044; /* 6.29:1 */
+  --plate-accent: #a63325; /* the Mastery red: gold is illegal here, 5.37:1 */
+  --plate-border: #d6c9b4; /* the plate announces itself by edge, not luminance */
 
   /* type, fluid from 320px to 960px viewport, saturating where the measure
    * saturates. Every preferred value carries a rem term so user font-size
@@ -83,7 +86,12 @@
     --chrome-ink: #c9a860;
     --chrome-rule: #55452b;
     --lamp-glow: #c9a860; /* in the dark the glow is legible light, 8.37:1 */
-    --term-border: #55452b;
+    /* the plate in dark: every value unchanged since Richard approved it */
+    --plate: #211b16;
+    --plate-ink: #ede3d2; /* 13.40:1 */
+    --plate-ink-2: #ac9c87; /* 6.37:1 */
+    --plate-accent: #c9a860; /* gold is legal on cover material, 7.50:1 */
+    --plate-border: #55452b;
   }
 }
 
@@ -97,7 +105,11 @@
   --chrome-ink: #c9a860;
   --chrome-rule: #55452b;
   --lamp-glow: #c9a860;
-  --term-border: #55452b;
+  --plate: #211b16;
+  --plate-ink: #ede3d2;
+  --plate-ink-2: #ac9c87;
+  --plate-accent: #c9a860;
+  --plate-border: #55452b;
 }
 
 /* ---- ground ---- */
@@ -393,8 +405,10 @@ html:not([data-js]) .lamp-toggle {
     }
   }
 
+  /* 40% faster than the first cut, Richard's directive: the catch was fluid
+   * but slow. The tug (the press) and the off fade are untouched. */
   :root[data-theme="light"] .lamp-toggle.pressed .shade-fill {
-    animation: lamp-catch 450ms ease-in-out 100ms backwards;
+    animation: lamp-catch 270ms ease-in-out 60ms backwards;
   }
 
   /* The light escapes: rays scale out from the shade corners once the
@@ -411,7 +425,7 @@ html:not([data-js]) .lamp-toggle {
   }
 
   :root[data-theme="light"] .lamp-toggle.pressed .ray {
-    animation: ray-out 200ms cubic-bezier(0.33, 1, 0.68, 1) 400ms backwards;
+    animation: ray-out 120ms cubic-bezier(0.33, 1, 0.68, 1) 240ms backwards;
   }
 
   /* Going dark: one fast fade, no flicker. Filaments catch slowly and die
@@ -541,31 +555,110 @@ h2 {
   margin-block: 2rem;
 }
 
-.terminal pre {
-  background: var(--term-ground);
-  color: var(--term-ink);
-  border: 1px solid var(--term-border);
+.term {
+  background: var(--plate);
+  color: var(--plate-ink);
+  border: 1px solid var(--plate-border);
   border-radius: 0;
   padding: 1.25rem 1.5rem;
+  margin: 0;
   font-family: ui-monospace, "Cascadia Code", SFMono-Regular, Menlo, Consolas,
     "Liberation Mono", monospace;
   font-size: var(--size-mono);
   line-height: 1.6;
   font-variant-numeric: normal;
   font-feature-settings: normal;
-  /* Never wrap: the score and agreement columns are tabular, and wrapping
-   * destroys the alignment that makes the agreement legible. */
   white-space: pre;
-  overflow-x: auto;
-  scrollbar-color: var(--term-ink-2) var(--term-ground);
+  overflow-x: auto; /* defensive only; it must never engage */
 }
 
-.t-dim {
-  color: var(--term-ink-2);
+.term .line {
+  display: block;
 }
 
-.t-hit {
-  color: var(--term-accent);
+.term .blank {
+  display: block;
+  height: 1.6em;
+}
+
+.term .prompt,
+.term .meta,
+.term .score,
+.term .pad {
+  color: var(--plate-ink-2);
+}
+
+.term .cmd,
+.term .base,
+.term .file {
+  color: var(--plate-ink);
+}
+
+.term .agree {
+  color: var(--plate-accent);
+}
+
+/* Below the width where the 85 column grid fits, the same values re-lay (spec
+ * 20.C). The honesty lives in the data, not the byte grid: the alignment is a
+ * hardcoded pad the tool performed for an 80 column terminal, so suppressing
+ * the pad spans removes no information. Every value stays byte-identical. */
+@media (max-width: 56rem) {
+  .term {
+    white-space: pre-wrap;
+    overflow-x: visible;
+    /* Full bleed by negative page padding, never 100vw: that unit includes the
+     * classic scrollbar and can push the document wider than the viewport. */
+    margin-inline: calc(-1 * var(--pad-page));
+    border-inline: 0;
+    padding: 1.25rem 0.75rem;
+  }
+
+  .term .pad {
+    display: none;
+  }
+
+  .term .hit {
+    display: grid;
+    grid-template-columns: max-content max-content 1fr;
+    grid-template-areas:
+      "file  file  file"
+      "base  score agree";
+    column-gap: 1ch;
+    margin-bottom: 0.6em;
+  }
+
+  .term .hit:last-of-type {
+    margin-bottom: 0;
+  }
+
+  .term .file {
+    grid-area: file;
+  }
+
+  .term .base {
+    grid-area: base;
+  }
+
+  .term .score {
+    grid-area: score;
+  }
+
+  .term .agree {
+    grid-area: agree;
+  }
+
+  .term .cmd-line,
+  .term .meta {
+    overflow-wrap: normal;
+  }
+
+  .term .file,
+  .term .agree,
+  .term .flag,
+  .term .score,
+  .term .base {
+    white-space: nowrap;
+  }
 }
 
 .terminal figcaption {
@@ -718,11 +811,23 @@ footer a:active {
     inset: 0;
   }
 
-  .type-live::after {
-    content: "";
-    border-right: 2px solid var(--accent);
-    margin-left: 1px;
-    /* Steady caret. No blink: nothing on this page loops. */
+  /* Every character is laid out from the first frame and reserves its final
+   * box; typing only flips visibility, so no glyph ever moves. The text is
+   * centered, and centered partial text re-centers on every keystroke, which
+   * is what made the old overlay slide as it typed. */
+  .type-live .ch {
+    visibility: hidden;
+  }
+
+  .type-live .ch.on {
+    visibility: visible;
+  }
+
+  /* The caret is a box-shadow, not a border: a border would add width to the
+   * character it sits on and shift the line it exists to hold still. Steady,
+   * no blink: nothing on this page loops. */
+  .type-live .ch.cur {
+    box-shadow: 1px 0 0 0 var(--accent);
   }
 
   html[data-js] [data-anim="rise"],
