@@ -303,3 +303,17 @@
   Search for: `boot`, `hook`, `UserPromptSubmit`, `who am i`, `identity`, `which agent answers`,
   `agent selection`, `constitution injection`, `session`, `plugged in`, `runtime`, `settings.json`,
   `CLAUDE.md`, `orchestration`, `quem responde`, `qual agente`, `roteamento automatico`.
+
+- **[[0023-the-phone-and-the-envelope]]** 🟡 proposed 2026-08-19. **The desk streams over SSE
+  carrying the load bearing third of Letta's envelope, and the phone is four decisions, not a
+  feature flag.** The envelope decomposed into separable tiers: typed events and sequence numbers
+  shipped (sixty lines on the existing HTTP server), while dedup and sync-replay wait for a client
+  that can actually lose messages, which a loopback browser cannot. The phone half is an agenda
+  rather than a build: a LAN bind is a new exposure class needing per-request tokens (Letta's
+  loopback-trusted rule copied whole), an installable PWA requires a secure context that plain LAN
+  HTTP never grants (page yes, service worker never), a reachable desk can spend the plan from any
+  device holding the token, and phone Wi-Fi is where sync-replay stops being scaffolding. Deferred
+  together, on the trigger that Richard asks again.
+  Search for: `phone`, `celular`, `PWA`, `websocket`, `SSE`, `envelope`, `event stream`,
+  `streaming`, `LAN`, `bind`, `token`, `secure context`, `service worker`, `remote access`,
+  `acesso remoto`, `mobile`, `desk transport`.
