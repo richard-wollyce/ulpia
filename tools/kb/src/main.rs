@@ -20,6 +20,7 @@ usage:
     kb route <question> [path]... [--top N] [--hybrid] [--all]
     kb remember <claim> [path]... [--all]
     kb init <name> [fleet-root]
+    kb init --person [fleet-root]
     kb write <agent> <slug> [fleet-root] --keys <a, b> --summary <one line> [--folder F]
     kb fleet [path]... [--all]
     kb blocks [path] [--emit]
@@ -109,6 +110,24 @@ fn main() -> ExitCode {
             let question = positional[0];
             let paths = paths_or_default(&positional[1..]);
             cmd_route(question, &paths, all, top, hybrid)
+        }
+        "init" if args.iter().any(|a| a == "--person") => {
+            let fleet = positional.first().copied().unwrap_or(".");
+            match init::person(Path::new(fleet), None) {
+                Ok(made) => {
+                    println!("wrote {}", made.path.display());
+                    println!("  {} files, no agent.txt: the router reads it and can never", made.files);
+                    println!("  choose it as the one who answers, because a person is not an agent.");
+                    println!();
+                    println!("Next: fill core.md. Every agent carries it resident, so a fleet");
+                    println!("whose person is blank gives generic answers confidently.");
+                    ExitCode::SUCCESS
+                }
+                Err(e) => {
+                    eprintln!("kb: {e}");
+                    ExitCode::from(1)
+                }
+            }
         }
         "init" => {
             if positional.is_empty() {

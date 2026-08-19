@@ -1,0 +1,3 @@
+# The index is derived from the markdown and rebuilt by `kb index`, so it is never
+# committed: the files are the source of truth and the index is a projection.
+.kb/

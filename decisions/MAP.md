@@ -337,3 +337,21 @@
   Search for: `who am i`, `quem sou eu`, `user`, `usuario`, `perfil`, `profile`, `persona`,
   `richard`, `human`, `humano`, `global file`, `arquivo global`, `escopo`, `scope`, `user block`,
   `resident`, `shared base`, `base compartilhada`, `identity`, `identidade`.
+
+- **[[0025-the-shape-is-public-the-person-is-not]]** 🟢 accepted 2026-08-19. **A fleet must
+  declare its human, and the shape of that declaration is the part that can be published.**
+  Richard's rule, and he named the precedent himself: the agents are his, but how an agent is
+  shaped and how they relate is documentable and eventually public, while his own file must never
+  transmit what is written about him. So the same split the fleet already makes for agents is made
+  for the person. Public: `kb init --person`, the committed `person-skeleton/`, and the structural
+  rule. Private: `fleet/profile/`, every word. The part that makes it structural rather than
+  advisory is that **`kb init` now writes a `[user]` block into every agent it creates**, so a new
+  agent cannot be born not knowing who it works for, which is exactly how Steve came to answer a
+  question about Richard's CV without knowing his name. Templates ship **empty with questions in
+  them**, because an empty profile is not neutral: an agent that does not know its human gives
+  generic answers confidently. Rejected putting the profile inside the agent skeleton, which would
+  re-teach the per-agent duplication ADR-0024 removed. **The general form: publish the shape, keep
+  the content.** Leaves the licence question open, deliberately.
+  Search for: `open source`, `publico`, `public`, `publish`, `licenca`, `license`, `skeleton`,
+  `person skeleton`, `kb init`, `privacidade`, `privacy`, `private line`, `shape`, `estrutura`,
+  `declarar usuario`, `declare the human`, `template`, `drift test`.

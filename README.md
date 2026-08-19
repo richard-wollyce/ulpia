@@ -206,6 +206,34 @@ fleet/<name>/
 the words a real question would use, and that line is what the keyword scorer matches.
 An entry without one is an entry nothing can reach.
 
+## And it must know who it works for
+
+A fleet has agents, and it has exactly one person, and **the person is not an agent**:
+
+```
+kb init --person
+```
+
+That writes `fleet/profile/` with no `agent.txt`, which is the whole trick. The router
+reads the base and **can never elect it as the one who answers**, because a question about
+you belongs to the librarian, not to a specialist impersonating you. Browse
+[`person-skeleton/`](person-skeleton/) for the exact shape.
+
+Every agent `kb init` creates carries a `[user]` block pointing at `../profile/core.md`,
+so **an agent cannot be born not knowing who it works for.** That is not hypothetical: this
+fleet ran with two agents that had no such block, and the marketing one answered a question
+about its owner's CV without knowing his name.
+
+One file is the truth, and residency is selective: the small core is resident everywhere,
+the domain files are retrieved when a question calls for them. Fill them. An empty profile
+is not a neutral state, it is an agent giving generic answers confidently.
+
+**The shape is public and the content is not.** `person-skeleton/` and the generator ship
+here; what you write into your own `fleet/profile/` lives in your fleet repository, which
+this one gitignores. That is the same split the agents already make, applied to you.
+
+---
+
 `kb-aliases.txt` is a record of misses, not a dictionary. Add a line **only after a real
 question failed to find something.** Expansion is additive, so a wrong line can add
 noise and can never remove signal. It is also how a fleet answers questions in one
@@ -250,7 +278,7 @@ Early, used daily, and honest about which is which.
 
 | | |
 |---|---|
-| `tools/kb` | Works. 171 tests. One dependency. |
+| `tools/kb` | Works. 172 tests. One dependency. |
 | `kb ui` | The reading room, set in the site's own type and palette: the fleet, the catalog, the stacks (shelves and book spines, ribbons where another agent works the document), the desk (chat routed by the same boot hook as every session), block budgets, doctor. One embedded page plus three Garamond faces, loopback only. |
 | `tools/tray` | Windows only, and young. |
 | `site` | The page at [ulpia.io](https://ulpia.io). Static front, one Rust binary behind it. |

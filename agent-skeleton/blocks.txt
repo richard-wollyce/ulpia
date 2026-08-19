@@ -8,6 +8,9 @@
 #
 # Run `kb blocks .` to see what each one costs and what changing it costs.
 
+# Who the human is. One file, shared by the whole fleet: a person is not an agent,
+# so it lives in a base of its own that the router can read and never elect.
+#
 # Who the agent is and how it works. Changes rarely.
 [identity]
 CLAUDE.md

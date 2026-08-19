@@ -63,6 +63,153 @@ impl std::fmt::Display for InitError {
     }
 }
 
+/// Creates the person's base at `<root>/fleet/profile`, or directly at `at`.
+///
+/// **A fleet has agents and it has exactly one person, and the person is not an agent.**
+/// So this writes a base with a map, a gitignore and three empty files, and deliberately
+/// **no `agent.txt`**: without one the router reads the base and can never elect it as
+/// the one who answers, which is the rule ADR-0024 rests on and the code already enforces.
+///
+/// It also writes no constitution, because a person does not boot. Agents reach the core
+/// file through a `[user]` block pointing at `../profile/core.md`, and `kb init` writes
+/// that block into every agent it creates.
+///
+/// **The files come out empty on purpose.** This is the shape, published so anyone can
+/// build the same structure; the content is one specific human and belongs to whoever
+/// runs the fleet. That split is the same one the agent skeleton already makes, and it
+/// is the whole answer to how this can be public while its user's file is not.
+pub fn person(fleet: &Path, at: Option<&Path>) -> Result<Created, InitError> {
+    let root = match at {
+        Some(p) => p.to_path_buf(),
+        None => fleet.join("fleet").join(PERSON_DIR),
+    };
+
+    if root.exists() {
+        return Err(InitError::Exists(root));
+    }
+    fs::create_dir_all(&root).map_err(|e| InitError::Io(root.clone(), e))?;
+
+    write(&root.join("MAP.md"), PERSON_MAP)?;
+    write(&root.join(".gitignore"), PERSON_GITIGNORE)?;
+    write(&root.join("core.md"), PERSON_CORE)?;
+    write(&root.join("work.md"), PERSON_WORK)?;
+    write(&root.join("presence.md"), PERSON_PRESENCE)?;
+
+    // No `git init` here, unlike an agent: the person's base is not its own
+    // repository, it lives inside the fleet's, so the privacy gate that matters is
+    // already the one the fleet repository provides.
+    Ok(Created { path: root, files: 5, git: false })
+}
+
+/// The directory the person's base lives in, beside the agents.
+pub const PERSON_DIR: &str = "profile";
+
+const PERSON_GITIGNORE: &str = "\
+# The index is derived from the markdown and rebuilt by `kb index`, so it is never
+# committed: the files are the source of truth and the index is a projection.
+.kb/
+";
+
+const PERSON_MAP: &str = "\
+# MAP: who the person is
+
+> **A base, not an agent.** It has no `agent.txt`, so the router reads it and can never
+> choose it as the one who answers: a person is not an agent.
+>
+> Every agent carries `core.md` resident, through a `[user]` block pointing at
+> `../profile/core.md`. The rest is retrieved when a question calls for it.
+>
+> **The shape is public and the content is not.** This file and the empty files beside it
+> describe how a fleet records the human it works for. What gets written into them is one
+> specific person, and belongs to whoever runs the fleet.
+
+---
+
+- **[[core]]** Resident in every constitution, so keep it short: who they are, the
+  language they write in, the machine, and how they want to be worked with. Everything
+  here is paid for by every question every agent answers.
+  Search for: `who am i`, `user`, `person`, `profile`, `how they work`.
+
+- **[[work]]** Retrieved. Employment, stack, level, projects. What an agent touching code
+  needs and nobody else does on every question.
+  Search for: `work`, `job`, `stack`, `projects`, `level`.
+
+- **[[presence]]** Retrieved. Goals, public surface, how work should find them. What an
+  agent writing something publishable needs.
+  Search for: `goal`, `presence`, `public`, `positioning`.
+";
+
+const PERSON_CORE: &str = "\
+# The person, core
+
+> **Resident in every agent's constitution**, so keep it short: it is paid for by every
+> question every agent answers. Detail belongs in the retrieved files beside this one.
+>
+> Replace everything below. An empty profile is a fleet that does not know who it works
+> for, and an agent that does not know who it works for gives generic answers confidently.
+
+| | |
+|---|---|
+| Name | |
+| Role here | |
+| Languages | The ones they write in, and the one the repositories use |
+| Machine | OS and shell, because half of what an agent suggests depends on it |
+
+## How to work with them
+
+- Who decides, and how.
+- What they consider good work, and what they consider bad work, in their own words.
+- Whether an agent should push back, and how hard.
+- House style: anything that would make an answer read wrong to them.
+
+## Where the rest is
+
+| File | What it holds |
+|---|---|
+| `work.md` | Employment, stack, level, projects |
+| `presence.md` | Goals, public surface |
+
+Anything an agent needs on every question belongs here. Anything one agent needs
+sometimes belongs beside this file, and the router will find it.
+";
+
+const PERSON_WORK: &str = "\
+# The person at work
+
+> Retrieved, not resident. Replace everything below.
+
+## Employment
+
+## Stack
+
+## Level, honestly assessed
+
+An agent that overestimates the person explains too little; one that underestimates them
+wastes their time. Write what is true, including what they are weak at, in their words
+where possible.
+
+## Projects
+";
+
+const PERSON_PRESENCE: &str = "\
+# The person in public
+
+> Retrieved, not resident. Replace everything below.
+
+## The goal
+
+What they are trying to become, on what horizon. This is a constraint on what gets built,
+not decoration: work that can be shown serves a public goal and private work does not.
+
+## The public surface
+
+Addresses, handles, and which is which.
+
+## What may never be published
+
+The standing rule about their own material. Whatever is written here binds every agent.
+";
+
 /// Creates an agent under `<root>/fleet/<name>`, or directly at `at` when given.
 ///
 /// The fleet root is where ADR-0011 says agents live. Passing an explicit path is
@@ -252,6 +399,9 @@ const BLOCKS_TXT: &str = "\
 #
 # Run `kb blocks .` to see what each one costs and what changing it costs.
 
+# Who the human is. One file, shared by the whole fleet: a person is not an agent,
+# so it lives in a base of its own that the router can read and never elect.
+#
 # Who the agent is and how it works. Changes rarely.
 [identity]
 CLAUDE.md
@@ -361,6 +511,39 @@ mod tests {
         );
     }
 
+    /// The same drift guard as the agent skeleton, for the same reason, with more at
+    /// stake. `person-skeleton/` is the public answer to a question the product has to
+    /// answer out loud: **how does a fleet record the human it works for, and how does
+    /// that stay publishable when the human's own file never can be.** A published shape
+    /// that no longer matches what the tool writes is documentation lying about its own
+    /// product, and it lies most convincingly about the part nobody can check by reading
+    /// the private repository.
+    #[test]
+    fn the_published_person_skeleton_is_what_this_code_writes() {
+        let published = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../person-skeleton");
+        assert!(
+            published.is_dir(),
+            "expected the published person skeleton at {}. Regenerate it with \
+             `kb init --person <tmp>` and move fleet/profile to the repository root.",
+            published.display()
+        );
+
+        let scratch = scratch("person-skeleton-drift");
+        let made = person(&scratch, None).expect("writes");
+
+        let mut checked = 0;
+        for entry in fs::read_dir(&made.path).expect("read generated") {
+            let entry = entry.expect("entry");
+            let name = entry.file_name();
+            let theirs = published.join(&name);
+            assert!(theirs.is_file(), "{:?} is generated but not published", name);
+            let a = fs::read_to_string(entry.path()).expect("generated").replace("\r\n", "\n");
+            let b = fs::read_to_string(&theirs).expect("published").replace("\r\n", "\n");
+            assert_eq!(a, b, "{:?} drifted from what kb init --person writes", name);
+            checked += 1;
+        }
+        assert_eq!(checked, 5, "every generated file is compared, none skipped");
+    }
     /// The published skeleton has to be exactly what this code writes.
     ///
     /// `agent-skeleton/` exists so somebody browsing the repository can see the shape
