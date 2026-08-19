@@ -73,11 +73,14 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
       .bind(normalized, new Date().toISOString(), CONSENT_VERSION)
       .run();
 
-    const created = (result.meta?.changes ?? 0) > 0;
-    return json(created ? 201 : 200, {
-      ok: true,
-      code: created ? "subscribed" : "already_subscribed",
-    });
+    // Deliberately identical whether the row was created or already existed.
+    // Distinguishing them would make this endpoint an email enumeration oracle:
+    // anyone could submit any address and learn whether that person is on our
+    // list, which is a disclosure about somebody who never visited the page, on
+    // a site whose whole claim is that it discloses nothing. The insert is
+    // idempotent, so silence costs us nothing.
+    void result;
+    return json(201, { ok: true, code: "subscribed" });
   } catch {
     // The visitor gets a state they can act on; the detail stays server side.
     return json(500, { ok: false, code: "server_error" });

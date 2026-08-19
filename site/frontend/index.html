@@ -22,6 +22,7 @@
     <meta property="og:type" content="website" />
     <script src="/theme.js"></script>
     <script src="/anim.js" defer></script>
+    <script src="/subscribe.js" defer></script>
     <link rel="stylesheet" href="/src/styles.css" />
   </head>
   <body>
@@ -55,7 +56,7 @@
         <h1>The memory is yours. The&nbsp;model is a guest.</h1>
         <p class="subhead" data-anim="type"><span class="type-real">A fleet of AI agents, each with its own knowledge base, and one memory layer under all of them. On your machine, in plain files, with no model in the retrieval&nbsp;path.</span></p>
         <p class="cta-row" data-anim="hero">
-          <a class="cta-primary" href="mailto:hello@ulpia.io">Write to hello@ulpia.io</a>
+          <a class="cta-primary" href="mailto:hello@ulpia.io" aria-haspopup="dialog">Write to hello@ulpia.io</a>
         </p>
         <p class="status-line" data-anim="hero">Pre-launch. Built daily.</p>
       </section>
@@ -136,9 +137,9 @@
       <section aria-labelledby="door">
         <h2 id="door">The doors are not open yet. The mail&nbsp;is.</h2>
         <p data-anim="rise">
-          Write to
-          <a href="mailto:hello@ulpia.io">hello@ulpia.io</a> and we will write
-          back when there is something you can install.
+          Our address is hello@ulpia.io, and the button at the top puts it on
+          your clipboard. Write whenever you like, or leave us yours and we
+          will write when there is something you can install.
         </p>
       </section>
     </main>
@@ -152,17 +153,123 @@
         </p>
       </details>
       <details>
-        <summary>No cookies, no analytics, no third parties.</summary>
+        <summary>No cookies, no analytics, nothing loaded from anyone else.</summary>
         <p>
-          This page sets no cookies, runs no analytics, and calls no third
-          party. If you choose a light or dark scheme, that choice is kept in
-          your browser's local storage and never leaves your machine. The
-          product holds the same position.
+          This page sets no cookies and runs no analytics. Everything it loads
+          comes from ulpia.io: the styles, the fonts, the small scripts. Open
+          the network tab and you will not find another origin.
+        </p>
+        <p>
+          It makes exactly one request that loading the page did not make, and
+          only if you ask for it: when you submit the form, your address is
+          posted to ulpia.io and stored so that we can write to you. Nothing
+          else goes with it. If you never submit that form, this page never
+          speaks to us at all.
+        </p>
+        <p>
+          The button copies our address to your clipboard when you press it. It
+          writes; it never reads.
+        </p>
+        <p>
+          If you choose a light or dark scheme, that choice is kept in your
+          browser's local storage and never leaves your machine.
+        </p>
+        <p>
+          The page is served by Cloudflare Pages, which means Cloudflare
+          terminates TLS and sees the request, as it does for a large part of
+          the web. That is the one third party in the path and we would rather
+          name it here than have you find it.
+        </p>
+        <p>
+          What happens to an address afterwards is in the
+          <a href="/privacy">privacy notice</a>. The product holds the same
+          position as the page.
         </p>
       </details>
       <p class="address-line">
         <a href="mailto:hello@ulpia.io">hello@ulpia.io</a>
       </p>
     </footer>
+
+    <!-- The write dialog (spec 22). Copy is provisional until Steve's deck lands.
+         The toast sits inside the dialog because a fixed element on the page
+         paints under the backdrop: the dialog is in the browser's top layer. -->
+    <dialog id="write-dialog" aria-labelledby="write-dialog-title">
+      <p class="toast" role="status" id="write-toast"><code>hello@ulpia.io</code> is on your clipboard.</p>
+      <div class="dialog-card" tabindex="-1">
+        <button type="button" class="dialog-close" aria-label="Close">&times;</button>
+        <h2 id="write-dialog-title">Would you like to be told when it&nbsp;opens?</h2>
+        <!-- The body carries the toast's information in permanent text on
+             purpose: a live announcement can be lost when focus moves into a
+             dialog opening in the same tick, and nothing a visitor needs may
+             exist only in a toast. The script swaps this line when the
+             clipboard write fails. -->
+        <p class="dialog-lede" id="dialog-body">
+          Our address is on your clipboard, so you can write whenever you like.
+          This is the other direction: leave yours and we will tell you when
+          there is something you can install. Rarely otherwise, and never more
+          than once a month.
+        </p>
+        <div class="addr">
+          <code id="write-address">hello@ulpia.io</code>
+          <button type="button" class="addr-copy">Copy</button>
+        </div>
+        <hr class="dialog-sep" />
+        <div class="offer">
+          <p class="form-error" role="alert">
+            That did not reach us. Try again, or write to hello@ulpia.io
+            instead: it is on your clipboard.
+          </p>
+          <form id="newsletter" novalidate>
+            <label class="field-label" for="email">Your email address</label>
+            <input
+              id="email"
+              type="email"
+              name="email"
+              autocomplete="email"
+              placeholder="you@example.com"
+              aria-describedby="email-msg"
+            />
+            <p class="field-msg" id="email-msg">We need an address to write to.</p>
+            <!-- Named "website" and hidden from people: a field no human sees and
+                 no human fills. -->
+            <input type="text" name="website" tabindex="-1" autocomplete="off" hidden />
+            <div class="consent">
+              <input type="checkbox" id="consent" name="consent" />
+              <label for="consent">
+                Yes, write to me about Ulpia: when there is something I can
+                install, and rarely otherwise.
+              </label>
+            </div>
+            <p class="consent-msg" role="alert">
+              We need that tick before we can add you.
+            </p>
+            <!-- The links sit outside the consent label on purpose: you are
+                 informed by a privacy notice, you do not agree to one, and
+                 bundling them into the tick would tie marketing consent to
+                 accepting a contract. -->
+            <p class="consent-note">
+              You can leave from any message. We store your address to send
+              those messages and for nothing else.
+              <a href="/privacy" target="_blank" rel="noopener">Privacy notice</a>
+              ·
+              <a href="/terms" target="_blank" rel="noopener">Terms of use</a>
+            </p>
+            <div class="actions">
+              <button type="submit" class="submit">Tell me when it opens</button>
+              <button type="button" class="dismiss">Not now</button>
+            </div>
+          </form>
+        </div>
+        <div class="success">
+          <h3 role="status" tabindex="-1">You are on the list.</h3>
+          <p id="success-body">
+            We will write when there is something you can install. Our address
+            is still on your clipboard, if you have something to say before
+            then.
+          </p>
+        </div>
+      </div>
+    </dialog>
   </body>
 </html>
