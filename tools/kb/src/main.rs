@@ -6,7 +6,7 @@
 
 
 use kb::checks::{Finding, Level};
-use kb::{base, blocks, boot, checks, commit, eval, index, init, mcp, memory, remember, store, write};
+use kb::{base, blocks, boot, checks, commit, eval, index, init, mcp, memory, remember, store, ui, write};
 use base::Base;
 use std::path::Path;
 use std::process::ExitCode;
@@ -26,6 +26,7 @@ usage:
     kb eval <gold.tsv> [path]... [--top N] [--all]
     kb commit <path>... -m <message>
     kb boot [path]... [--top N] [--all]
+    kb ui [path]... [--port N] [--all]
     kb serve [path]... [--top N] [--all]
 
     path        base to work on, defaults to the current directory
@@ -76,7 +77,7 @@ const LINES_SHOWN: usize = 3;
 
 /// Flags that consume the argument after them.
 const VALUE_FLAGS: &[&str] =
-    &["--top", "--keys", "--summary", "--folder", "--provenance", "--stage", "-m"];
+    &["--top", "--keys", "--summary", "--folder", "--provenance", "--stage", "-m", "--port"];
 
 fn main() -> ExitCode {
     let args: Vec<String> = std::env::args().skip(1).collect();
@@ -139,6 +140,18 @@ fn main() -> ExitCode {
             cmd_commit(&positional, &message)
         }
         "boot" => cmd_boot(&paths_or_default(&positional), all, top),
+        "ui" => {
+            let port = flag_value(&args, "--port")
+                .and_then(|v| v.parse().ok())
+                .unwrap_or(ui::DEFAULT_PORT);
+            match ui::serve(&paths_or_default(&positional), all, port) {
+                Ok(()) => ExitCode::SUCCESS,
+                Err(e) => {
+                    eprintln!("kb ui: {e}");
+                    ExitCode::from(1)
+                }
+            }
+        }
         "eval" => {
             if positional.is_empty() {
                 eprintln!("kb: eval needs a gold file\n");

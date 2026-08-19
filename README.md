@@ -110,6 +110,7 @@ kb route "your question" .      which files should this open
 kb check .                      lint every agent
 kb fleet .                      who is in the fleet
 kb eval gold.tsv .              grade the routing against your own answer key
+kb ui .                         the reading room: http://127.0.0.1:4114
 ```
 
 ---
@@ -249,7 +250,8 @@ Early, used daily, and honest about which is which.
 
 | | |
 |---|---|
-| `tools/kb` | Works. 163 tests. One dependency. |
+| `tools/kb` | Works. 170 tests. One dependency. |
+| `kb ui` | The reading room: fleet, routing inspector, link graph, block budgets, doctor. One embedded page, 17 KB, loopback only. |
 | `tools/tray` | Windows only, and young. |
 | `site` | The page at [ulpia.io](https://ulpia.io). Static front, one Rust binary behind it. |
 | Local model routing | Not built. |

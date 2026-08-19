@@ -1,0 +1,346 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Ulpia</title>
+<style>
+/* The reading room. Dark first, because the lamp is lit for the reader, not the room.
+   Typography is the recovered craft here: a serif for what is read, a mono for what
+   is measured. No fonts are fetched; the machine's own faces are enough. */
+:root {
+  --bg: #14161a; --panel: #1b1e24; --line: #2a2e36;
+  --ink: #d8d3c7; --dim: #8b8779; --mono: #a8a494;
+  --accent: #c0453c; --ok: #7ba05b; --warn: #c9a227;
+  --serif: 'Iowan Old Style', 'Palatino Linotype', Palatino, Georgia, serif;
+  --monof: ui-monospace, 'Cascadia Mono', Consolas, monospace;
+}
+@media (prefers-color-scheme: light) {
+  :root {
+    --bg: #f3efe6; --panel: #faf7f0; --line: #d9d2c2;
+    --ink: #2a2721; --dim: #6f6a5c; --mono: #57534a;
+    --accent: #a03a32; --ok: #55763c; --warn: #8a6d14;
+  }
+}
+* { box-sizing: border-box; margin: 0; }
+body { background: var(--bg); color: var(--ink); font-family: var(--serif);
+       font-size: 16px; line-height: 1.45; height: 100vh; display: flex; flex-direction: column; }
+header { display: flex; align-items: baseline; gap: 1.2rem; padding: .8rem 1.4rem;
+         border-bottom: 1px solid var(--line); }
+header h1 { font-size: 1.15rem; font-weight: 600; letter-spacing: .04em; }
+header h1 span { color: var(--accent); }
+header .sub { color: var(--dim); font-size: .85rem; }
+nav { margin-left: auto; display: flex; gap: .2rem; }
+nav button { background: none; border: 1px solid transparent; color: var(--dim);
+  font-family: var(--monof); font-size: .8rem; padding: .35rem .8rem; cursor: pointer; }
+nav button.on { color: var(--ink); border-color: var(--line); background: var(--panel); }
+nav button:hover { color: var(--ink); }
+main { flex: 1; overflow: hidden; display: flex; }
+.pane { flex: 1; overflow: auto; padding: 1.4rem; display: none; }
+.pane.on { display: block; }
+h2 { font-size: 1rem; font-weight: 600; margin-bottom: .8rem; color: var(--ink); }
+.cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: .8rem; }
+.card { background: var(--panel); border: 1px solid var(--line); padding: .9rem 1rem; }
+.card h3 { font-size: .95rem; margin-bottom: .3rem; }
+.card .role { color: var(--dim); font-size: .85rem; min-height: 2.4em; }
+.card .meta { font-family: var(--monof); font-size: .75rem; color: var(--mono); margin-top: .6rem; }
+.tag { font-family: var(--monof); font-size: .68rem; padding: .1rem .45rem;
+       border: 1px solid var(--line); color: var(--dim); margin-left: .4rem; vertical-align: middle; }
+.tag.route { color: var(--ok); border-color: var(--ok); }
+/* Ask */
+.askrow { display: flex; gap: .6rem; margin-bottom: 1rem; }
+.askrow input { flex: 1; background: var(--panel); color: var(--ink); border: 1px solid var(--line);
+  padding: .55rem .8rem; font-family: var(--serif); font-size: 1rem; }
+.askrow button, .toolbar button { background: var(--panel); color: var(--ink); border: 1px solid var(--line);
+  font-family: var(--monof); font-size: .8rem; padding: .55rem 1rem; cursor: pointer; }
+.askrow button:hover, .toolbar button:hover { border-color: var(--dim); }
+.verdict { font-family: var(--monof); font-size: .8rem; padding: .6rem .9rem; margin-bottom: 1rem;
+           border: 1px solid var(--line); background: var(--panel); }
+.verdict b.hit { color: var(--ok); } .verdict b.guess { color: var(--warn); }
+.verdict b.nothing { color: var(--accent); }
+table { border-collapse: collapse; width: 100%; font-size: .85rem; }
+th { text-align: left; font-family: var(--monof); font-size: .7rem; color: var(--dim);
+     font-weight: 400; padding: .3rem .6rem; border-bottom: 1px solid var(--line); }
+td { padding: .4rem .6rem; border-bottom: 1px solid var(--line); vertical-align: top; }
+td.n { font-family: var(--monof); font-size: .78rem; color: var(--mono); white-space: nowrap; }
+a.file { color: var(--ink); text-decoration: none; border-bottom: 1px dotted var(--dim); cursor: pointer; }
+a.file:hover { color: var(--accent); border-bottom-color: var(--accent); }
+.bars { margin: .8rem 0 1.2rem; max-width: 480px; }
+.bar { display: grid; grid-template-columns: 90px 1fr 60px; gap: .6rem; align-items: center;
+       font-family: var(--monof); font-size: .75rem; color: var(--mono); margin-bottom: .3rem; }
+.bar .track { background: var(--panel); border: 1px solid var(--line); height: 10px; }
+.bar .fill { background: var(--accent); height: 100%; opacity: .85; }
+/* Graph */
+#graphwrap { position: relative; height: 100%; }
+#graph { width: 100%; height: 100%; }
+#graph text { font-family: var(--monof); font-size: 10px; fill: var(--dim); }
+#graph text.b { fill: var(--mono); font-size: 11px; }
+#graph line { stroke: var(--line); stroke-width: 1; }
+#graph line.broken { stroke: var(--accent); stroke-dasharray: 3 3; }
+#graph circle { cursor: pointer; }
+#legend { position: absolute; left: .8rem; bottom: .8rem; font-family: var(--monof);
+          font-size: .72rem; color: var(--dim); background: var(--panel);
+          border: 1px solid var(--line); padding: .5rem .8rem; }
+#legend i { display: inline-block; width: 9px; height: 9px; border-radius: 50%; margin-right: .45rem; }
+/* Viewer drawer */
+#viewer { width: 0; transition: width .15s; overflow: hidden; border-left: 1px solid var(--line);
+          background: var(--panel); display: flex; flex-direction: column; }
+#viewer.open { width: min(46%, 640px); }
+#viewer .vhead { display: flex; align-items: center; padding: .6rem .9rem; border-bottom: 1px solid var(--line);
+                 font-family: var(--monof); font-size: .75rem; color: var(--mono); }
+#viewer .vhead button { margin-left: auto; background: none; border: none; color: var(--dim);
+                        cursor: pointer; font-size: 1rem; }
+#viewer pre { flex: 1; overflow: auto; padding: 1rem; font-family: var(--monof);
+              font-size: .78rem; line-height: 1.5; white-space: pre-wrap; color: var(--ink); }
+.toolbar { display: flex; gap: .6rem; margin-bottom: 1rem; align-items: center; }
+.toolbar .hint { color: var(--dim); font-size: .8rem; }
+.lvl-error { color: var(--accent); font-family: var(--monof); font-size: .75rem; }
+.lvl-warning { color: var(--warn); font-family: var(--monof); font-size: .75rem; }
+footer { padding: .45rem 1.4rem; border-top: 1px solid var(--line); color: var(--dim);
+         font-family: var(--monof); font-size: .7rem; }
+</style>
+</head>
+<body>
+<header>
+  <h1>ULPIA <span>&middot;</span> the reading room</h1>
+  <div class="sub" id="sub">opening the library&hellip;</div>
+  <nav>
+    <button data-p="fleet" class="on">fleet</button>
+    <button data-p="ask">ask</button>
+    <button data-p="graph">graph</button>
+    <button data-p="blocks">blocks</button>
+    <button data-p="doctor">doctor</button>
+  </nav>
+</header>
+<main>
+  <section class="pane on" id="p-fleet">
+    <h2>Who is in the fleet</h2>
+    <div class="cards" id="fleetcards"></div>
+  </section>
+
+  <section class="pane" id="p-ask">
+    <h2>Ask Vesta where a question goes</h2>
+    <div class="askrow">
+      <input id="q" placeholder="quanto de proteina eu preciso por refeicao" autocomplete="off">
+      <button id="go">route</button>
+    </div>
+    <div id="askout"></div>
+  </section>
+
+  <section class="pane" id="p-graph" style="padding:0">
+    <div id="graphwrap">
+      <svg id="graph"></svg>
+      <div id="legend"></div>
+    </div>
+  </section>
+
+  <section class="pane" id="p-blocks">
+    <h2>The constitutions, block by block</h2>
+    <p class="hint" style="color:var(--dim);font-size:.85rem;margin-bottom:1rem">
+      Resident blocks are paid for by every question afterwards. Order is by stability,
+      because prefix caching reuses the prompt only up to the first token that differs.</p>
+    <div id="blocksout"></div>
+  </section>
+
+  <section class="pane" id="p-doctor">
+    <div class="toolbar">
+      <h2 style="margin:0">Doctor</h2>
+      <button id="reload">re-read the library</button>
+      <span class="hint">what the linter would say, plus the reload after files change on disk</span>
+    </div>
+    <div id="checkout"></div>
+  </section>
+
+  <aside id="viewer">
+    <div class="vhead"><span id="vtitle"></span><button id="vclose">&times;</button></div>
+    <pre id="vbody"></pre>
+  </aside>
+</main>
+<footer id="foot">served from 127.0.0.1 only &middot; tracked files only &middot; the index is derived and the files are the truth</footer>
+<script>
+"use strict";
+const $ = s => document.querySelector(s);
+const esc = s => s.replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const api = p => fetch(p).then(r => { if (!r.ok) throw new Error(r.status); return r.json(); });
+
+/* tabs */
+document.querySelectorAll('nav button').forEach(b => b.onclick = () => {
+  document.querySelectorAll('nav button').forEach(x => x.classList.remove('on'));
+  document.querySelectorAll('.pane').forEach(x => x.classList.remove('on'));
+  b.classList.add('on');
+  $('#p-' + b.dataset.p).classList.add('on');
+  if (b.dataset.p === 'graph' && !graphDrawn) drawGraph();
+});
+
+/* file viewer */
+function openFile(base, rel) {
+  fetch(`/api/file?base=${encodeURIComponent(base)}&rel=${encodeURIComponent(rel)}`)
+    .then(r => r.ok ? r.text() : Promise.reject(r.status))
+    .then(t => {
+      $('#vtitle').textContent = base + '/' + rel;
+      $('#vbody').textContent = t;
+      $('#viewer').classList.add('open');
+    })
+    .catch(() => { $('#vtitle').textContent = 'not served'; $('#vbody').textContent =
+      'That file is not in the tracked set this server was allowed to read.'; $('#viewer').classList.add('open'); });
+}
+$('#vclose').onclick = () => $('#viewer').classList.remove('open');
+const fileLink = (base, rel) =>
+  `<a class="file" onclick="openFile('${esc(base)}','${esc(rel)}')">${esc(base)}/${esc(rel)}</a>`;
+
+/* fleet */
+const PALETTE = ['#c0453c', '#7ba05b', '#5b7ba0', '#c9a227', '#8a5ba0', '#5ba09b'];
+let baseColor = {};
+function loadFleet() {
+  api('/api/fleet').then(f => {
+    $('#sub').textContent = `${f.agents.length} agents, ${f.entries} entries, ${f.aliases} aliases` +
+      (f.private ? ' (private layer included)' : '');
+    f.agents.forEach((a, i) => baseColor[a.name.toLowerCase()] = PALETTE[i % PALETTE.length]);
+    $('#fleetcards').innerHTML = f.agents.map((a, i) => `
+      <div class="card" style="border-top: 2px solid ${PALETTE[i % PALETTE.length]}">
+        <h3>${esc(a.name)}${a.routable ? '<span class="tag route">answers</span>' : '<span class="tag">read only</span>'}</h3>
+        <div class="role">${esc(a.role || 'role not set in agent.txt')}</div>
+        <div class="meta">${a.files} tracked files</div>
+      </div>`).join('');
+  }).catch(e => $('#sub').textContent = 'the server went away: ' + e);
+}
+
+/* ask */
+function ask() {
+  const q = $('#q').value.trim();
+  if (!q) return;
+  $('#askout').innerHTML = '<p class="hint" style="color:var(--dim)">routing&hellip;</p>';
+  api('/api/route?q=' + encodeURIComponent(q)).then(r => {
+    let h = '';
+    const v = r.verdict;
+    h += `<div class="verdict">verdict <b class="${v}">${v.toUpperCase()}</b>
+      &nbsp; keyword score ${r.score.toFixed(2)} against floor ${r.floor.toFixed(1)}
+      &nbsp; margin over runner-up ${r.margin.toFixed(2)}</div>`;
+    if (r.agent) {
+      h += `<div class="bars"><div style="font-family:var(--monof);font-size:.75rem;color:var(--dim);margin-bottom:.4rem">
+        owner: <b style="color:var(--ink)">${esc(r.agent.name)}</b> (${r.agent.files} files voted, ${r.agent.contenders} contender${r.agent.contenders===1?'':'s'})</div>`;
+      const top = Math.max(...r.agent.totals.map(t => t.score));
+      h += r.agent.totals.map(t => `<div class="bar"><span>${esc(t.name)}</span>
+        <span class="track"><span class="fill" style="width:${(100*t.score/top).toFixed(0)}%;background:${baseColor[t.name.toLowerCase()]||'var(--accent)'}"></span></span>
+        <span>${t.score.toFixed(3)}</span></div>`).join('');
+      h += '</div>';
+    }
+    if (r.found && r.found.length) {
+      h += `<table><tr><th>open this</th><th>why</th><th>matched</th><th>keyword</th></tr>` +
+        r.found.map(f => `<tr>
+          <td>${fileLink(f.base, f.rel)}${f.heading ? `<div style="color:var(--dim);font-size:.78rem">${esc(f.heading)}: ${esc(f.excerpt || '')}</div>` : ''}</td>
+          <td class="n">${esc(f.why)}</td><td class="n">${esc(f.matched)}</td>
+          <td class="n">${f.keyword.toFixed(1)}</td></tr>`).join('') + '</table>';
+    } else if (v !== 'empty') {
+      h += '<p class="hint" style="color:var(--dim)">nothing matched, in either scorer.</p>';
+    }
+    $('#askout').innerHTML = h;
+  });
+}
+$('#go').onclick = ask;
+$('#q').addEventListener('keydown', e => { if (e.key === 'Enter') ask(); });
+
+/* graph: a small force layout, written here rather than imported, because the whole
+   simulation is sixty lines and a dependency would be the heavier artefact. */
+let graphDrawn = false;
+function drawGraph() {
+  graphDrawn = true;
+  api('/api/graph').then(g => {
+    const svg = $('#graph');
+    const W = svg.clientWidth, H = svg.clientHeight;
+    const bases = [...new Set(g.nodes.map(n => n.base))];
+    const centre = {};
+    bases.forEach((b, i) => {
+      const a = 2 * Math.PI * i / bases.length;
+      centre[b] = { x: W/2 + Math.cos(a) * W/3.2, y: H/2 + Math.sin(a) * H/3.2 };
+    });
+    const nodes = g.nodes.map(n => ({ ...n,
+      x: centre[n.base].x + (Math.random()-.5)*120,
+      y: centre[n.base].y + (Math.random()-.5)*120,
+      r: Math.max(3, Math.min(11, Math.sqrt(n.bytes/900))) }));
+    const byId = {}; nodes.forEach(n => byId[n.id] = n);
+    const edges = g.edges.filter(e => byId[e.from] && (byId[e.to] || e.broken))
+      .map(e => ({ a: byId[e.from], b: byId[e.to], broken: e.broken }));
+
+    for (let it = 0; it < 220; it++) {
+      const k = it < 60 ? 1 : 40/(it+1);
+      for (const n of nodes) {           /* cluster gravity */
+        n.x += (centre[n.base].x - n.x) * .02 * k;
+        n.y += (centre[n.base].y - n.y) * .02 * k;
+      }
+      for (let i = 0; i < nodes.length; i++) for (let j = i+1; j < nodes.length; j++) {
+        const p = nodes[i], q = nodes[j];
+        let dx = p.x-q.x, dy = p.y-q.y, d2 = dx*dx+dy*dy || 1;
+        if (d2 < 90*90) { const f = 620*k/d2; dx*=f; dy*=f; p.x+=dx; p.y+=dy; q.x-=dx; q.y-=dy; }
+      }
+      for (const e of edges) if (e.b) {  /* springs */
+        const dx = e.b.x-e.a.x, dy = e.b.y-e.a.y, d = Math.sqrt(dx*dx+dy*dy)||1;
+        const f = (d-70)/d * .012 * k;
+        e.a.x += dx*f; e.a.y += dy*f; e.b.x -= dx*f; e.b.y -= dy*f;
+      }
+      for (const n of nodes) { n.x = Math.max(30, Math.min(W-30, n.x)); n.y = Math.max(24, Math.min(H-24, n.y)); }
+    }
+
+    let out = '';
+    for (const e of edges) {
+      if (e.b) {
+        out += `<line x1="${e.a.x}" y1="${e.a.y}" x2="${e.b.x}" y2="${e.b.y}" class="${e.broken?'broken':''}"/>`;
+      } else if (e.broken) {
+        /* A dangling link has no destination to draw to, and hiding it would
+           un-make the point: this is E01 rendered. A short dashed stub says
+           "a reference leaves this file and lands nowhere". */
+        out += `<line x1="${e.a.x}" y1="${e.a.y}" x2="${e.a.x+22}" y2="${e.a.y-16}" class="broken"><title>broken link out of ${esc(e.a.id)}</title></line>`;
+      }
+    }
+    for (const n of nodes)
+      out += `<circle cx="${n.x}" cy="${n.y}" r="${n.r}" fill="${baseColor[n.base.toLowerCase()]||'#888'}" opacity=".85"
+        onclick="openFile('${esc(n.base)}','${esc(n.rel)}')"><title>${esc(n.id)}</title></circle>`;
+    for (const b of bases)
+      out += `<text class="b" x="${centre[b].x}" y="${centre[b].y - H/3.2*0.42}" text-anchor="middle">${esc(b)}</text>`;
+    svg.innerHTML = out;
+    $('#legend').innerHTML = bases.map(b =>
+      `<div><i style="background:${baseColor[b.toLowerCase()]||'#888'}"></i>${esc(b)}</div>`).join('') +
+      `<div style="margin-top:.3rem"><i style="background:none;border:1px dashed var(--accent);border-radius:0"></i>broken link</div>`;
+  });
+}
+
+/* blocks */
+function loadBlocks() {
+  api('/api/blocks').then(b => {
+    $('#blocksout').innerHTML = b.agents.map(a => {
+      const resident = a.blocks.filter(x => x.mode !== 'ondemand' && x.mode !== 'on_demand');
+      const total = resident.reduce((s, x) => s + x.bytes, 0);
+      const top = Math.max(1, ...a.blocks.map(x => x.bytes));
+      return `<div class="card" style="margin-bottom:1rem">
+        <h3>${esc(a.agent)} <span class="tag">${(total/1024).toFixed(1)} KB resident</span></h3>
+        <div class="bars" style="margin-bottom:.2rem">` +
+        a.blocks.map(x => `<div class="bar"><span>[${esc(x.name)}]</span>
+          <span class="track"><span class="fill" style="width:${(100*x.bytes/top).toFixed(0)}%;opacity:${x.mode==='resident'?'.9':'.35'}"></span></span>
+          <span>${(x.bytes/1024).toFixed(1)} KB</span></div>` +
+          (x.missing.length ? `<div class="lvl-error">missing: ${x.missing.map(esc).join(', ')}</div>` : '')
+        ).join('') + `</div></div>`;
+    }).join('') || '<p class="hint" style="color:var(--dim)">no blocks.txt found in any base.</p>';
+  });
+}
+
+/* doctor */
+function loadCheck() {
+  api('/api/check').then(c => {
+    $('#checkout').innerHTML = c.findings.length
+      ? `<table><tr><th>base</th><th>level</th><th>code</th><th>where</th><th>finding</th></tr>` +
+        c.findings.map(f => `<tr><td class="n">${esc(f.base)}</td>
+          <td><span class="lvl-${esc(f.level)}">${esc(f.level)}</span></td>
+          <td class="n">${esc(f.code)}</td>
+          <td class="n">${esc(f.file)}:${f.line}</td>
+          <td>${esc(f.message)}</td></tr>`).join('') + '</table>'
+      : '<p style="color:var(--ok);font-family:var(--monof);font-size:.85rem">every base is clean.</p>';
+  });
+}
+$('#reload').onclick = () =>
+  fetch('/api/reload', { method: 'POST' }).then(() => { graphDrawn = false; boot(); });
+
+function boot() { loadFleet(); loadBlocks(); loadCheck(); }
+boot();
+</script>
+</body>
+</html>
