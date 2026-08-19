@@ -1177,35 +1177,6 @@ input[type="email"]:focus-visible {
   line-height: 1.5;
 }
 
-/* ---- the toast ---- */
-
-.toast {
-  display: none;
-  position: fixed;
-  top: 1rem;
-  left: 50%;
-  transform: translateX(-50%);
-  background: var(--plate);
-  color: var(--plate-ink);
-  border: 1px solid var(--rule);
-  border-radius: 0;
-  padding: 0.625rem 1rem;
-  font-size: var(--size-small);
-  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.18);
-  max-width: calc(100% - 2rem);
-  text-align: center;
-}
-
-.toast.is-open {
-  display: block;
-}
-
-.toast code {
-  font-family: ui-monospace, "Cascadia Code", SFMono-Regular, Menlo, Consolas,
-    "Liberation Mono", monospace;
-  font-size: var(--size-mono);
-}
-
 /* Phone: a bottom sheet, so the thumb reaches the form and the keyboard has
  * somewhere to go. */
 @media (max-width: 34rem) {
@@ -1228,23 +1199,8 @@ input[type="email"]:focus-visible {
  * follows a beat later, so the eye meets the confirmation and then the offer
  * instead of two objects in one frame. */
 @media screen and (prefers-reduced-motion: no-preference) {
-  dialog[open] .toast.is-open {
-    animation: toast-in 160ms ease-out backwards;
-  }
-
   dialog[open] .dialog-card {
     animation: card-in 200ms ease-out 140ms backwards;
-  }
-
-  @keyframes toast-in {
-    from {
-      opacity: 0;
-      transform: translate(-50%, -0.5rem);
-    }
-    to {
-      opacity: 1;
-      transform: translate(-50%, 0);
-    }
   }
 
   @keyframes card-in {
@@ -1359,4 +1315,28 @@ input[type="email"]:focus-visible {
 
 .wordmark a:hover {
   color: var(--accent);
+}
+
+/* The disclosure boxes open by sliding rather than snapping. Two modern pieces
+ * do it with no script and no measured heights: interpolate-size lets a
+ * keyword like auto take part in a transition, and ::details-content is the
+ * wrapper the browser puts around the part that opens. Guarded by @supports,
+ * so a browser without them keeps today's instant open rather than breaking. */
+@media screen and (prefers-reduced-motion: no-preference) {
+  @supports (interpolate-size: allow-keywords) and selector(details::details-content) {
+    :root {
+      interpolate-size: allow-keywords;
+    }
+
+    details::details-content {
+      block-size: 0;
+      overflow: hidden;
+      transition: block-size 240ms cubic-bezier(0.33, 1, 0.68, 1),
+        content-visibility 240ms allow-discrete;
+    }
+
+    details[open]::details-content {
+      block-size: auto;
+    }
+  }
 }

@@ -4,13 +4,10 @@
 // address is on screen, selectable, with a Copy button to retry.
 (function () {
   var ADDRESS = "hello@ulpia.io";
-  var TOAST_MS = 4000;
 
-  // Steve's deck: the toast is a receipt, so it names what was copied and where
-  // it went. "Copied" alone works beside a code block; here the click promised
-  // "write to" and the visitor needs to know the promise was converted.
-  var TOAST_OK = "Copied " + ADDRESS + " to your clipboard.";
-  var TOAST_FAIL = "We could not reach your clipboard. The address is " + ADDRESS;
+  // No toast: the dialog body states the outcome in permanent text, and the
+  // address row with its Copy button is right there. A floating receipt saying
+  // what the card already says is redundancy, not reassurance.
   var BODY_FAIL =
     "Our address is " + ADDRESS + ", and your browser would not let us copy it " +
     "for you. This is the other direction: leave yours and we will tell you when " +
@@ -26,24 +23,12 @@
     if (!cta || !dialog || typeof dialog.showModal !== "function") return;
 
     var card = dialog.querySelector(".dialog-card");
-    var toast = document.getElementById("write-toast");
     var form = document.getElementById("newsletter");
     var email = document.getElementById("email");
     var consent = document.getElementById("consent");
     var submit = form.querySelector(".submit");
     var addressNode = document.getElementById("write-address");
     var submitLabel = submit.textContent;
-    var toastTimer = null;
-    var copied = true;
-
-    function setToast(text) {
-      toast.textContent = text;
-      toast.classList.add("is-open");
-      clearTimeout(toastTimer);
-      toastTimer = setTimeout(function () {
-        toast.classList.remove("is-open");
-      }, TOAST_MS);
-    }
 
     function selectAddress() {
       var range = document.createRange();
@@ -60,22 +45,14 @@
         if (announce) failed();
         return;
       }
-      navigator.clipboard.writeText(ADDRESS).then(
-        function () {
-          copied = true;
-          if (announce) setToast(TOAST_OK);
-        },
-        function () {
-          if (announce) failed();
-        },
-      );
+      navigator.clipboard.writeText(ADDRESS).then(function () {}, function () {
+        if (announce) failed();
+      });
     }
 
-    // Both the toast and the permanent body text carry the failure, because the
-    // visitor must end better off than before the click either way.
+    // The body text carries the failure, because the visitor must end better off
+    // than before the click either way.
     function failed() {
-      copied = false;
-      setToast(TOAST_FAIL);
       var body = document.getElementById("dialog-body");
       if (body) body.textContent = BODY_FAIL;
       var success = document.getElementById("success-body");
@@ -89,7 +66,6 @@
       if (typeof event.button === "number" && event.button !== 0) return;
       event.preventDefault();
       dialog.showModal();
-      setToast(TOAST_OK);
       card.focus();
       copyAddress(true);
     });
@@ -115,8 +91,6 @@
     });
 
     dialog.addEventListener("close", function () {
-      clearTimeout(toastTimer);
-      toast.classList.remove("is-open");
       cta.focus();
     });
 
