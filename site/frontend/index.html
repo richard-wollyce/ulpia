@@ -29,16 +29,21 @@
       <div class="band-inner">
         <p class="wordmark">Ulpia</p>
         <button type="button" class="lamp-toggle" aria-label="Color scheme: auto, press to change">
-          <svg viewBox="0 0 24 24" width="24" height="24" aria-hidden="true" focusable="false">
-            <clipPath id="lamp-half"><rect x="12" y="0" width="12" height="24" /></clipPath>
-            <g class="glow" stroke-width="1">
-              <ellipse cx="12" cy="3.75" rx="2.75" ry="1.75" />
-              <ellipse cx="12" cy="16" rx="7" ry="3.5" />
+          <svg viewBox="0 0 28 28" width="28" height="28" aria-hidden="true" focusable="false">
+            <clipPath id="lamp-half"><rect x="14" y="0" width="14" height="28" /></clipPath>
+            <g class="glow">
+              <path class="ray" d="M 8.9 1 L 10.2 2.5" stroke-width="1.5" />
+              <path class="ray" d="M 19.1 1 L 17.8 2.5" stroke-width="1.5" />
+              <path d="M 6.5 12.5 L 3.5 20.5 L 24.5 20.5 L 21.5 12.5 Z" stroke-width="1" />
+              <path class="shade-fill" d="M 6.5 12.5 L 10 3.5 L 18 3.5 L 21.5 12.5 Z" stroke="none" />
             </g>
-            <g class="lamp" fill="none" stroke-width="1.5" stroke-linejoin="round" stroke-linecap="round">
-              <path d="M 9.5 6 L 14.5 6 L 18 12 L 6 12 Z" />
-              <path d="M 12 12 L 12 19" />
-              <ellipse cx="12" cy="20" rx="4" ry="1.5" />
+            <g class="lamp" fill="none" stroke-width="1.75" stroke-linejoin="round" stroke-linecap="round">
+              <path d="M 6.5 12.5 L 10 3.5 L 18 3.5 L 21.5 12.5 Z" />
+              <path d="M 12.95 12.5 C 12.95 13.6, 11.8 14.2, 11.8 15.6 C 11.8 17.0, 13.1 17.4, 13.1 18.4 C 13.1 19.7, 11.4 20.4, 11.4 22 L 16.6 22 C 16.6 20.4, 14.9 19.7, 14.9 18.4 C 14.9 17.4, 16.2 17.0, 16.2 15.6 C 16.2 14.2, 15.05 13.6, 15.05 12.5 Z" />
+              <path d="M 8.75 24.5 L 19.25 24.5" />
+              <path class="chain-casing" d="M 19 13.25 L 19 16.5" stroke-width="3.25" />
+              <path class="chain" d="M 19 13.25 L 19 16.5" stroke-width="1.25" />
+              <circle class="chain-pull" cx="19" cy="17.9" r="1.3" />
             </g>
           </svg>
         </button>

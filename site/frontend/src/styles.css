@@ -236,7 +236,7 @@ html:not([data-js]) .lamp-toggle {
   justify-content: center;
   min-width: 2.75rem;
   min-height: 2.75rem;
-  padding: 0.625rem;
+  padding: 0.5rem;
   background: transparent;
   border: 0;
   border-radius: 0;
@@ -261,11 +261,36 @@ html:not([data-js]) .lamp-toggle {
   stroke: var(--chrome-ink);
 }
 
+/* The lit grammar (spec 16.B): the shade's interior fills (the object holds
+ * the light), rays are pure strokes, the down beam is stroked geometry with
+ * the wash inside it, per law 1's first amendment. */
 .lamp-toggle .glow {
   stroke: var(--chrome-ink);
   fill: var(--lamp-glow);
   /* Auto: half lit, the cut landing on the stem, the lamp's own axis. */
   clip-path: url(#lamp-half);
+}
+
+.lamp-toggle .glow .ray {
+  fill: none;
+}
+
+/* The pull-chain: the part of a lamp a hand knows to reach for, on a control
+ * a hand presses. Accent in both schemes; the ground-colored casing
+ * guarantees its edge on every field it crosses (gold on the light wash is
+ * 1.62:1 without it). */
+.lamp-toggle .chain-casing {
+  stroke: var(--ground);
+}
+
+.lamp-toggle .chain {
+  stroke: var(--accent);
+}
+
+.lamp-toggle .chain-pull {
+  fill: var(--accent);
+  stroke: var(--ground);
+  stroke-width: 1;
 }
 
 :root[data-theme="light"] .lamp-toggle .glow {
