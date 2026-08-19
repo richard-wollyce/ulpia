@@ -80,10 +80,26 @@ mail records cannot be proxied, and a proxied `autoconfig` breaks mail client se
 | TXT | `@` | `v=spf1 include:_spf.mail.hostinger.com ~all` | |
 | TXT | `_dmarc` | `v=DMARC1; p=none` | |
 | CNAME | `autoconfig` | `autoconfig.mail.hostinger.com` | |
+| CNAME | `autodiscover` | `autodiscover.mail.hostinger.com` | |
+| CNAME | `hostingermail-a._domainkey` | `hostingermail-a.dkim.mail.hostinger.com` | |
+| CNAME | `hostingermail-b._domainkey` | `hostingermail-b.dkim.mail.hostinger.com` | |
+| CNAME | `hostingermail-c._domainkey` | `hostingermail-c.dkim.mail.hostinger.com` | |
 
-**Do not recreate the old `A @` record.** It pointed the apex at the previous web
-host; the apex belongs to Pages now and Cloudflare writes that record itself when the
-custom domain is attached.
+**The three `_domainkey` records are DKIM and they are not optional.** SPF says which
+server may send for the domain; DKIM signs each message so a receiver can verify it
+was not altered in transit and really came from us. Large mailbox providers now expect
+both, and SPF alone breaks the moment a message is forwarded, because the forwarding
+server is not in our SPF record while the DKIM signature still verifies. A domain that
+sends without DKIM lands in spam and teaches the receiving side to keep putting it
+there, which is a reputation this project needs intact before it ever mails a list.
+
+**Every one of these is DNS only.** Cloudflare proxies CNAMEs by default, and a
+proxied `_domainkey` returns Cloudflare's own addresses instead of the DKIM target,
+which silently breaks signing.
+
+**Do not recreate the old `A @` record, and do not recreate `www` by hand.** It pointed the apex at the previous web
+host, and `www` pointed at the apex. Both belong to Pages now, and Cloudflare writes
+them itself when the custom domains are attached.
 
 Verify from outside rather than from the dashboard, because the dashboard shows
 intent and DNS shows reality:
