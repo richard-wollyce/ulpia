@@ -88,7 +88,26 @@ impl Coverage {
 ///
 /// Deliberately small and deliberately closed: the classifier is told the only names it
 /// may answer with, so an invented agent is a parse failure rather than a routing error.
+///
+/// **Split into a prefix that never varies and a tail that always does**, and the split is
+/// worth real time rather than being tidiness. A resident llama.cpp server keeps the KV
+/// cache of the longest prefix it has already computed, so everything ahead of the first
+/// difference is free after the first message. Measured on this machine with a 2B: the
+/// server processed 755 tokens per message before the split and about 495 after it,
+/// 7.9 seconds of prefill down to 4.0.
+///
+/// The two halves are separate functions so the boundary is a thing the compiler knows
+/// about. Written as one function with a comment in the middle, the boundary survives
+/// exactly until someone adds a line in the wrong place.
 pub fn dossier(memory: &Memory, question: &str, found: &[Retrieved]) -> String {
+    let mut out = stable_prefix(memory);
+    out.push_str(&variable_tail(question, found));
+    out
+}
+
+/// Everything identical for every message: who is being asked, the roster, and the rules
+/// for judging. Changes only when the fleet does.
+fn stable_prefix(memory: &Memory) -> String {
     let mut out = String::new();
 
     out.push_str(
@@ -111,6 +130,49 @@ pub fn dossier(memory: &Memory, question: &str, found: &[Retrieved]) -> String {
         }
     }
 
+    // The judging rules sit here, ahead of the evidence, rather than after the message
+    // where they used to be. They are the same for every message, so they belong on this
+    // side of the boundary.
+    out.push_str(
+        "\nJudge by what each agent does and where it stops, never by the scores. The \
+         scores say which files share words with the message; they never say who \
+         understands the subject. A message may belong to an agent whose base scored \
+         nothing, and a high score in a base whose domain does not fit is a coincidence \
+         of vocabulary.\n\n\
+         COVERAGE is the field that matters and the bar for `covered` is high. Use it \
+         only when the subject is plainly part of what that agent does, as its own two \
+         lines describe it. If the subject merely sits near an agent's work, or needs \
+         knowledge that agent has no reason to hold, answer `adjacent` and name that \
+         agent as the nearest. When torn between covered and adjacent, answer adjacent.\n\n\
+         Worked example, with a fleet of a marketer, a nutritionist, an architect who \
+         builds software and stops before running it, and an interface designer, asked \
+         about Kubernetes autoscaling: the answer is `adjacent`, owner the architect, \
+         because operating systems in production is a different craft from designing and \
+         building them. Answering `covered` there hides a real gap behind a confident \
+         name, and the gap is the useful part: it tells the person a new agent may be \
+         worth creating.\n",
+    );
+
+    // **A second worked example, for `uncovered`, was written here and measured out.**
+    // The reasoning was clean: the rules demonstrate `adjacent` and never `uncovered`,
+    // so the answer that matters most has no example. It cost a question. Haiku scored
+    // 13 of 14 on the coverage set without it and 12 with it, and the 2B was unmoved at
+    // 6 either way. What the same session's measurements did buy was an edit to one
+    // agent's `ends` line, worth two questions.
+    //
+    // The general shape, since it is now the third time: **more instruction is not more
+    // accuracy, and the roster is where the leverage is.** A rule added to the prompt
+    // competes with every other rule for the model's attention; a fact added to an
+    // agent's card is the only description of that agent there is.
+
+    out
+}
+
+/// Everything that changes with the message: what retrieval found, the message itself,
+/// and the four lines to answer in.
+fn variable_tail(question: &str, found: &[Retrieved]) -> String {
+    let mut out = String::new();
+
     out.push_str(
         "\nWHAT THE LIBRARY FOUND for this message. The search is lexical, so a high score \
          means shared words and not shared meaning, and an empty list means nobody has \
@@ -132,29 +194,17 @@ pub fn dossier(memory: &Memory, question: &str, found: &[Retrieved]) -> String {
 
     out.push_str(&format!("\nTHE MESSAGE:\n  {}\n", question.replace('\n', " ")));
 
+    // The four fields are answered in the order they are derived in, not the order they
+    // are read in. A 0.8B asked for the owner first wrote `OWNER: steve` above a REASON
+    // that described a different agent entirely: it committed to a name and then
+    // narrated around it. Naming the subject first costs about twenty tokens of output
+    // and gives the choice something to follow from.
     out.push_str(
-        "\nJudge by what each agent does and where it stops, never by the scores. The \
-         scores say which files share words with the message; they never say who \
-         understands the subject. A message may belong to an agent whose base scored \
-         nothing, and a high score in a base whose domain does not fit is a coincidence \
-         of vocabulary.\n\n\
-         COVERAGE is the field that matters and the bar for `covered` is high. Use it \
-         only when the subject is plainly part of what that agent does, as its own two \
-         lines describe it. If the subject merely sits near an agent's work, or needs \
-         knowledge that agent has no reason to hold, answer `adjacent` and name that \
-         agent as the nearest. When torn between covered and adjacent, answer adjacent.\n\n\
-         Worked example, with a fleet of a marketer, a nutritionist, an architect who \
-         builds software and stops before running it, and an interface designer, asked \
-         about Kubernetes autoscaling: the answer is `adjacent`, owner the architect, \
-         because operating systems in production is a different craft from designing and \
-         building them. Answering `covered` there hides a real gap behind a confident \
-         name, and the gap is the useful part: it tells the person a new agent may be \
-         worth creating.\n\n\
-         Reply exactly:\n\
-         OWNER: <name from the list, or none>\n\
-         COVERAGE: <covered|adjacent|uncovered>\n\
+        "\nAnswer in exactly these four lines, in this order:\n\
          SUBJECT: <two to five words naming the domain this message belongs to>\n\
-         REASON: <one sentence>\n",
+         REASON: <one sentence>\n\
+         COVERAGE: <covered|adjacent|uncovered>\n\
+         OWNER: <name from the list, or none>\n",
     );
     out
 }
@@ -296,13 +346,42 @@ pub fn coverage_note(v: &Verdict) -> Option<String> {
 
 /// The deterministic choice, kept as the fallback and as the thing the classifier is
 /// measured against.
-pub fn fallback(choice: Option<AgentChoice>) -> Option<Verdict> {
+pub fn fallback(choice: Option<AgentChoice>, why: FellBack) -> Option<Verdict> {
     choice.map(|c| Verdict {
         owner: Some(c.agent),
         coverage: Coverage::Covered,
         subject: String::new(),
-        reason: "chosen by keyword score, with no classifier configured".into(),
+        reason: why.reason().into(),
     })
+}
+
+/// Why the deterministic choice is answering instead of a model.
+///
+/// **The two cases must not share a sentence.** The previous version said "no classifier
+/// configured" for both, so a fleet whose classifier was configured and dead reported
+/// itself as a fleet that had never asked for one. That is the same failure as running a
+/// stale binary and reporting the feature it did not contain: a message asserting
+/// something it never checked.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum FellBack {
+    /// `fleet.txt` names no classifier. The deterministic sum is the whole router, which
+    /// is a supported configuration and not a fault.
+    NotConfigured,
+    /// A classifier is configured and did not answer: not installed, not running, timed
+    /// out, or it named an agent off the roster. Routing continues, worse, and silently
+    /// unless somebody is told.
+    DidNotAnswer,
+}
+
+impl FellBack {
+    pub fn reason(self) -> &'static str {
+        match self {
+            Self::NotConfigured => "chosen by keyword score, with no classifier configured",
+            Self::DidNotAnswer => {
+                "chosen by keyword score, because the configured classifier did not answer"
+            }
+        }
+    }
 }
 
 #[cfg(test)]
@@ -311,6 +390,44 @@ mod tests {
 
     fn roster() -> Vec<String> {
         vec!["aldo".into(), "steve".into(), "yaron".into(), "zed".into()]
+    }
+
+    fn evidence(n: usize) -> Vec<Retrieved> {
+        (0..n)
+            .map(|i| Retrieved {
+                base: "zed".into(),
+                path: format!("knowledge/systems/a-file-with-a-realistic-name-{i}.md"),
+                title: String::new(),
+                score: 0.0,
+                keyword_score: 15.0,
+                why: vec![],
+                matched: vec!["deploy".into(), "monitoring".into()],
+                passages: vec![],
+            })
+            .collect()
+    }
+
+    /// **That the prefix cannot contain the message is the compiler's job, not this
+    /// test's**: `stable_prefix` is not handed the question, so no edit can put one there
+    /// without changing a signature. What no signature can check is how much is left on
+    /// the variable side, and that is what decides whether caching the prefix pays.
+    ///
+    /// The measured prefix on this fleet is about 550 tokens. A tail that grew past it
+    /// would mean most of each message is recomputed anyway and the split stopped earning
+    /// its complexity. 1400 characters is roughly 350 tokens, comfortably under, and the
+    /// number is a tripwire rather than a target.
+    #[test]
+    fn the_variable_half_stays_small_enough_for_caching_the_other_half_to_pay() {
+        let tail = variable_tail(
+            "como faco deploy com zero downtime e monitoramento de infra",
+            &evidence(5),
+        );
+        assert!(
+            tail.len() < 1400,
+            "the variable tail grew to {} chars; caching the prefix stops paying",
+            tail.len()
+        );
+        assert!(tail.contains("zero downtime"), "the message belongs on the variable side");
     }
 
     #[test]

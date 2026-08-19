@@ -137,9 +137,15 @@ pub fn brief(memory: &Memory, root: &Path, req: &Request, top: usize) -> Briefin
     .or_else(|| {
         // No classifier, or it could not be reached. The deterministic choice stands,
         // gated by the floor exactly as before, so the fleet keeps routing when a model
-        // is unavailable rather than stopping.
+        // is unavailable rather than stopping. Which of the two happened is carried
+        // forward, because a configured classifier that is not answering is a fault and
+        // a fleet without one is not.
+        let why = match classifier {
+            crate::classify::Classifier::None => crate::classify::FellBack::NotConfigured,
+            _ => crate::classify::FellBack::DidNotAnswer,
+        };
         match answer.confidence.verdict {
-            Verdict::Hit => crate::classify::fallback(answer.agent.clone()),
+            Verdict::Hit => crate::classify::fallback(answer.agent.clone(), why),
             _ => None,
         }
     });
@@ -164,6 +170,15 @@ pub fn brief(memory: &Memory, root: &Path, req: &Request, top: usize) -> Briefin
             };
         }
     }
+
+    // **Say it out loud when a configured classifier is not answering.** The fallback is
+    // good enough that nothing looks broken: routing continues, an agent is named, and
+    // the only symptom is worse choices. That is how a stale binary ran for a day with
+    // the classifier compiled out of it while the surface reported it working. Degraded
+    // and silent is the combination that costs the most to find.
+    let degraded = verdict
+        .as_ref()
+        .is_some_and(|v| v.reason == crate::classify::FellBack::DidNotAnswer.reason());
 
     let chosen = verdict.as_ref().and_then(|v| v.owner.clone());
 
@@ -242,6 +257,14 @@ pub fn brief(memory: &Memory, root: &Path, req: &Request, top: usize) -> Briefin
         }
     } else {
         text.push_str(&format!("VESTA: still {agent}.\n\n"));
+    }
+
+    if degraded {
+        text.push_str(
+            "VESTA: the configured classifier did not answer, so this was routed by \
+             keyword score alone. Routing is degraded, not stopped. Say so if the choice \
+             looks wrong.\n\n",
+        );
     }
 
     if files.is_empty() {
