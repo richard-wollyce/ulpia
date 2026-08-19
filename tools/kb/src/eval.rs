@@ -43,6 +43,10 @@ pub struct Row {
     pub agent: Option<AgentChoice>,
     /// The same choice folded from the keyword ranking instead of the fused one.
     pub keyword_agent: Option<AgentChoice>,
+    /// What the model said, when `kb eval --classify` ran one. The whole point of
+    /// measuring it beside the arithmetic is that the choice between them is a
+    /// decision about latency against correctness, and that decision needs numbers.
+    pub classified: Option<crate::classify::Verdict>,
     pub confidence: Confidence,
     pub micros: u128,
     pub keyword_micros: u128,
@@ -120,6 +124,17 @@ impl Row {
             None => false,
         }
     }
+
+    /// A classifier hit. **Abstention counts as correct on an abstain row**, which
+    /// the arithmetic cannot score at all: naming no owner for a question the fleet
+    /// does not cover is the right answer, not a miss.
+    pub fn classified_hit(&self) -> bool {
+        let Some(v) = &self.classified else { return false };
+        match &v.owner {
+            Some(o) => self.correct_agents().contains(&o.as_str()),
+            None => self.expects_abstention(),
+        }
+    }
 }
 
 /// Reads `question<TAB>path[|path...]`, where a lone `-` means abstain.
@@ -181,6 +196,22 @@ pub fn stale_answers(rows: &[(String, Vec<String>)], memory: &Memory) -> Vec<Str
 }
 
 pub fn run(memory: &Memory, rows: &[(String, Vec<String>)], top: usize) -> Vec<Row> {
+    run_with(memory, rows, top, false, Path::new("."))
+}
+
+/// The same pass, optionally asking the configured classifier about every question.
+///
+/// Slow on purpose when `classify` is set: it spawns one model call per question, which
+/// is exactly the cost being measured.
+pub fn run_with(
+    memory: &Memory,
+    rows: &[(String, Vec<String>)],
+    top: usize,
+    classify: bool,
+    root: &Path,
+) -> Vec<Row> {
+    let classifier = memory.classifier();
+    let roster = memory.roster();
     let routable: Vec<String> =
         memory.agents.iter().filter(|a| a.routable).map(|a| a.name.clone()).collect();
     let _ = &routable;
@@ -208,6 +239,16 @@ pub fn run(memory: &Memory, rows: &[(String, Vec<String>)], top: usize) -> Vec<R
                 keyword_top: answer.keyword_top.clone(),
                 agent: memory.choose_agent(&answer.found),
                 keyword_agent,
+                classified: if classify {
+                    crate::classify::run(
+                        &classifier,
+                        root,
+                        &crate::classify::dossier(memory, question, &answer.found),
+                        &roster,
+                    )
+                } else {
+                    None
+                },
                 confidence: answer.confidence,
                 micros,
                 keyword_micros,
@@ -241,6 +282,9 @@ pub struct Summary {
     pub keyword_hits: usize,
     pub agent_hits: usize,
     pub keyword_agent_hits: usize,
+    /// Correct owners chosen by the classifier, and how many questions it was asked.
+    pub classified_hits: usize,
+    pub classified_asked: usize,
     /// The agent-level denominator: answerable questions that have an owner at all.
     pub ownable: usize,
     pub baseline_agent: String,
@@ -299,6 +343,8 @@ pub fn summarise(rows: &[Row]) -> Summary {
         keyword_hits: answerable.iter().filter(|r| r.keyword_hit()).count(),
         agent_hits: ownable.iter().filter(|r| r.agent_hit()).count(),
         keyword_agent_hits: ownable.iter().filter(|r| r.keyword_agent_hit()).count(),
+        classified_hits: ownable.iter().filter(|r| r.classified_hit()).count(),
+        classified_asked: rows.iter().filter(|r| r.classified.is_some()).count(),
         ownable: ownable.len(),
         baseline_agent,
         baseline_hits,
@@ -351,6 +397,7 @@ mod tests {
             },
             micros: 100,
             keyword_micros: 40,
+            classified: None,
             routable: Vec::new(),
         }
     }

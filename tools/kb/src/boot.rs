@@ -115,21 +115,65 @@ pub fn brief(memory: &Memory, root: &Path, req: &Request, top: usize) -> Briefin
     }
 
     let answer = memory.ask(&req.prompt, top);
-    let chosen = match (&answer.agent, answer.confidence.verdict) {
-        (Some(choice), Verdict::Hit) => Some(choice.agent.clone()),
-        // Below the gate the fleet does not hand over an identity. Saying "I am not sure
-        // who owns this" is a usable answer; picking the largest base and sounding certain
-        // is the failure this system exists to avoid.
-        _ => None,
-    };
+
+    // **Retrieval is code; choosing who answers is a judgement.** ADR-0013 said so and
+    // this is where it finally holds: the deterministic sum is now the fallback, and a
+    // model reads the roster and the evidence when one is configured. It sees a dossier
+    // of roughly three hundred tokens and never the corpus, so it cannot invent a file,
+    // and its answer is a name from a list it was handed.
+    let classifier = memory.classifier();
+    let roster_names = memory.roster();
+
+    // **The cascade was built, measured and rejected. See `classify::is_uncontested`.**
+    // The classifier is consulted on every message, because the one signal a cascade
+    // could gate on is the deterministic score, and the deterministic score does not
+    // know when it is wrong. That is the whole reason this module exists.
+    let verdict = crate::classify::run(
+        &classifier,
+        root,
+        &crate::classify::dossier(memory, &req.prompt, &answer.found),
+        &roster_names,
+    )
+    .or_else(|| {
+        // No classifier, or it could not be reached. The deterministic choice stands,
+        // gated by the floor exactly as before, so the fleet keeps routing when a model
+        // is unavailable rather than stopping.
+        match answer.confidence.verdict {
+            Verdict::Hit => crate::classify::fallback(answer.agent.clone()),
+            _ => None,
+        }
+    });
+
+    // A subject nobody owns is reported, not routed. This is the state arithmetic could
+    // never express: a score of zero says "no match" and never says "no one here does
+    // this kind of work".
+    if let Some(v) = &verdict {
+        if let Some(note) = crate::classify::coverage_note(v) {
+            let nearest = v
+                .owner
+                .as_ref()
+                .map(|o| format!(
+                    "\n\nIf you answer anyway, answer as {o} and say plainly that this is \
+                     outside the fleet's covered ground.\n"
+                ))
+                .unwrap_or_default();
+            return Briefing {
+                agent: None,
+                switched: false,
+                text: format!("{note}{nearest}\n{}", roster(memory)),
+            };
+        }
+    }
+
+    let chosen = verdict.as_ref().and_then(|v| v.owner.clone());
 
     let Some(agent) = chosen else {
         return Briefing {
             agent: None,
             switched: false,
             text: format!(
-                "VESTA: routed this message and did not find an owner above the \
-                 confidence floor (top keyword score {:.1}, floor {:.1}).\n\n\
+                "VESTA: routed this message and found no owner (top keyword score {:.1}, \
+                 floor {:.1}).\n\n\
                  Do not assume an agent. Either ask which one this belongs to, or answer \
                  as the fleet's librarian and say the base does not appear to cover it.\n\n{}",
                 answer.confidence.keyword_score,

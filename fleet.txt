@@ -20,3 +20,13 @@ role = Keeper of the fleet: knows who is here, routes what arrives, and holds th
 # system's own design find their answers without a model.
 attach = decisions
 
+
+# Who answers is a judgement, not a sum. The deterministic score says which files
+# share words with the message; it cannot say which agent understands the subject,
+# and it cannot say that nobody here does. A classifier reads the roster and the
+# evidence and answers both. See decisions/0027.
+#
+# The contract is a process: dossier on stdin, verdict on stdout. Any model behind
+# any runtime satisfies it, and when this line is absent or the command fails, the
+# deterministic choice stands, so the fleet never stops routing.
+classifier = tools\classify-claude.cmd

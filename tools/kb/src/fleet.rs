@@ -22,6 +22,14 @@ use std::path::{Path, PathBuf};
 /// A name and a role, as written in `fleet.txt` or `agent.txt`.
 pub struct Card {
     pub name: String,
+    /// Where the agent stops, from `ends =`. Absent for an agent that never said.
+    ///
+    /// **A roster of roles tells a reader what each agent does and never what none
+    /// of them does**, which is exactly the judgement the classifier exists to make.
+    /// Without edges, a model asked about DevOps sees "software architecture and
+    /// building" and calls it covered, because it plausibly is, and the fleet loses
+    /// the answer that matters: nobody here operates systems in production.
+    pub ends: Option<String>,
     /// Absent means the file has no `role =` line. Absent, not invented: a role we
     /// made up would read exactly like one the owner chose.
     pub role: Option<String>,
@@ -49,6 +57,7 @@ pub fn card(dir: &Path, file: &str, fallback: &str) -> Card {
     let text = std::fs::read_to_string(dir.join(file)).unwrap_or_default();
     let mut name = None;
     let mut role = None;
+    let mut ends = None;
 
     for line in text.lines() {
         let line = line.split('#').next().unwrap_or("").trim();
@@ -60,11 +69,12 @@ pub fn card(dir: &Path, file: &str, fallback: &str) -> Card {
         match key.trim() {
             "name" => name = Some(value.to_string()),
             "role" => role = Some(value.to_string()),
+            "ends" => ends = Some(value.to_string()),
             _ => {}
         }
     }
 
-    Card { name: name.unwrap_or_else(|| title_case(fallback)), role }
+    Card { name: name.unwrap_or_else(|| title_case(fallback)), role, ends }
 }
 
 fn title_case(name: &str) -> String {
@@ -150,14 +160,14 @@ mod tests {
     #[test]
     fn the_description_names_every_agent_and_says_where_it_came_from() {
         let d = Description {
-            fleet: Card { name: "Fleet".into(), role: None },
+            fleet: Card { name: "Fleet".into(), role: None, ends: None },
             members: vec![
                 Member {
-                    card: Card { name: "Steve".into(), role: Some("marketing".into()) },
+                    card: Card { name: "Steve".into(), role: Some("marketing".into()), ends: None },
                     root: PathBuf::from("/f/fleet/steve"),
                 },
                 Member {
-                    card: Card { name: "Zed".into(), role: None },
+                    card: Card { name: "Zed".into(), role: None, ends: None },
                     root: PathBuf::from("/f/fleet/zed"),
                 },
             ],
@@ -179,7 +189,7 @@ mod tests {
     #[test]
     fn an_empty_fleet_says_so_rather_than_rendering_nothing() {
         let d = Description {
-            fleet: Card { name: "Fleet".into(), role: Some("orchestrator".into()) },
+            fleet: Card { name: "Fleet".into(), role: Some("orchestrator".into()), ends: None },
             members: vec![],
         };
         let text = d.to_text();

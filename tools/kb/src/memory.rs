@@ -679,6 +679,29 @@ impl Memory {
     /// measurement instead of rediscovering the idea.
 
 
+    /// The classifier declared in the fleet manifest, if any.
+    ///
+    /// Read from the opened roots rather than stored at open time, because a fleet root
+    /// is a path the caller gave and re-reading one small file costs nothing next to
+    /// being wrong about which fleet is being served.
+    pub fn classifier(&self) -> crate::classify::Classifier {
+        for root in &self.opened {
+            if let (_, _, Some(cmd)) = manifest_full(&root.join(MANIFEST)) {
+                return crate::classify::Classifier::Command(cmd);
+            }
+        }
+        crate::classify::Classifier::None
+    }
+
+    /// The names an owner may have: the bases that declared themselves agents.
+    pub fn roster(&self) -> Vec<String> {
+        self.agents
+            .iter()
+            .filter(|a| a.routable)
+            .map(|a| a.name.to_lowercase())
+            .collect()
+    }
+
     /// True when the full text index has no chunks for anything the keywords ranked,
     /// which almost always means the index is stale rather than the base being thin.
     /// Worth saying out loud: the alternative is a caller concluding the base is empty.
@@ -816,13 +839,23 @@ fn bases_in(dir: &Path) -> Vec<PathBuf> {
 /// and for the same reason: the person editing it just watched something go wrong,
 /// and a format they have to look up is a format they will not use.
 fn manifest(path: &Path) -> (Vec<String>, Vec<String>) {
+    let (attach, disable, _) = manifest_full(path);
+    (attach, disable)
+}
+
+/// The manifest, including the classifier line.
+///
+/// Separate from `manifest` because `expand_roots` runs before a `Memory` exists and
+/// only needs the first two, while the classifier is read once the fleet root is known.
+fn manifest_full(path: &Path) -> (Vec<String>, Vec<String>, Option<String>) {
     let text = match std::fs::read_to_string(path) {
         Ok(t) => t,
-        Err(_) => return (Vec::new(), Vec::new()),
+        Err(_) => return (Vec::new(), Vec::new(), None),
     };
 
     let mut attach = Vec::new();
     let mut disable = Vec::new();
+    let mut classifier = None;
     for line in text.lines() {
         let line = line.split('#').next().unwrap_or("").trim();
         let Some((key, value)) = line.split_once('=') else { continue };
@@ -833,10 +866,11 @@ fn manifest(path: &Path) -> (Vec<String>, Vec<String>) {
         match key.trim() {
             "attach" => attach.push(value),
             "disable" => disable.push(value),
+            "classifier" => classifier = Some(value),
             _ => {}
         }
     }
-    (attach, disable)
+    (attach, disable, classifier)
 }
 
 #[cfg(test)]

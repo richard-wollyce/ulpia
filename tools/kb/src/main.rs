@@ -24,7 +24,7 @@ usage:
     kb write <agent> <slug> [fleet-root] --keys <a, b> --summary <one line> [--folder F]
     kb fleet [path]... [--all]
     kb blocks [path] [--emit]
-    kb eval <gold.tsv> [path]... [--top N] [--all]
+    kb eval <gold.tsv> [path]... [--top N] [--all] [--classify]
     kb commit <path>... -m <message>
     kb boot [path]... [--top N] [--all]
     kb ui [path]... [--port N] [--all]
@@ -179,7 +179,7 @@ fn main() -> ExitCode {
             }
             let gold = positional[0];
             let paths = paths_or_default(&positional[1..]);
-            cmd_eval(Path::new(gold), &paths, all, top)
+            cmd_eval(Path::new(gold), &paths, all, top, args.iter().any(|a| a == "--classify"))
         }
         "fleet" => cmd_fleet(&paths_or_default(&positional), all),
         "blocks" => {
@@ -722,7 +722,7 @@ left untouched, still dirty ({}):", done.left_alone.len());
 // eval
 // ---------------------------------------------------------------------------
 
-fn cmd_eval(gold_path: &Path, paths: &[&str], all: bool, top: usize) -> ExitCode {
+fn cmd_eval(gold_path: &Path, paths: &[&str], all: bool, top: usize, classify: bool) -> ExitCode {
     let rows = match eval::read_gold(gold_path) {
         Ok(r) => r,
         Err(e) => {
@@ -756,7 +756,11 @@ fn cmd_eval(gold_path: &Path, paths: &[&str], all: bool, top: usize) -> ExitCode
         return ExitCode::from(1);
     }
 
-    let graded = eval::run(&memory, &rows, top);
+    if classify {
+        eprintln!("kb eval: asking the classifier about every question, one model call each.");
+    }
+    let root = given.first().copied().unwrap_or_else(|| Path::new("."));
+    let graded = eval::run_with(&memory, &rows, top, classify, root);
     let s = eval::summarise(&graded);
 
     println!("gold:     {} questions, {} answerable", graded.len(), s.answerable);
@@ -830,6 +834,14 @@ fn cmd_eval(gold_path: &Path, paths: &[&str], all: bool, top: usize) -> ExitCode
         println!(
             "       ({} question(s) excluded: answered only from an attached base, which              can be read but cannot be the agent who answers)",
             s.answerable - s.ownable
+        );
+    }
+    if s.classified_asked > 0 {
+        println!(
+            "       model     {}/{}  ({:.0}%), a classifier reading the roster and the evidence",
+            s.classified_hits,
+            s.ownable,
+            pct(s.classified_hits, s.ownable)
         );
     }
     println!(

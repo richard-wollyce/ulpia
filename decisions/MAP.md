@@ -372,3 +372,27 @@
   Search for: `wikilink`, `link`, `broken link`, `E01`, `base scope`, `escopo`, `cross-base`,
   `resolucao`, `resolve`, `privacy boundary`, `fronteira`, `ribbon`, `fita`, `stacks`, `Z38`,
   `convention`, `convencao`.
+
+- **[[0027-a-model-decides-who-answers]]** 🟢 accepted 2026-08-19. **Choosing an agent is
+  classification, so a model does it.** Written after four sessions of routing failures and
+  Richard's demand that the system work independently of what is in the bases. The answer was
+  already in this repository: ADR-0013 says *classification is the model's job and lookup is the
+  code's job*, and choosing an owner had been built as a sum of IDF weighted keyword scores, then
+  patched for three days with stopword lists, aliases, an incumbent margin and a share
+  normalisation, most of them measured and removed. **The patching was the symptom.** Retrieval is
+  lexical and a keyword index answers it; *who understands this subject* is semantic and no count
+  of shared words answers it, which a subject nobody has written about proves: the word **zero**
+  in "zero downtime" gave the marketing agent 100% of the field. Retrieval is unchanged; the
+  classifier gets a **dossier** of roster plus evidence, never the corpus, so it cannot invent a
+  file. Agents now declare `ends =`, because a roster of roles says what each agent does and never
+  what none of them does. **Coverage is a first class answer**: covered, adjacent, uncovered, so
+  the fleet can say nobody here does this and name the nearest, which is the input to creating an
+  agent. Contract is a process, dossier on stdin and verdict on stdout, so any model behind any
+  runtime satisfies it. Carries a **built and rejected cascade**: gating the model on the
+  deterministic score cut latency from 14s to 1s and routed DevOps to marketing in 971ms, because
+  a gate built on a blind signal inherits the blindness. Costs 13 to 16 seconds per message, stated
+  and not hidden.
+  Search for: `classifier`, `classificador`, `roteamento`, `routing`, `who answers`, `quem
+  responde`, `agent selection`, `escolha de agente`, `coverage`, `cobertura`, `devops`, `gap`,
+  `novo agente`, `new agent`, `dossier`, `ends`, `edges`, `bordas`, `cascade`, `cascata`,
+  `latency`, `latencia`, `model in the loop`, `modelo`.
