@@ -141,28 +141,24 @@ pub fn brief(memory: &Memory, root: &Path, req: &Request, top: usize) -> Briefin
 
     let previous = last_agent(root, &req.session);
 
-    // Stickiness. A follow-up like "yes, run it and measure" carries no domain content
-    // and still matches something somewhere: that exact message routed to the nutrition
-    // agent at 28.44 because a recipes file contains the word "out". The floor cannot
-    // catch it, because the floor asks whether anything matched and not whether anything
-    // about *this domain* matched. So the agent already holding the conversation keeps
-    // it unless a challenger beats it by SWITCH_MARGIN.
-    let agent = match (&previous, &answer.agent) {
-        (Some(prev), Some(choice)) if !prev.eq_ignore_ascii_case(&agent) => {
-            let incumbent = choice
-                .totals
-                .iter()
-                .find(|(name, _)| name.eq_ignore_ascii_case(prev))
-                .map(|(_, w)| *w)
-                .unwrap_or(0.0);
-            if incumbent > 0.0 && choice.score < incumbent * crate::memory::SWITCH_MARGIN {
-                prev.clone()
-            } else {
-                agent
-            }
-        }
-        _ => agent,
-    };
+    // **Stickiness was built here and removed on 2026-08-19, measured both times.**
+    //
+    // It existed because "yes, run it and measure" routed to the nutrition agent at
+    // 28.44 on the word "out" from a recipes file. The real cause was the stopword
+    // list, not the absence of an incumbent: completing the closed classes dropped
+    // "ok obrigado", "isso ai", "pode fazer" and "continua" to a score of **zero**,
+    // where the confidence floor already handles them and never changes the agent.
+    //
+    // What the incumbent rule did instead was freeze a wrong answer. Richard's
+    // session pinned to the marketing agent and stayed there through four messages
+    // about routing and interface design, because a challenger had to double the
+    // incumbent to take the conversation. The hook said "still steve" while he asked
+    // about the router. **A mechanism that needs the first answer to be right is not
+    // a correction mechanism.**
+    //
+    // Same shape as MIN_MARGIN and the corpus-share normalisation: reasoned into
+    // existence, then removed once the instrument had an opinion. The floor decides,
+    // and a message with nothing in it changes nothing.
 
     let switched = previous.as_deref() != Some(agent.as_str());
     remember_agent(root, &req.session, &agent);

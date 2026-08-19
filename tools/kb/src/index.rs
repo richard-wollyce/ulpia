@@ -114,6 +114,14 @@ const STOPWORDS: &[&str] = &[
     "e", "ou", "mas", "se", "que", "qual", "quais", "como", "quem", "quanto",
     "quanta", "quantos", "quantas", "quando", "onde", "porque", "nao", "sim",
     "ja", "la", "mais", "menos", "muito", "muita", "muitos", "muitas", "tambem",
+    // "ai" is the Portuguese interjection and filler, and it collides head-on with
+    // the English initialism AI. Measured 2026-08-19: the message "isso ai", which
+    // carries no content at all, scored 34.42 and routed confidently to marketing,
+    // because a research note about AI slop matched on those two letters. Dropping
+    // it costs the ability to search for "AI" alone, which was never a good search
+    // term: it appears in everything and the questions people actually ask say IA,
+    // inteligencia artificial, modelo or LLM.
+    "ai",
     "so", "apenas", "ainda", "agora", "hoje", "tudo", "todo", "toda", "todos",
     "todas", "outro", "outra", "entao", "assim", "aqui", "ali",
 ];

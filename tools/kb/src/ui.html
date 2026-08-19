@@ -799,10 +799,15 @@ function loadFleet() {
         <div class="meta">${a.files} tracked files</div>
       </div>`).join('');
 
+    /* Named plainly. The first draft read "2 shared bases the whole fleet reads and
+       none of them is: profile, decisions", which a reader can parse as denying that
+       those two are the shared bases. A sentence whose grammar allows the opposite
+       reading is a wrong sentence, however true the intent. */
     $('#sharednote').innerHTML = shared.length
-      ? `Plus ${shared.length} shared base${shared.length === 1 ? '' : 's'} the whole fleet
-         reads and none of them is: ${shared.map(s => esc(s.name.toLowerCase())).join(', ')}.
-         They shelve in <a class="file" onclick="show('stacks')">the stacks</a> like everything else.`
+      ? `${shared.map(s => `<b>${esc(s.name.toLowerCase())}</b>`).join(' and ')} are shared
+         bases: every agent reads them, and none of them is an agent, so the router can
+         never hand them a question to answer. They shelve in
+         <a class="file" onclick="show('stacks')">the stacks</a> with everything else.`
       : '';
   }).catch(e => $('#sub').textContent = 'the server went away: ' + e);
 }

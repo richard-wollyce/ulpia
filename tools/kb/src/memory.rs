@@ -36,22 +36,23 @@ use crate::store::{Scope, Store};
 /// remembered, and it moves when the evidence moves.
 pub const SCORE_FLOOR: f32 = 6.0;
 
-/// How far a challenger must beat the agent already holding the conversation.
+/// **The incumbent margin was built, measured and removed on 2026-08-19.** The constant
+/// is gone; this note is what it left behind.
 ///
-/// **A follow-up message is not a new question.** "yes, run it and measure" carries almost
-/// no domain content, and on 2026-08-18 it routed to the nutrition agent at a score of
-/// 28.44, because `recipes/eating-out.md` matched the word **out** and IDF rated that word
-/// informative. It cleared the 6.0 floor comfortably. The floor answers "did anything
-/// match" and cannot answer "did anything about *this domain* match", so a conversational
-/// turn will always find something somewhere.
+/// It was meant for follow-ups with no domain content, after "yes, run it and measure"
+/// routed to the nutrition agent at 28.44 because a recipes file contains the word "out".
+/// The diagnosis was wrong: the cause was an incomplete stopword list, and completing the
+/// closed classes dropped every such message to a score of **zero**, where the confidence
+/// floor already handles them.
 ///
-/// Stickiness is the cheaper fix than trying to enumerate meaningless words in two
-/// languages: once an agent holds the conversation, the incumbent keeps it unless a
-/// challenger beats it by this factor. A continuation scores diffusely across bases and
-/// loses; a genuine topic change concentrates and wins.
+/// What the margin actually did was freeze the first answer. A session that started on the
+/// wrong agent stayed there, because a challenger had to double the incumbent to take the
+/// conversation, and the hook kept reporting "still steve" through four messages about
+/// routing and interface design. **A rule that requires the first answer to be right is
+/// not a correction mechanism, it is a commitment mechanism.**
 ///
-/// Calibrated by `kb eval` against continuation rows added to the gold set, not chosen.
-pub const SWITCH_MARGIN: f64 = 2.0;
+/// Third time this shape has appeared: reasoned into existence, kept until `kb eval` and a
+/// replay disagreed, then removed. See `MIN_MARGIN` and Z33.
 
 /// The margin over the runner-up is **measured, reported, and deliberately not part
 /// of the verdict.** This constant is what it would have been.
@@ -1000,15 +1001,27 @@ mod tests {
 
     /// One base answering and no other base having anything to say is the one case
     /// where an absent runner-up really is maximum confidence, unlike at file level.
-    /// Stickiness: the incumbent keeps the conversation unless the challenger clears
-    /// SWITCH_MARGIN. The real case, replayed: "yes, run it and measure" scored 28.44 for
-    /// the nutrition base because a recipes file contains the word "out", against 16.07
-    /// for the architect who was already answering. 28.44 / 16.07 is 1.77, under 2.0, so
-    /// the conversation stays where it was.
+    /// The incumbent rule is gone, and this is the test that replaced it: the words
+    /// it was built for now score **nothing**, so the floor handles them and no
+    /// second mechanism is needed. Guards the stopword list against a regression
+    /// that would bring the whole argument back.
     #[test]
-    fn a_challenger_that_does_not_clear_the_switch_margin_does_not_take_the_conversation() {
-        assert!(28.44 / 16.07 < SWITCH_MARGIN, "a continuation does not flip the agent");
-        assert!(180.0 / 16.07 >= SWITCH_MARGIN, "a real topic change still does");
+    fn a_message_with_no_content_scores_nothing_at_all() {
+        let entries = vec![
+            Entry {
+                base: "yaron".into(), rel: "recipes/eating-out.md".into(),
+                stem: "eating-out".into(), title: "Eating out".into(),
+                keywords: vec!["comer fora".into(), "restaurante".into()],
+                summary: String::new(), body: "comer fora restaurante".into(),
+            },
+        ];
+        for empty in ["ok obrigado", "isso ai", "pode fazer", "continua", "yes lets do it"] {
+            let hits = index::route(empty, &entries, &[], 5);
+            assert!(
+                hits.is_empty(),
+                "{empty:?} carries no domain content and must not reach a file"
+            );
+        }
     }
 
     #[test]
