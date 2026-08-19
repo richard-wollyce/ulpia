@@ -17,11 +17,20 @@
 //! viewer shows the compiled prompt; ours shows what `kb boot` would inject, which is
 //! stronger, because our injection is deterministic and theirs is approximated.
 //!
-//! What was deliberately not stolen: their WebSocket envelope. It is the best engineered
-//! piece of their stack (event_seq, idempotency_key, sync replay) and it earns its
-//! complexity only when messages stream from a live model loop. This page inspects; it
-//! does not chat. The envelope gets copied the day a model loop lives behind this server,
-//! and not one day earlier, per the-bar's rule on complexity bought before the use case.
+//! The desk (chat) rides the same mechanism as every session: it spawns the Claude Code
+//! CLI headless in the fleet root, and the `UserPromptSubmit` hook boots the agent there
+//! exactly as it does here, so a chat message is routed by Vesta with zero code in this
+//! file deciding anything. The CLI's `--output-format stream-json` is already a typed
+//! message union, which is the half of Letta's wire design worth having. **The prompt
+//! travels on the child's stdin, never as an argument**: on Windows a `.cmd` shim is
+//! launched through cmd.exe, whose argument quoting is exploitable with attacker text
+//! (the BatBadBut class), and stdin has no quoting to exploit.
+//!
+//! Their full WebSocket envelope (event_seq, idempotency_key, sync replay) is adopted in
+//! one third: events carry a sequence number. The rest earns its complexity only with a
+//! second client on a lossy transport, which is the phone, which is an ADR of its own:
+//! it needs a non-loopback bind, a token, and an answer to PWAs requiring a secure
+//! context off localhost. Deferred deliberately, not forgotten.
 //!
 //! ## Security posture, in one paragraph
 //!
@@ -33,9 +42,11 @@
 //! it is unrepresentable. The private layer stays out the same way it does everywhere
 //! else: `Base::discover` narrowed to what git tracks unless `--all` said otherwise.
 
-use std::io::{Read, Write};
+use std::collections::HashMap;
+use std::io::{BufRead, BufReader, Read, Write};
 use std::net::{TcpListener, TcpStream};
-use std::path::Path;
+use std::path::{Path, PathBuf};
+use std::sync::{Arc, Mutex};
 
 use crate::base::Base;
 use crate::blocks;
@@ -101,15 +112,30 @@ pub fn serve(paths: &[&str], all: bool, port: u16) -> Result<(), String> {
 
     // Sequential on purpose. One local user, and a single thread means the State
     // needs no lock and a reload cannot race a read half way through.
+    // Sequential for everything that reads State: one local user, no lock, and a
+    // reload cannot race a read. The one exception is the desk: a chat turn takes as
+    // long as the model takes, and holding every other panel hostage to it teaches
+    // the user not to chat. Chat requests get their socket and a thread, and touch
+    // no State at all: the child process and the boot hook do the routing, which is
+    // ADR-0022 doing the work.
+    let chats: Arc<Mutex<HashMap<String, String>>> = Arc::new(Mutex::new(HashMap::new()));
+    let root: PathBuf =
+        state.roots.first().cloned().unwrap_or_else(|| PathBuf::from("."));
+
     for stream in listener.incoming() {
         let Ok(mut stream) = stream else { continue };
         let _ = stream.set_read_timeout(Some(std::time::Duration::from_secs(5)));
-        let _ = handle(&mut stream, &mut state);
+        let _ = handle(&mut stream, &mut state, &chats, &root);
     }
     Ok(())
 }
 
-fn handle(stream: &mut TcpStream, state: &mut State) -> std::io::Result<()> {
+fn handle(
+    stream: &mut TcpStream,
+    state: &mut State,
+    chats: &Arc<Mutex<HashMap<String, String>>>,
+    root: &Path,
+) -> std::io::Result<()> {
     // Enough for a request line and headers; bodies are not read because no endpoint
     // takes one. A larger request is somebody else's protocol.
     let mut buf = [0u8; 8192];
@@ -133,7 +159,22 @@ fn handle(stream: &mut TcpStream, state: &mut State) -> std::io::Result<()> {
             let q = param(query, "q").unwrap_or_default();
             respond_json(stream, api_route(state, &q))
         }
-        ("GET", "/api/graph") => respond_json(stream, api_graph(state)),
+        ("GET", "/api/stacks") => respond_json(stream, api_stacks(state)),
+        ("GET", "/font/400") => respond_bytes(stream, "font/woff2", FONT_400),
+        ("GET", "/font/400i") => respond_bytes(stream, "font/woff2", FONT_400I),
+        ("GET", "/font/600") => respond_bytes(stream, "font/woff2", FONT_600),
+        ("GET", "/api/chat") => {
+            let msg = param(query, "m").unwrap_or_default();
+            let chat = param(query, "chat").unwrap_or_else(|| "desk".into());
+            let resume = chats.lock().ok().and_then(|m| m.get(&chat).cloned());
+            let chats = Arc::clone(chats);
+            let root = root.to_path_buf();
+            let stream = stream.try_clone()?;
+            std::thread::spawn(move || {
+                let _ = chat_stream(stream, &root, &chat, &msg, resume, &chats);
+            });
+            Ok(())
+        }
         ("GET", "/api/blocks") => respond_json(stream, api_blocks(state)),
         ("GET", "/api/check") => respond_json(stream, api_check(state)),
         ("GET", "/api/file") => {
@@ -169,6 +210,181 @@ fn respond(stream: &mut TcpStream, code: u16, ctype: &str, body: &str) -> std::i
 fn respond_json(stream: &mut TcpStream, v: Value) -> std::io::Result<()> {
     respond(stream, 200, "application/json", &v.to_string())
 }
+
+fn respond_bytes(stream: &mut TcpStream, ctype: &str, body: &[u8]) -> std::io::Result<()> {
+    let head = format!(
+        "HTTP/1.1 200 OK\r\nContent-Type: {ctype}\r\nCache-Control: max-age=31536000, immutable\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
+        body.len()
+    );
+    stream.write_all(head.as_bytes())?;
+    stream.write_all(body)
+}
+
+// ---------------------------------------------------------------------------
+// The desk
+// ---------------------------------------------------------------------------
+
+/// One chat turn: spawn the runtime headless, translate its typed stream onto SSE.
+///
+/// The child is `claude -p` with the fleet root as its working directory, so the
+/// `UserPromptSubmit` hook fires inside it and Vesta routes the message exactly as it
+/// routes this session's. This function forwards; it decides nothing.
+///
+/// SSE rather than the WebSocket envelope, deliberately: one client on loopback needs
+/// ordering (the `seq` field) and nothing else the envelope sells. The body has no
+/// Content-Length and ends when the socket closes, which HTTP/1.1 permits and
+/// EventSource accepts.
+fn chat_stream(
+    mut stream: TcpStream,
+    root: &Path,
+    chat: &str,
+    message: &str,
+    resume: Option<String>,
+    chats: &Arc<Mutex<HashMap<String, String>>>,
+) -> std::io::Result<()> {
+    stream.set_read_timeout(None).ok();
+    stream.write_all(
+        b"HTTP/1.1 200 OK\r\nContent-Type: text/event-stream\r\nCache-Control: no-store\r\nConnection: close\r\n\r\n",
+    )?;
+
+    let mut seq: u64 = 0;
+    let mut send = |stream: &mut TcpStream, kind: &str, text: &str| -> std::io::Result<()> {
+        let mut v = Value::obj();
+        v.set("seq", Value::Num(seq as f64));
+        v.set("kind", Value::Str(kind.into()));
+        v.set("text", Value::Str(text.into()));
+        seq += 1;
+        stream.write_all(format!("data: {}\n\n", v.to_string()).as_bytes())
+    };
+
+    if message.trim().is_empty() {
+        return send(&mut stream, "error", "an empty message routes nowhere");
+    }
+
+    // `claude` on Windows is an npm shim, so the real target of Command::new is a
+    // .cmd, which CreateProcess hands to cmd.exe. Every argument below is a fixed
+    // string for exactly that reason; the message goes in on stdin, where there is
+    // no quoting layer to exploit (the BatBadBut class of bug).
+    let spawn_with = |program: &str| {
+        let mut cmd = crate::base::quiet(program);
+        cmd.arg("-p").arg("--output-format").arg("stream-json").arg("--verbose");
+        if let Some(sid) = &resume {
+            // The session id came from the child's own earlier output, validated on
+            // capture below, never from the browser.
+            cmd.arg("--resume").arg(sid);
+        }
+        cmd.current_dir(root)
+            .stdin(std::process::Stdio::piped())
+            .stdout(std::process::Stdio::piped())
+            .stderr(std::process::Stdio::null());
+        cmd.spawn()
+    };
+
+    // The shim name differs across installs; the bare name covers the unix shape.
+    let mut child = match spawn_with("claude.cmd").or_else(|_| spawn_with("claude")) {
+        Ok(c) => c,
+        Err(e) => {
+            return send(
+                &mut stream,
+                "error",
+                &format!("the runtime did not start: {e}. Is Claude Code on PATH?"),
+            );
+        }
+    };
+
+    if let Some(mut stdin) = child.stdin.take() {
+        let _ = stdin.write_all(message.as_bytes());
+        // Dropped here, which closes the pipe; -p treats EOF as end of prompt.
+    }
+
+    let Some(stdout) = child.stdout.take() else {
+        let _ = child.kill();
+        return send(&mut stream, "error", "the runtime gave no output stream");
+    };
+
+    for line in BufReader::new(stdout).lines() {
+        let Ok(line) = line else { break };
+        if line.trim().is_empty() {
+            continue;
+        }
+        let Ok(event) = crate::json::parse(&line) else { continue };
+        let kind = event.get("type").and_then(|t| t.as_str()).unwrap_or("");
+
+        let sent = match kind {
+            "system" => {
+                let sub = event.get("subtype").and_then(|t| t.as_str()).unwrap_or("");
+                if sub == "init" {
+                    if let Some(sid) = event.get("session_id").and_then(|s| s.as_str()) {
+                        // Constrained to the shape a session id has, so a hostile
+                        // child could not plant a flag through the resume path.
+                        if !sid.is_empty()
+                            && sid.chars().all(|c| c.is_ascii_hexdigit() || c == '-')
+                        {
+                            if let Ok(mut m) = chats.lock() {
+                                m.insert(chat.to_string(), sid.to_string());
+                            }
+                        }
+                    }
+                    send(&mut stream, "session", "")
+                } else if sub == "hook_response" {
+                    // The boot hook's own stdout, which is Vesta saying who answers.
+                    // Surfacing it makes the desk show the routing decision the same
+                    // way this session's transcript shows it.
+                    let out = event.get("stdout").and_then(|s| s.as_str()).unwrap_or("");
+                    match out.lines().find(|l| l.starts_with("VESTA:")) {
+                        Some(first) => send(&mut stream, "routed", first),
+                        None => Ok(()),
+                    }
+                } else {
+                    Ok(())
+                }
+            }
+            "assistant" => {
+                let is_error = event.get("error").and_then(|e| e.as_str()).is_some();
+                let mut wrote = Ok(());
+                if let Some(Value::Arr(content)) =
+                    event.get("message").and_then(|m| m.get("content"))
+                {
+                    for item in content {
+                        match item.get("type").and_then(|t| t.as_str()) {
+                            Some("text") => {
+                                let text =
+                                    item.get("text").and_then(|t| t.as_str()).unwrap_or("");
+                                wrote = send(
+                                    &mut stream,
+                                    if is_error { "error" } else { "assistant" },
+                                    text,
+                                );
+                            }
+                            Some("tool_use") => {
+                                let name =
+                                    item.get("name").and_then(|t| t.as_str()).unwrap_or("tool");
+                                wrote = send(&mut stream, "tool", name);
+                            }
+                            _ => {}
+                        }
+                    }
+                }
+                wrote
+            }
+            "result" => send(&mut stream, "done", ""),
+            _ => Ok(()),
+        };
+
+        // A dead socket means the reader left, so the child has nobody to talk to.
+        if sent.is_err() {
+            let _ = child.kill();
+            return Ok(());
+        }
+    }
+
+    let _ = child.wait();
+    Ok(())
+}
+
+const FONT_400: &[u8] = include_bytes!("fonts/eb-garamond-latin-400-normal.woff2");
+const FONT_400I: &[u8] = include_bytes!("fonts/eb-garamond-latin-400-italic.woff2");
+const FONT_600: &[u8] = include_bytes!("fonts/eb-garamond-latin-600-normal.woff2");
 
 /// One query parameter, percent-decoded, `+` as space.
 ///
@@ -310,56 +526,129 @@ fn api_route(state: &State, question: &str) -> Value {
     out
 }
 
-/// The bases as a graph: files are nodes, `[[wikilinks]]` are edges.
+/// The bases as the stacks: one shelf per agent, files as book spines.
 ///
-/// A link resolves by stem, same base first, then anywhere in the fleet, which is the
-/// order a reader would try. One that resolves nowhere is still emitted, flagged
-/// broken, because the graph showing a dangling reference is `kb check`'s E01 made
-/// visible instead of a lint line nobody reads.
-fn api_graph(state: &State) -> Value {
-    let mut nodes = Vec::new();
-    let mut edges = Vec::new();
+/// This replaces the force graph, on Richard's direction: the fleet's own language is
+/// the library (ADR-0019), so the visualization is shelves and books rather than nodes
+/// and springs. The graph's information survives whole, in book form:
+///
+/// - An **edge out** is the book's `cites` count, listed when the book is opened.
+/// - An **edge in from another agent's base** becomes a **ribbon** on the spine, in
+///   that agent's color: the visible mark that more than one agent works this
+///   document. That was the question the graph answered with crossing lines; a
+///   bookmark left in a borrowed book answers it in the library's own grammar.
+/// - A **broken link** is listed on the open book as a citation to a missing work,
+///   which is E01 said the way a reader would say it.
+///
+/// Shelf order is the fleet's order; the record office (an attached, non-routable
+/// base like `decisions/`) shelves beside the agents, since the Bibliotheca Ulpia
+/// was reading room and record office in one building, which is the whole name.
+fn api_stacks(state: &State) -> Value {
+    // Backlinks first: who cites whom, resolved once across the fleet.
+    // target id -> list of (citing base, citing rel)
+    let mut cited_by: HashMap<String, Vec<(String, String)>> = HashMap::new();
+    // source id -> (resolved targets, broken stems)
+    let mut cites: HashMap<String, (Vec<String>, Vec<String>)> = HashMap::new();
 
     for (name, base) in &state.bases {
         for file in &base.files {
-            // The map's own links are structural: it points at every file it catalogs,
-            // by construction, so its edges would turn every base into a star and say
-            // nothing. The map stays as a node; only its edges are dropped. Same for
-            // template folders, whose [[links]] are placeholders per checks.rs.
             let is_map = base.map.as_deref() == Some(file.rel.as_str());
-            let mut n = Value::obj();
-            n.set("id", Value::Str(format!("{}/{}", name, file.rel)));
-            n.set("base", Value::Str(name.clone()));
-            n.set("rel", Value::Str(file.rel.clone()));
-            n.set("stem", Value::Str(file.stem.clone()));
-            n.set("bytes", Value::Num(file.text.len() as f64));
-            nodes.push(n);
-
             if is_map {
+                // The catalog cites everything it catalogs, by construction. Recording
+                // that would put every agent's ribbon on every book and say nothing.
                 continue;
             }
+            let id = format!("{}/{}", name, file.rel);
+            let entry = cites.entry(id.clone()).or_default();
             for (_, target) in checks::wikilinks(&file.text) {
-                let resolved = resolve(state, name, &target);
-                let mut e = Value::obj();
-                e.set("from", Value::Str(format!("{}/{}", name, file.rel)));
-                match resolved {
+                match resolve(state, name, &target) {
                     Some(to) => {
-                        e.set("to", Value::Str(to));
-                        e.set("broken", Value::Bool(false));
+                        if !entry.0.contains(&to) {
+                            entry.0.push(to.clone());
+                            cited_by
+                                .entry(to)
+                                .or_default()
+                                .push((name.clone(), file.rel.clone()));
+                        }
                     }
                     None => {
-                        e.set("to", Value::Str(format!("{}#{}", name, target)));
-                        e.set("broken", Value::Bool(true));
+                        if !entry.1.contains(&target) {
+                            entry.1.push(target);
+                        }
                     }
                 }
-                edges.push(e);
             }
         }
     }
 
+    let mut shelves = Vec::new();
+    for (name, base) in &state.bases {
+        let routable = state
+            .memory
+            .agents
+            .iter()
+            .find(|a| &a.name == name)
+            .map(|a| a.routable)
+            .unwrap_or(false);
+
+        let mut books = Vec::new();
+        for file in &base.files {
+            let id = format!("{}/{}", name, file.rel);
+            let (out_links, broken) = cites.get(&id).cloned().unwrap_or_default();
+
+            // A ribbon per *other* base that cites this book, one each however many
+            // of its files do: the ribbon says "that agent works here", not how often.
+            let mut ribbons: Vec<String> = Vec::new();
+            for (citer, _) in cited_by.get(&id).map(|v| v.as_slice()).unwrap_or(&[]) {
+                if citer != name && !ribbons.contains(citer) {
+                    ribbons.push(citer.clone());
+                }
+            }
+
+            let mut b = Value::obj();
+            b.set("rel", Value::Str(file.rel.clone()));
+            b.set("stem", Value::Str(file.stem.clone()));
+            // The book's own first heading is its title. The file is already in
+            // memory, and a note that opens with anything else has no better name
+            // than its stem, which the front already shows.
+            let title = file
+                .text
+                .lines()
+                .find(|l| l.starts_with("# "))
+                .map(|l| l[2..].trim().to_string())
+                .unwrap_or_default();
+            b.set("title", Value::Str(title));
+            b.set("bytes", Value::Num(file.text.len() as f64));
+            b.set("folder", Value::Str(
+                file.rel.rsplit_once('/').map(|(d, _)| d.to_string()).unwrap_or_default(),
+            ));
+            b.set("cites", Value::Arr(out_links.into_iter().map(Value::Str).collect()));
+            b.set("broken", Value::Arr(broken.into_iter().map(Value::Str).collect()));
+            b.set(
+                "cited_by",
+                Value::Arr(
+                    cited_by
+                        .get(&id)
+                        .map(|v| v.as_slice())
+                        .unwrap_or(&[])
+                        .iter()
+                        .map(|(citer, rel)| Value::Str(format!("{}/{}", citer, rel)))
+                        .collect(),
+                ),
+            );
+            b.set("ribbons", Value::Arr(ribbons.into_iter().map(Value::Str).collect()));
+            books.push(b);
+        }
+
+        let mut shelf = Value::obj();
+        shelf.set("agent", Value::Str(name.clone()));
+        shelf.set("routable", Value::Bool(routable));
+        shelf.set("books", Value::Arr(books));
+        shelves.push(shelf);
+    }
+
     let mut out = Value::obj();
-    out.set("nodes", Value::Arr(nodes));
-    out.set("edges", Value::Arr(edges));
+    out.set("shelves", Value::Arr(shelves));
     out
 }
 
@@ -512,22 +801,85 @@ mod tests {
         assert!(file_text(&state, "nosuch", "knowledge/real-note.md").is_none());
     }
 
-    /// A dangling wikilink is a node the graph shows as broken, not a crash and not
-    /// an omission: the graph is E01 made visible.
+    /// A dangling wikilink is listed on the open book as a citation of a missing
+    /// work, not dropped: the stacks are E01 made visible, exactly as the graph was.
     #[test]
-    fn the_graph_carries_broken_links_flagged_rather_than_dropped() {
+    fn a_book_lists_its_broken_citations_rather_than_hiding_them() {
         let state = scratch_state();
-        let graph = api_graph(&state);
-        let edges = match graph.get("edges") {
-            Some(Value::Arr(e)) => e,
-            _ => panic!("edges"),
+        let stacks = api_stacks(&state);
+        let shelves = match stacks.get("shelves") {
+            Some(Value::Arr(v)) => v,
+            _ => panic!("shelves"),
         };
+        assert_eq!(shelves.len(), 1);
+        let books = match shelves[0].get("books") {
+            Some(Value::Arr(v)) => v,
+            _ => panic!("books"),
+        };
+        let note = books
+            .iter()
+            .find(|b| b.get("stem") == Some(&Value::Str("real-note".into())))
+            .expect("the note shelves");
+        let broken = match note.get("broken") {
+            Some(Value::Arr(v)) => v,
+            _ => panic!("broken"),
+        };
+        assert_eq!(broken, &vec![Value::Str("missing-note".into())]);
+    }
+
+    /// The multi-agent mark: a ribbon appears only for a citation arriving from
+    /// another base, because a ribbon says "another agent works here" and a base
+    /// citing its own book says nothing of the kind.
+    #[test]
+    fn a_ribbon_marks_a_citation_from_another_base_and_only_that() {
+        let dir = std::env::temp_dir()
+            .join("kb-ui-ribbon")
+            .join(format!("{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        for agent in ["prosa", "verso"] {
+            let root = dir.join("fleet").join(agent);
+            std::fs::create_dir_all(root.join("knowledge")).expect("mkdir");
+            std::fs::write(root.join("agent.txt"), "name = X\nrole = t\n").expect("a");
+            std::fs::write(
+                root.join("MAP.md"),
+                "# MAP\n\n- **[[a]]** x\n  Search for: `x`\n",
+            )
+            .expect("map");
+        }
+        // prosa owns the book; verso cites a stem that only prosa has.
+        std::fs::write(
+            dir.join("fleet/prosa/knowledge/only-prosa-has-this.md"),
+            "# The book\n\nno citations out\n",
+        )
+        .expect("w");
+        std::fs::write(
+            dir.join("fleet/verso/knowledge/versos-note.md"),
+            "# Verso\n\nSee [[only-prosa-has-this]].\n",
+        )
+        .expect("w");
+
+        let state = State::open(&[dir.as_path()], true).expect("opens");
+        let stacks = api_stacks(&state);
+        let shelves = match stacks.get("shelves") {
+            Some(Value::Arr(v)) => v,
+            _ => panic!("shelves"),
+        };
+        let mut ribboned = None;
+        for shelf in shelves {
+            if let Some(Value::Arr(books)) = shelf.get("books") {
+                for b in books {
+                    if b.get("stem") == Some(&Value::Str("only-prosa-has-this".into())) {
+                        ribboned = Some(b.clone());
+                    }
+                }
+            }
+        }
+        let book = ribboned.expect("the cited book shelves");
         assert_eq!(
-            edges.len(),
-            1,
-            "one wikilink in the scratch base: the note's. The map's structural link              to the note is deliberately not an edge"
+            book.get("ribbons"),
+            Some(&Value::Arr(vec![Value::Str("verso".into())])),
+            "one ribbon, in the citing agent's name"
         );
-        assert_eq!(edges[0].get("broken"), Some(&Value::Bool(true)));
     }
 
     #[test]

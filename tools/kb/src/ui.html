@@ -3,111 +3,204 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light dark">
 <title>Ulpia</title>
 <style>
-/* The reading room. Dark first, because the lamp is lit for the reader, not the room.
-   Typography is the recovered craft here: a serif for what is read, a mono for what
-   is measured. No fonts are fetched; the machine's own faces are enough. */
+/* The reading room, set in the design system of ulpia.io. The spec is Aldo's
+   fleet/aldo/knowledge/ulpia-landing-design.md and its tokens are copied, not
+   reinterpreted. The two ground laws travel with the palette:
+     1. Gold exists only on cover material. On paper it is ornament at best.
+     2. Red exists only on paper. In dark mode nothing is paper, so no red.
+   In dark the page becomes the cover and gold takes the hierarchy roles:
+   rubrication in the light, illumination in the dark. */
+@font-face { font-family: 'EB Garamond'; font-style: normal; font-weight: 400;
+  src: url(/font/400) format('woff2'); font-display: swap; }
+@font-face { font-family: 'EB Garamond'; font-style: italic; font-weight: 400;
+  src: url(/font/400i) format('woff2'); font-display: swap; }
+@font-face { font-family: 'EB Garamond'; font-style: normal; font-weight: 600;
+  src: url(/font/600) format('woff2'); font-display: swap; }
+
 :root {
-  --bg: #14161a; --panel: #1b1e24; --line: #2a2e36;
-  --ink: #d8d3c7; --dim: #8b8779; --mono: #a8a494;
-  --accent: #c0453c; --ok: #7ba05b; --warn: #c9a227;
-  --serif: 'Iowan Old Style', 'Palatino Linotype', Palatino, Georgia, serif;
+  color-scheme: light;
+  --ground: #f6f1e7; --ink: #241d16; --ink-2: #5a5044;
+  --accent: #a63325; --rule: #dacfc0; --panel: #fbf8f1;
+  --cover: #12100d; --gold: #c9a860; --cover-ink: #ede3d2;
+  --serif: 'EB Garamond', 'Iowan Old Style', Palatino, Georgia, serif;
   --monof: ui-monospace, 'Cascadia Mono', Consolas, monospace;
+  --size-body: clamp(1.0rem, 0.95rem + 0.25vw, 1.125rem);
+  --size-small: clamp(0.875rem, 0.813rem + 0.31vw, 1rem);
+  --size-mono: clamp(0.72rem, 0.68rem + 0.2vw, 0.8rem);
 }
-@media (prefers-color-scheme: light) {
+@media (prefers-color-scheme: dark) {
   :root {
-    --bg: #f3efe6; --panel: #faf7f0; --line: #d9d2c2;
-    --ink: #2a2721; --dim: #6f6a5c; --mono: #57534a;
-    --accent: #a03a32; --ok: #55763c; --warn: #8a6d14;
+    color-scheme: dark;
+    --ground: #12100d; --ink: #e7ddcc; --ink-2: #ab9e89;
+    --accent: #c9a860; --rule: #3d3320; --panel: #191510;
   }
 }
+/* Book cloth, one bolt per agent. Muted so the spines read as a shelf and not a
+   chart; the same six hold on paper and on the cover. */
+:root {
+  --cloth-1: #7d3b32; --cloth-2: #55613f; --cloth-3: #46586e;
+  --cloth-4: #96733a; --cloth-5: #64465f; --cloth-6: #3f6159;
+}
+
 * { box-sizing: border-box; margin: 0; }
-body { background: var(--bg); color: var(--ink); font-family: var(--serif);
-       font-size: 16px; line-height: 1.45; height: 100vh; display: flex; flex-direction: column; }
-header { display: flex; align-items: baseline; gap: 1.2rem; padding: .8rem 1.4rem;
-         border-bottom: 1px solid var(--line); }
-header h1 { font-size: 1.15rem; font-weight: 600; letter-spacing: .04em; }
-header h1 span { color: var(--accent); }
-header .sub { color: var(--dim); font-size: .85rem; }
-nav { margin-left: auto; display: flex; gap: .2rem; }
-nav button { background: none; border: 1px solid transparent; color: var(--dim);
-  font-family: var(--monof); font-size: .8rem; padding: .35rem .8rem; cursor: pointer; }
-nav button.on { color: var(--ink); border-color: var(--line); background: var(--panel); }
+body { background: var(--ground); color: var(--ink); font-family: var(--serif);
+  font-size: var(--size-body); line-height: 1.5;
+  height: 100vh; display: flex; flex-direction: column; }
+header { display: flex; align-items: baseline; gap: 1.2rem;
+  padding: .7rem 1.4rem; border-bottom: 1px solid var(--rule); }
+header .wordmark { font-size: 1.2rem; font-weight: 600; letter-spacing: .06em; }
+header .sub { color: var(--ink-2); font-size: var(--size-small); font-style: italic; }
+nav { margin-left: auto; display: flex; gap: .1rem; flex-wrap: wrap; }
+nav button { background: none; border: none; border-bottom: 2px solid transparent;
+  color: var(--ink-2); font-family: var(--serif); font-size: var(--size-small);
+  letter-spacing: .02em; padding: .3rem .7rem; cursor: pointer; }
+nav button.on { color: var(--ink); border-bottom-color: var(--accent); }
 nav button:hover { color: var(--ink); }
 main { flex: 1; overflow: hidden; display: flex; }
 .pane { flex: 1; overflow: auto; padding: 1.4rem; display: none; }
 .pane.on { display: block; }
-h2 { font-size: 1rem; font-weight: 600; margin-bottom: .8rem; color: var(--ink); }
-.cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: .8rem; }
-.card { background: var(--panel); border: 1px solid var(--line); padding: .9rem 1rem; }
-.card h3 { font-size: .95rem; margin-bottom: .3rem; }
-.card .role { color: var(--dim); font-size: .85rem; min-height: 2.4em; }
-.card .meta { font-family: var(--monof); font-size: .75rem; color: var(--mono); margin-top: .6rem; }
-.tag { font-family: var(--monof); font-size: .68rem; padding: .1rem .45rem;
-       border: 1px solid var(--line); color: var(--dim); margin-left: .4rem; vertical-align: middle; }
-.tag.route { color: var(--ok); border-color: var(--ok); }
-/* Ask */
-.askrow { display: flex; gap: .6rem; margin-bottom: 1rem; }
-.askrow input { flex: 1; background: var(--panel); color: var(--ink); border: 1px solid var(--line);
-  padding: .55rem .8rem; font-family: var(--serif); font-size: 1rem; }
-.askrow button, .toolbar button { background: var(--panel); color: var(--ink); border: 1px solid var(--line);
-  font-family: var(--monof); font-size: .8rem; padding: .55rem 1rem; cursor: pointer; }
-.askrow button:hover, .toolbar button:hover { border-color: var(--dim); }
-.verdict { font-family: var(--monof); font-size: .8rem; padding: .6rem .9rem; margin-bottom: 1rem;
-           border: 1px solid var(--line); background: var(--panel); }
-.verdict b.hit { color: var(--ok); } .verdict b.guess { color: var(--warn); }
-.verdict b.nothing { color: var(--accent); }
-table { border-collapse: collapse; width: 100%; font-size: .85rem; }
-th { text-align: left; font-family: var(--monof); font-size: .7rem; color: var(--dim);
-     font-weight: 400; padding: .3rem .6rem; border-bottom: 1px solid var(--line); }
-td { padding: .4rem .6rem; border-bottom: 1px solid var(--line); vertical-align: top; }
-td.n { font-family: var(--monof); font-size: .78rem; color: var(--mono); white-space: nowrap; }
-a.file { color: var(--ink); text-decoration: none; border-bottom: 1px dotted var(--dim); cursor: pointer; }
+h2 { font-size: 1.15rem; font-weight: 600; margin-bottom: .8rem; }
+.hint { color: var(--ink-2); font-size: var(--size-small); }
+button.act { background: none; border: 1px solid var(--rule); color: var(--ink);
+  font-family: var(--serif); font-size: var(--size-small); padding: .45rem 1rem;
+  cursor: pointer; }
+button.act:hover { border-color: var(--ink-2); }
+
+/* fleet */
+.cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: .9rem; }
+.card { background: var(--panel); border: 1px solid var(--rule); padding: 1rem 1.1rem; }
+.card h3 { font-size: 1.05rem; font-weight: 600; margin-bottom: .25rem; }
+.card .role { color: var(--ink-2); font-size: var(--size-small); min-height: 2.6em; }
+.card .meta { font-family: var(--monof); font-size: var(--size-mono);
+  color: var(--ink-2); margin-top: .6rem; }
+.tag { font-size: .72rem; font-style: italic; color: var(--ink-2); margin-left: .4rem; }
+.tag.route { color: var(--accent); }
+
+/* catalog */
+.askrow { display: flex; gap: .6rem; margin-bottom: 1rem; max-width: 52rem; }
+.askrow input { flex: 1; background: var(--panel); color: var(--ink);
+  border: 1px solid var(--rule); padding: .55rem .8rem;
+  font-family: var(--serif); font-size: var(--size-body); }
+.verdict { font-size: var(--size-small); padding: .6rem .9rem; margin-bottom: 1rem;
+  border-left: 3px solid var(--rule); background: var(--panel); max-width: 52rem; }
+.verdict b { font-variant: small-caps; letter-spacing: .05em; }
+.verdict b.hit { color: var(--accent); }
+.verdict b.guess, .verdict b.nothing { color: var(--ink-2); }
+table { border-collapse: collapse; width: 100%; font-size: var(--size-small); }
+th { text-align: left; font-variant: small-caps; letter-spacing: .06em;
+  font-weight: 400; color: var(--ink-2); padding: .3rem .6rem;
+  border-bottom: 1px solid var(--rule); font-size: .8rem; }
+td { padding: .45rem .6rem; border-bottom: 1px solid var(--rule); vertical-align: top; }
+td.n { font-family: var(--monof); font-size: var(--size-mono); color: var(--ink-2);
+  white-space: nowrap; }
+a.file { color: var(--ink); text-decoration: none;
+  border-bottom: 1px dotted var(--ink-2); cursor: pointer; }
 a.file:hover { color: var(--accent); border-bottom-color: var(--accent); }
-.bars { margin: .8rem 0 1.2rem; max-width: 480px; }
-.bar { display: grid; grid-template-columns: 90px 1fr 60px; gap: .6rem; align-items: center;
-       font-family: var(--monof); font-size: .75rem; color: var(--mono); margin-bottom: .3rem; }
-.bar .track { background: var(--panel); border: 1px solid var(--line); height: 10px; }
-.bar .fill { background: var(--accent); height: 100%; opacity: .85; }
-/* Graph */
-#graphwrap { position: relative; height: 100%; }
-#graph { width: 100%; height: 100%; }
-#graph text { font-family: var(--monof); font-size: 10px; fill: var(--dim); }
-#graph text.b { fill: var(--mono); font-size: 11px; }
-#graph line { stroke: var(--line); stroke-width: 1; }
-#graph line.broken { stroke: var(--accent); stroke-dasharray: 3 3; }
-#graph circle { cursor: pointer; }
-#legend { position: absolute; left: .8rem; bottom: .8rem; font-family: var(--monof);
-          font-size: .72rem; color: var(--dim); background: var(--panel);
-          border: 1px solid var(--line); padding: .5rem .8rem; }
-#legend i { display: inline-block; width: 9px; height: 9px; border-radius: 50%; margin-right: .45rem; }
-/* Viewer drawer */
-#viewer { width: 0; transition: width .15s; overflow: hidden; border-left: 1px solid var(--line);
-          background: var(--panel); display: flex; flex-direction: column; }
-#viewer.open { width: min(46%, 640px); }
-#viewer .vhead { display: flex; align-items: center; padding: .6rem .9rem; border-bottom: 1px solid var(--line);
-                 font-family: var(--monof); font-size: .75rem; color: var(--mono); }
-#viewer .vhead button { margin-left: auto; background: none; border: none; color: var(--dim);
-                        cursor: pointer; font-size: 1rem; }
-#viewer pre { flex: 1; overflow: auto; padding: 1rem; font-family: var(--monof);
-              font-size: .78rem; line-height: 1.5; white-space: pre-wrap; color: var(--ink); }
-.toolbar { display: flex; gap: .6rem; margin-bottom: 1rem; align-items: center; }
-.toolbar .hint { color: var(--dim); font-size: .8rem; }
-.lvl-error { color: var(--accent); font-family: var(--monof); font-size: .75rem; }
-.lvl-warning { color: var(--warn); font-family: var(--monof); font-size: .75rem; }
-footer { padding: .45rem 1.4rem; border-top: 1px solid var(--line); color: var(--dim);
-         font-family: var(--monof); font-size: .7rem; }
+.bars { margin: .8rem 0 1.2rem; max-width: 460px; }
+.bar { display: grid; grid-template-columns: 96px 1fr 64px; gap: .6rem;
+  align-items: center; font-family: var(--monof); font-size: var(--size-mono);
+  color: var(--ink-2); margin-bottom: .3rem; }
+.bar .track { background: var(--panel); border: 1px solid var(--rule); height: 9px; }
+.bar .fill { height: 100%; opacity: .85; background: var(--accent); }
+
+/* the stacks */
+#p-stacks { padding: 1.4rem 1.6rem 2.5rem; }
+.shelfhead { display: flex; align-items: baseline; gap: .8rem; margin: 1.6rem 0 .2rem; }
+.shelfhead:first-child { margin-top: .2rem; }
+.shelfhead h3 { font-size: 1.05rem; font-weight: 600; }
+.shelfhead .office { font-style: italic; color: var(--ink-2); font-size: var(--size-small); }
+.shelf { display: flex; align-items: flex-end; gap: 2px; min-height: 128px;
+  padding: 0 .6rem 0; border-bottom: 6px solid var(--rule); overflow-x: auto; }
+.gapbetween { width: 1.1rem; flex: none; }
+.book { position: relative; flex: none; cursor: pointer;
+  border: 1px solid rgba(0,0,0,.28); border-bottom: none;
+  display: flex; align-items: flex-end; justify-content: center;
+  transition: transform .08s; }
+.book:hover { transform: translateY(-5px); }
+.book .spine { writing-mode: vertical-rl; font-family: var(--serif);
+  font-size: .68rem; letter-spacing: .02em; color: #f2e9d8;
+  padding: 6px 0 8px; overflow: hidden; text-overflow: ellipsis;
+  white-space: nowrap; max-height: 100%; text-shadow: 0 0 2px rgba(0,0,0,.35); }
+.book .ribbon { position: absolute; top: -6px; width: 5px; height: 22px;
+  border: 1px solid rgba(0,0,0,.3); }
+.folderlabel { font-variant: small-caps; letter-spacing: .08em; color: var(--ink-2);
+  font-size: .72rem; align-self: flex-end; padding: 0 .3rem .2rem;
+  writing-mode: vertical-rl; rotate: 180deg; flex: none; }
+
+/* the desk */
+#p-desk { display: none; flex-direction: column; padding: 0; }
+#p-desk.on { display: flex; }
+#deskscroll { flex: 1; overflow-y: auto; padding: 1.4rem; }
+#deskin { display: flex; gap: .6rem; padding: .9rem 1.4rem;
+  border-top: 1px solid var(--rule); background: var(--panel); }
+#deskin textarea { flex: 1; background: var(--ground); color: var(--ink);
+  border: 1px solid var(--rule); padding: .55rem .8rem; resize: none;
+  font-family: var(--serif); font-size: var(--size-body); min-height: 2.6rem; }
+.turn { max-width: 46rem; margin: 0 auto 1.1rem; }
+.turn .who { font-variant: small-caps; letter-spacing: .08em;
+  font-size: .78rem; color: var(--ink-2); margin-bottom: .15rem; }
+.turn.you .who { color: var(--accent); }
+.turn .said { white-space: pre-wrap; }
+.turn.meta { font-family: var(--monof); font-size: var(--size-mono);
+  color: var(--ink-2); }
+.turn.meta.err { color: var(--accent); }
+.toolchip { display: inline-block; font-family: var(--monof); font-size: .7rem;
+  border: 1px solid var(--rule); padding: .05rem .45rem; margin: 0 .25rem .25rem 0;
+  color: var(--ink-2); }
+
+/* the page (viewer) */
+#pageview { width: 0; transition: width .15s; overflow: hidden;
+  border-left: 1px solid var(--rule); background: var(--ground);
+  display: flex; flex-direction: column; }
+#pageview.open { width: min(52%, 44rem); }
+#pageview .phead { display: flex; align-items: baseline; gap: .8rem;
+  padding: .7rem 1.2rem; border-bottom: 1px solid var(--rule); }
+#pageview .phead .where { font-family: var(--monof); font-size: var(--size-mono);
+  color: var(--ink-2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#pageview .phead button { margin-left: auto; background: none; border: none;
+  color: var(--ink-2); cursor: pointer; font-size: 1.1rem; }
+#pagebody { flex: 1; overflow-y: auto; padding: 1.6rem 2rem 3rem; }
+#pagebody .inner { max-width: 32rem; margin: 0 auto; }
+#pagebody h1 { font-size: 1.5rem; font-weight: 600; margin: 0 0 .6rem; line-height: 1.25; }
+#pagebody h2 { font-size: 1.2rem; margin: 1.2rem 0 .4rem; }
+#pagebody h3 { font-size: 1.05rem; margin: 1rem 0 .3rem; }
+#pagebody p { margin: 0 0 .7rem; }
+#pagebody li { margin: 0 0 .25rem; }
+#pagebody ul, #pagebody ol { margin: 0 0 .7rem; padding-left: 1.4rem; }
+#pagebody code { font-family: var(--monof); font-size: .82em; }
+#pagebody pre { background: var(--cover); color: var(--cover-ink);
+  font-family: var(--monof); font-size: var(--size-mono); line-height: 1.5;
+  padding: .8rem 1rem; overflow-x: auto; margin: 0 0 .8rem; }
+#pagebody blockquote { border-left: 3px solid var(--rule); padding-left: .9rem;
+  color: var(--ink-2); margin: 0 0 .7rem; }
+#pagebody .fm { font-family: var(--monof); font-size: var(--size-mono);
+  color: var(--ink-2); border: 1px solid var(--rule); padding: .5rem .8rem;
+  margin-bottom: 1rem; white-space: pre-wrap; }
+.pagerefs { border-top: 1px solid var(--rule); margin-top: 1.4rem; padding-top: .8rem; }
+.pagerefs .lbl { font-variant: small-caps; letter-spacing: .08em;
+  font-size: .78rem; color: var(--ink-2); }
+.pagerefs ul { list-style: none; padding: 0; margin: .2rem 0 .8rem; }
+.pagerefs .missing { color: var(--accent); font-style: italic; }
+
+.lvl-error { color: var(--accent); font-family: var(--monof); font-size: var(--size-mono); }
+.lvl-warning { color: var(--ink-2); font-family: var(--monof); font-size: var(--size-mono); }
+footer { padding: .4rem 1.4rem; border-top: 1px solid var(--rule);
+  color: var(--ink-2); font-size: .72rem; font-style: italic; }
+.toolbar { display: flex; gap: .8rem; margin-bottom: 1rem; align-items: center; }
 </style>
 </head>
 <body>
 <header>
-  <h1>ULPIA <span>&middot;</span> the reading room</h1>
+  <p class="wordmark">Ulpia</p>
   <div class="sub" id="sub">opening the library&hellip;</div>
   <nav>
     <button data-p="fleet" class="on">fleet</button>
-    <button data-p="ask">ask</button>
-    <button data-p="graph">graph</button>
+    <button data-p="catalog">catalog</button>
+    <button data-p="stacks">the stacks</button>
+    <button data-p="desk">the desk</button>
     <button data-p="blocks">blocks</button>
     <button data-p="doctor">doctor</button>
   </nav>
@@ -118,121 +211,197 @@ footer { padding: .45rem 1.4rem; border-top: 1px solid var(--line); color: var(-
     <div class="cards" id="fleetcards"></div>
   </section>
 
-  <section class="pane" id="p-ask">
-    <h2>Ask Vesta where a question goes</h2>
+  <section class="pane" id="p-catalog">
+    <h2>The catalog</h2>
+    <p class="hint" style="margin-bottom:.8rem">Ask where a question goes. This is the
+      router itself, deciding in the open.</p>
     <div class="askrow">
       <input id="q" placeholder="quanto de proteina eu preciso por refeicao" autocomplete="off">
-      <button id="go">route</button>
+      <button class="act" id="go">consult</button>
     </div>
     <div id="askout"></div>
   </section>
 
-  <section class="pane" id="p-graph" style="padding:0">
-    <div id="graphwrap">
-      <svg id="graph"></svg>
-      <div id="legend"></div>
+  <section class="pane" id="p-stacks"><div id="stacksout"></div></section>
+
+  <section class="pane" id="p-desk">
+    <div id="deskscroll"><div class="turn meta" id="deskhello">
+      The desk. What you write here is routed by Vesta through the same hook that
+      routes every session, and answered by the agent it chooses.</div></div>
+    <div id="deskin">
+      <textarea id="deskmsg" rows="1" placeholder="write to the fleet"></textarea>
+      <button class="act" id="desksend">send</button>
     </div>
   </section>
 
   <section class="pane" id="p-blocks">
     <h2>The constitutions, block by block</h2>
-    <p class="hint" style="color:var(--dim);font-size:.85rem;margin-bottom:1rem">
-      Resident blocks are paid for by every question afterwards. Order is by stability,
-      because prefix caching reuses the prompt only up to the first token that differs.</p>
+    <p class="hint" style="margin-bottom:1rem">Resident blocks are paid for by every
+      question afterwards. Order is by stability, because prefix caching reuses the
+      prompt only up to the first token that differs.</p>
     <div id="blocksout"></div>
   </section>
 
   <section class="pane" id="p-doctor">
     <div class="toolbar">
       <h2 style="margin:0">Doctor</h2>
-      <button id="reload">re-read the library</button>
-      <span class="hint">what the linter would say, plus the reload after files change on disk</span>
+      <button class="act" id="reload">re-read the library</button>
+      <span class="hint">the linter's findings, and the reload for when files changed on disk</span>
     </div>
     <div id="checkout"></div>
   </section>
 
-  <aside id="viewer">
-    <div class="vhead"><span id="vtitle"></span><button id="vclose">&times;</button></div>
-    <pre id="vbody"></pre>
+  <aside id="pageview">
+    <div class="phead"><span class="where" id="pwhere"></span><button id="pclose">&times;</button></div>
+    <div id="pagebody"><div class="inner" id="pinner"></div></div>
   </aside>
 </main>
-<footer id="foot">served from 127.0.0.1 only &middot; tracked files only &middot; the index is derived and the files are the truth</footer>
+<footer>served from 127.0.0.1 only &middot; tracked files only &middot; the index is derived and the files are the truth</footer>
 <script>
 "use strict";
 const $ = s => document.querySelector(s);
 const esc = s => s.replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 const api = p => fetch(p).then(r => { if (!r.ok) throw new Error(r.status); return r.json(); });
 
-/* tabs */
 document.querySelectorAll('nav button').forEach(b => b.onclick = () => {
   document.querySelectorAll('nav button').forEach(x => x.classList.remove('on'));
   document.querySelectorAll('.pane').forEach(x => x.classList.remove('on'));
   b.classList.add('on');
   $('#p-' + b.dataset.p).classList.add('on');
-  if (b.dataset.p === 'graph' && !graphDrawn) drawGraph();
+  if (b.dataset.p === 'stacks' && !stacksDrawn) drawStacks();
 });
 
-/* file viewer */
+/* one bolt of cloth per agent */
+const CLOTH = ['--cloth-1','--cloth-2','--cloth-3','--cloth-4','--cloth-5','--cloth-6'];
+let clothOf = {};
+const cloth = name =>
+  `var(${clothOf[name.toLowerCase()] || '--cloth-1'})`;
+
+/* ------------------------------------------------- the page (shared viewer) */
+let stacksData = null;
+function bookMeta(base, rel) {
+  if (!stacksData) return null;
+  for (const s of stacksData.shelves) {
+    if (s.agent.toLowerCase() !== base.toLowerCase()) continue;
+    for (const b of s.books) if (b.rel === rel) return b;
+  }
+  return null;
+}
+
+/* A page is set, not dumped: the markdown gets the smallest honest rendering,
+   on escaped text only, so a note cannot script the room it is read in. */
+function renderMd(text) {
+  let fm = '';
+  if (text.startsWith('---')) {
+    const end = text.indexOf('\n---', 3);
+    if (end > 0) { fm = text.slice(4, end).trim(); text = text.slice(end + 4); }
+  }
+  const lines = text.split('\n');
+  let out = fm ? `<div class="fm">${esc(fm)}</div>` : '';
+  let inFence = false, fence = [], inList = false, para = [];
+  const inline = s => esc(s)
+    .replace(/`([^`]+)`/g, '<code>$1</code>')
+    .replace(/\*\*([^*]+)\*\*/g, '<b>$1</b>')
+    .replace(/\*([^*]+)\*/g, '<i>$1</i>')
+    .replace(/\[\[([^\]]+)\]\]/g, '<i>$1</i>');
+  const flushP = () => { if (para.length) { out += `<p>${inline(para.join(' '))}</p>`; para = []; } };
+  const flushL = () => { if (inList) { out += '</ul>'; inList = false; } };
+  for (const raw of lines) {
+    if (raw.trimStart().startsWith('```')) {
+      flushP(); flushL();
+      if (inFence) { out += `<pre>${esc(fence.join('\n'))}</pre>`; fence = []; }
+      inFence = !inFence; continue;
+    }
+    if (inFence) { fence.push(raw); continue; }
+    const l = raw.trimEnd();
+    if (!l.trim()) { flushP(); flushL(); continue; }
+    let m;
+    if ((m = l.match(/^(#{1,3})\s+(.*)/))) { flushP(); flushL();
+      const h = m[1].length; out += `<h${h}>${inline(m[2])}</h${h}>`; continue; }
+    if ((m = l.match(/^\s*[-*]\s+(.*)/))) { flushP();
+      if (!inList) { out += '<ul>'; inList = true; }
+      out += `<li>${inline(m[1])}</li>`; continue; }
+    if (l.startsWith('>')) { flushP(); flushL();
+      out += `<blockquote>${inline(l.replace(/^>\s?/, ''))}</blockquote>`; continue; }
+    para.push(l.trim());
+  }
+  flushP(); flushL();
+  if (inFence) out += `<pre>${esc(fence.join('\n'))}</pre>`;
+  return out;
+}
+
 function openFile(base, rel) {
   fetch(`/api/file?base=${encodeURIComponent(base)}&rel=${encodeURIComponent(rel)}`)
     .then(r => r.ok ? r.text() : Promise.reject(r.status))
     .then(t => {
-      $('#vtitle').textContent = base + '/' + rel;
-      $('#vbody').textContent = t;
-      $('#viewer').classList.add('open');
+      $('#pwhere').textContent = base + '/' + rel;
+      let html = renderMd(t);
+      const meta = bookMeta(base, rel);
+      if (meta && (meta.cites.length || meta.cited_by.length || meta.broken.length)) {
+        html += '<div class="pagerefs">';
+        if (meta.cites.length) html += `<div class="lbl">this work cites</div><ul>` +
+          meta.cites.map(c => { const i = c.indexOf('/');
+            return `<li><a class="file" onclick="openFile('${esc(c.slice(0,i))}','${esc(c.slice(i+1))}')">${esc(c)}</a></li>`; }).join('') + '</ul>';
+        if (meta.cited_by.length) html += `<div class="lbl">cited by</div><ul>` +
+          meta.cited_by.map(c => { const i = c.indexOf('/');
+            return `<li><a class="file" onclick="openFile('${esc(c.slice(0,i))}','${esc(c.slice(i+1))}')">${esc(c)}</a></li>`; }).join('') + '</ul>';
+        if (meta.broken.length) html += `<div class="lbl">cites a missing work</div><ul>` +
+          meta.broken.map(c => `<li class="missing">${esc(c)}</li>`).join('') + '</ul>';
+        html += '</div>';
+      }
+      $('#pinner').innerHTML = html;
+      $('#pageview').classList.add('open');
+      $('#pagebody').scrollTop = 0;
     })
-    .catch(() => { $('#vtitle').textContent = 'not served'; $('#vbody').textContent =
-      'That file is not in the tracked set this server was allowed to read.'; $('#viewer').classList.add('open'); });
+    .catch(() => { $('#pwhere').textContent = 'not served';
+      $('#pinner').innerHTML = '<p class="hint">That file is not in the tracked set this server was allowed to read.</p>';
+      $('#pageview').classList.add('open'); });
 }
-$('#vclose').onclick = () => $('#viewer').classList.remove('open');
+$('#pclose').onclick = () => $('#pageview').classList.remove('open');
 const fileLink = (base, rel) =>
   `<a class="file" onclick="openFile('${esc(base)}','${esc(rel)}')">${esc(base)}/${esc(rel)}</a>`;
 
-/* fleet */
-const PALETTE = ['#c0453c', '#7ba05b', '#5b7ba0', '#c9a227', '#8a5ba0', '#5ba09b'];
-let baseColor = {};
+/* -------------------------------------------------------------------- fleet */
 function loadFleet() {
   api('/api/fleet').then(f => {
     $('#sub').textContent = `${f.agents.length} agents, ${f.entries} entries, ${f.aliases} aliases` +
       (f.private ? ' (private layer included)' : '');
-    f.agents.forEach((a, i) => baseColor[a.name.toLowerCase()] = PALETTE[i % PALETTE.length]);
-    $('#fleetcards').innerHTML = f.agents.map((a, i) => `
-      <div class="card" style="border-top: 2px solid ${PALETTE[i % PALETTE.length]}">
-        <h3>${esc(a.name)}${a.routable ? '<span class="tag route">answers</span>' : '<span class="tag">read only</span>'}</h3>
+    f.agents.forEach((a, i) => clothOf[a.name.toLowerCase()] = CLOTH[i % CLOTH.length]);
+    $('#fleetcards').innerHTML = f.agents.map(a => `
+      <div class="card" style="border-top:3px solid ${cloth(a.name)}">
+        <h3>${esc(a.name)}${a.routable ? '<span class="tag route">answers</span>' : '<span class="tag">the record office</span>'}</h3>
         <div class="role">${esc(a.role || 'role not set in agent.txt')}</div>
         <div class="meta">${a.files} tracked files</div>
       </div>`).join('');
   }).catch(e => $('#sub').textContent = 'the server went away: ' + e);
 }
 
-/* ask */
+/* ------------------------------------------------------------------ catalog */
 function ask() {
   const q = $('#q').value.trim();
   if (!q) return;
-  $('#askout').innerHTML = '<p class="hint" style="color:var(--dim)">routing&hellip;</p>';
+  $('#askout').innerHTML = '<p class="hint">consulting&hellip;</p>';
   api('/api/route?q=' + encodeURIComponent(q)).then(r => {
     let h = '';
-    const v = r.verdict;
-    h += `<div class="verdict">verdict <b class="${v}">${v.toUpperCase()}</b>
-      &nbsp; keyword score ${r.score.toFixed(2)} against floor ${r.floor.toFixed(1)}
-      &nbsp; margin over runner-up ${r.margin.toFixed(2)}</div>`;
+    h += `<div class="verdict">the catalog says <b class="${r.verdict}">${r.verdict}</b>
+      &nbsp;&middot;&nbsp; keyword score ${r.score.toFixed(2)} against floor ${r.floor.toFixed(1)}
+      &nbsp;&middot;&nbsp; margin ${r.margin.toFixed(2)}</div>`;
     if (r.agent) {
-      h += `<div class="bars"><div style="font-family:var(--monof);font-size:.75rem;color:var(--dim);margin-bottom:.4rem">
-        owner: <b style="color:var(--ink)">${esc(r.agent.name)}</b> (${r.agent.files} files voted, ${r.agent.contenders} contender${r.agent.contenders===1?'':'s'})</div>`;
       const top = Math.max(...r.agent.totals.map(t => t.score));
-      h += r.agent.totals.map(t => `<div class="bar"><span>${esc(t.name)}</span>
-        <span class="track"><span class="fill" style="width:${(100*t.score/top).toFixed(0)}%;background:${baseColor[t.name.toLowerCase()]||'var(--accent)'}"></span></span>
-        <span>${t.score.toFixed(3)}</span></div>`).join('');
-      h += '</div>';
+      h += `<div class="bars"><div class="hint" style="margin-bottom:.4rem">
+        this belongs to <b>${esc(r.agent.name)}</b> (${r.agent.files} files voted, ${r.agent.contenders} contender${r.agent.contenders===1?'':'s'})</div>` +
+        r.agent.totals.map(t => `<div class="bar"><span>${esc(t.name)}</span>
+          <span class="track"><span class="fill" style="width:${(100*t.score/top).toFixed(0)}%;background:${cloth(t.name)}"></span></span>
+          <span>${t.score.toFixed(3)}</span></div>`).join('') + '</div>';
     }
     if (r.found && r.found.length) {
       h += `<table><tr><th>open this</th><th>why</th><th>matched</th><th>keyword</th></tr>` +
         r.found.map(f => `<tr>
-          <td>${fileLink(f.base, f.rel)}${f.heading ? `<div style="color:var(--dim);font-size:.78rem">${esc(f.heading)}: ${esc(f.excerpt || '')}</div>` : ''}</td>
+          <td>${fileLink(f.base, f.rel)}${f.heading ? `<div class="hint">${esc(f.heading)}: ${esc(f.excerpt || '')}</div>` : ''}</td>
           <td class="n">${esc(f.why)}</td><td class="n">${esc(f.matched)}</td>
           <td class="n">${f.keyword.toFixed(1)}</td></tr>`).join('') + '</table>';
-    } else if (v !== 'empty') {
-      h += '<p class="hint" style="color:var(--dim)">nothing matched, in either scorer.</p>';
+    } else if (r.verdict !== 'empty') {
+      h += '<p class="hint">nothing matched, in either scorer.</p>';
     }
     $('#askout').innerHTML = h;
   });
@@ -240,90 +409,119 @@ function ask() {
 $('#go').onclick = ask;
 $('#q').addEventListener('keydown', e => { if (e.key === 'Enter') ask(); });
 
-/* graph: a small force layout, written here rather than imported, because the whole
-   simulation is sixty lines and a dependency would be the heavier artefact. */
-let graphDrawn = false;
-function drawGraph() {
-  graphDrawn = true;
-  api('/api/graph').then(g => {
-    const svg = $('#graph');
-    const W = svg.clientWidth, H = svg.clientHeight;
-    const bases = [...new Set(g.nodes.map(n => n.base))];
-    const centre = {};
-    bases.forEach((b, i) => {
-      const a = 2 * Math.PI * i / bases.length;
-      centre[b] = { x: W/2 + Math.cos(a) * W/3.2, y: H/2 + Math.sin(a) * H/3.2 };
-    });
-    const nodes = g.nodes.map(n => ({ ...n,
-      x: centre[n.base].x + (Math.random()-.5)*120,
-      y: centre[n.base].y + (Math.random()-.5)*120,
-      r: Math.max(3, Math.min(11, Math.sqrt(n.bytes/900))) }));
-    const byId = {}; nodes.forEach(n => byId[n.id] = n);
-    const edges = g.edges.filter(e => byId[e.from] && (byId[e.to] || e.broken))
-      .map(e => ({ a: byId[e.from], b: byId[e.to], broken: e.broken }));
-
-    for (let it = 0; it < 220; it++) {
-      const k = it < 60 ? 1 : 40/(it+1);
-      for (const n of nodes) {           /* cluster gravity */
-        n.x += (centre[n.base].x - n.x) * .02 * k;
-        n.y += (centre[n.base].y - n.y) * .02 * k;
-      }
-      for (let i = 0; i < nodes.length; i++) for (let j = i+1; j < nodes.length; j++) {
-        const p = nodes[i], q = nodes[j];
-        let dx = p.x-q.x, dy = p.y-q.y, d2 = dx*dx+dy*dy || 1;
-        if (d2 < 90*90) { const f = 620*k/d2; dx*=f; dy*=f; p.x+=dx; p.y+=dy; q.x-=dx; q.y-=dy; }
-      }
-      for (const e of edges) if (e.b) {  /* springs */
-        const dx = e.b.x-e.a.x, dy = e.b.y-e.a.y, d = Math.sqrt(dx*dx+dy*dy)||1;
-        const f = (d-70)/d * .012 * k;
-        e.a.x += dx*f; e.a.y += dy*f; e.b.x -= dx*f; e.b.y -= dy*f;
-      }
-      for (const n of nodes) { n.x = Math.max(30, Math.min(W-30, n.x)); n.y = Math.max(24, Math.min(H-24, n.y)); }
-    }
-
+/* --------------------------------------------------------------- the stacks */
+let stacksDrawn = false;
+const jitter = s => { let h = 0; for (const c of s) h = (h * 31 + c.charCodeAt(0)) | 0;
+  return Math.abs(h); };
+function drawStacks() {
+  stacksDrawn = true;
+  api('/api/stacks').then(g => {
+    stacksData = g;
     let out = '';
-    for (const e of edges) {
-      if (e.b) {
-        out += `<line x1="${e.a.x}" y1="${e.a.y}" x2="${e.b.x}" y2="${e.b.y}" class="${e.broken?'broken':''}"/>`;
-      } else if (e.broken) {
-        /* A dangling link has no destination to draw to, and hiding it would
-           un-make the point: this is E01 rendered. A short dashed stub says
-           "a reference leaves this file and lands nowhere". */
-        out += `<line x1="${e.a.x}" y1="${e.a.y}" x2="${e.a.x+22}" y2="${e.a.y-16}" class="broken"><title>broken link out of ${esc(e.a.id)}</title></line>`;
+    for (const shelf of g.shelves) {
+      out += `<div class="shelfhead"><h3>${esc(shelf.agent)}</h3>` +
+        (shelf.routable ? '' : '<span class="office">the record office: read by every agent, owned by none</span>') +
+        `</div><div class="shelf">`;
+      /* group by folder, keep shelf order stable */
+      const groups = [];
+      for (const b of shelf.books) {
+        const g0 = groups.find(x => x.folder === b.folder);
+        if (g0) g0.books.push(b); else groups.push({ folder: b.folder, books: [b] });
       }
+      groups.forEach((grp, gi) => {
+        if (gi) out += '<div class="gapbetween"></div>';
+        if (grp.folder) out += `<div class="folderlabel">${esc(grp.folder)}</div>`;
+        for (const b of grp.books) {
+          const w = Math.max(15, Math.min(34, 8 + 3.4 * Math.log2(1 + b.bytes / 800)));
+          const hgt = 88 + (jitter(b.stem) % 34);
+          const label = b.title || b.stem;
+          const ribbons = b.ribbons.map((r, i) =>
+            `<span class="ribbon" style="background:${cloth(r)};right:${4 + i * 8}px" title="${esc(r)} works here"></span>`).join('');
+          out += `<div class="book" style="width:${w.toFixed(0)}px;height:${hgt}px;background:${cloth(shelf.agent)}"
+            onclick="openFile('${esc(shelf.agent)}','${esc(b.rel)}')"
+            title="${esc(label)}${b.ribbons.length ? ' · ribbons: ' + esc(b.ribbons.join(', ')) : ''}">
+            ${ribbons}<span class="spine">${esc(b.stem)}</span></div>`;
+        }
+      });
+      out += '</div>';
     }
-    for (const n of nodes)
-      out += `<circle cx="${n.x}" cy="${n.y}" r="${n.r}" fill="${baseColor[n.base.toLowerCase()]||'#888'}" opacity=".85"
-        onclick="openFile('${esc(n.base)}','${esc(n.rel)}')"><title>${esc(n.id)}</title></circle>`;
-    for (const b of bases)
-      out += `<text class="b" x="${centre[b].x}" y="${centre[b].y - H/3.2*0.42}" text-anchor="middle">${esc(b)}</text>`;
-    svg.innerHTML = out;
-    $('#legend').innerHTML = bases.map(b =>
-      `<div><i style="background:${baseColor[b.toLowerCase()]||'#888'}"></i>${esc(b)}</div>`).join('') +
-      `<div style="margin-top:.3rem"><i style="background:none;border:1px dashed var(--accent);border-radius:0"></i>broken link</div>`;
+    $('#stacksout').innerHTML = out ||
+      '<p class="hint">the shelves are empty, which means discovery found no bases.</p>';
   });
 }
 
-/* blocks */
+/* ----------------------------------------------------------------- the desk */
+const chatId = (() => {
+  let id = sessionStorage.getItem('ulpia-desk');
+  if (!id) { id = 'desk-' + Math.random().toString(36).slice(2, 10);
+    sessionStorage.setItem('ulpia-desk', id); }
+  return id;
+})();
+let busy = false;
+function say(cls, who, text) {
+  const d = document.createElement('div');
+  d.className = 'turn ' + cls;
+  d.innerHTML = (who ? `<div class="who">${esc(who)}</div>` : '') +
+    `<div class="said"></div>`;
+  d.querySelector('.said').textContent = text;
+  $('#deskscroll').appendChild(d);
+  $('#deskscroll').scrollTop = $('#deskscroll').scrollHeight;
+  return d.querySelector('.said');
+}
+function sendDesk() {
+  if (busy) return;
+  const m = $('#deskmsg').value.trim();
+  if (!m) return;
+  $('#deskmsg').value = '';
+  say('you', 'you', m);
+  busy = true; $('#desksend').textContent = '…';
+  const status = say('meta', '', 'taken to the desk…');
+  let answer = null, tools = null;
+  const es = new EventSource(`/api/chat?chat=${encodeURIComponent(chatId)}&m=${encodeURIComponent(m)}`);
+  const finish = () => { busy = false; $('#desksend').textContent = 'send'; es.close(); };
+  es.onmessage = ev => {
+    let e; try { e = JSON.parse(ev.data); } catch { return; }
+    if (e.kind === 'routed') { status.textContent = e.text; }
+    else if (e.kind === 'tool') {
+      if (!tools) { const d = document.createElement('div'); d.className = 'turn meta';
+        $('#deskscroll').appendChild(d); tools = d; }
+      tools.innerHTML += `<span class="toolchip">${esc(e.text)}</span>`;
+    }
+    else if (e.kind === 'assistant') {
+      if (!answer) answer = say('', 'the fleet', '');
+      answer.textContent += (answer.textContent ? '\n\n' : '') + e.text;
+      $('#deskscroll').scrollTop = $('#deskscroll').scrollHeight;
+    }
+    else if (e.kind === 'error') { say('meta err', '', e.text); }
+    else if (e.kind === 'done') { finish(); }
+  };
+  es.onerror = () => { if (busy) { if (!answer) status.textContent += ' (the stream closed)'; finish(); } };
+}
+$('#desksend').onclick = sendDesk;
+$('#deskmsg').addEventListener('keydown', e => {
+  if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendDesk(); }
+});
+
+/* ------------------------------------------------------------------- blocks */
 function loadBlocks() {
   api('/api/blocks').then(b => {
     $('#blocksout').innerHTML = b.agents.map(a => {
-      const resident = a.blocks.filter(x => x.mode !== 'ondemand' && x.mode !== 'on_demand');
+      const resident = a.blocks.filter(x => x.mode === 'resident');
       const total = resident.reduce((s, x) => s + x.bytes, 0);
       const top = Math.max(1, ...a.blocks.map(x => x.bytes));
-      return `<div class="card" style="margin-bottom:1rem">
+      return `<div class="card" style="margin-bottom:1rem;border-top:3px solid ${cloth(a.agent)}">
         <h3>${esc(a.agent)} <span class="tag">${(total/1024).toFixed(1)} KB resident</span></h3>
         <div class="bars" style="margin-bottom:.2rem">` +
         a.blocks.map(x => `<div class="bar"><span>[${esc(x.name)}]</span>
-          <span class="track"><span class="fill" style="width:${(100*x.bytes/top).toFixed(0)}%;opacity:${x.mode==='resident'?'.9':'.35'}"></span></span>
+          <span class="track"><span class="fill" style="width:${(100*x.bytes/top).toFixed(0)}%;opacity:${x.mode==='resident'?'.9':'.35'};background:${cloth(a.agent)}"></span></span>
           <span>${(x.bytes/1024).toFixed(1)} KB</span></div>` +
           (x.missing.length ? `<div class="lvl-error">missing: ${x.missing.map(esc).join(', ')}</div>` : '')
         ).join('') + `</div></div>`;
-    }).join('') || '<p class="hint" style="color:var(--dim)">no blocks.txt found in any base.</p>';
+    }).join('') || '<p class="hint">no blocks.txt found in any base.</p>';
   });
 }
 
-/* doctor */
+/* ------------------------------------------------------------------- doctor */
 function loadCheck() {
   api('/api/check').then(c => {
     $('#checkout').innerHTML = c.findings.length
@@ -333,11 +531,11 @@ function loadCheck() {
           <td class="n">${esc(f.code)}</td>
           <td class="n">${esc(f.file)}:${f.line}</td>
           <td>${esc(f.message)}</td></tr>`).join('') + '</table>'
-      : '<p style="color:var(--ok);font-family:var(--monof);font-size:.85rem">every base is clean.</p>';
+      : '<p class="hint" style="font-style:italic">every base is clean.</p>';
   });
 }
 $('#reload').onclick = () =>
-  fetch('/api/reload', { method: 'POST' }).then(() => { graphDrawn = false; boot(); });
+  fetch('/api/reload', { method: 'POST' }).then(() => { stacksDrawn = false; boot(); });
 
 function boot() { loadFleet(); loadBlocks(); loadCheck(); }
 boot();

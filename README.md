@@ -250,8 +250,8 @@ Early, used daily, and honest about which is which.
 
 | | |
 |---|---|
-| `tools/kb` | Works. 170 tests. One dependency. |
-| `kb ui` | The reading room: fleet, routing inspector, link graph, block budgets, doctor. One embedded page, 17 KB, loopback only. |
+| `tools/kb` | Works. 171 tests. One dependency. |
+| `kb ui` | The reading room, set in the site's own type and palette: the fleet, the catalog, the stacks (shelves and book spines, ribbons where another agent works the document), the desk (chat routed by the same boot hook as every session), block budgets, doctor. One embedded page plus three Garamond faces, loopback only. |
 | `tools/tray` | Windows only, and young. |
 | `site` | The page at [ulpia.io](https://ulpia.io). Static front, one Rust binary behind it. |
 | Local model routing | Not built. |
