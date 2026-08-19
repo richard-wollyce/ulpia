@@ -36,6 +36,23 @@ use crate::store::{Scope, Store};
 /// remembered, and it moves when the evidence moves.
 pub const SCORE_FLOOR: f32 = 6.0;
 
+/// How far a challenger must beat the agent already holding the conversation.
+///
+/// **A follow-up message is not a new question.** "yes, run it and measure" carries almost
+/// no domain content, and on 2026-08-18 it routed to the nutrition agent at a score of
+/// 28.44, because `recipes/eating-out.md` matched the word **out** and IDF rated that word
+/// informative. It cleared the 6.0 floor comfortably. The floor answers "did anything
+/// match" and cannot answer "did anything about *this domain* match", so a conversational
+/// turn will always find something somewhere.
+///
+/// Stickiness is the cheaper fix than trying to enumerate meaningless words in two
+/// languages: once an agent holds the conversation, the incumbent keeps it unless a
+/// challenger beats it by this factor. A continuation scores diffusely across bases and
+/// loses; a genuine topic change concentrates and wins.
+///
+/// Calibrated by `kb eval` against continuation rows added to the gold set, not chosen.
+pub const SWITCH_MARGIN: f64 = 2.0;
+
 /// The margin over the runner-up is **measured, reported, and deliberately not part
 /// of the verdict.** This constant is what it would have been.
 ///
@@ -144,6 +161,9 @@ pub struct AgentChoice {
     /// How many agents scored anything. One contender is a different situation from
     /// four, and the number is cheap to carry and expensive to recover later.
     pub contenders: usize,
+    /// Every agent that scored, best first. Carried so a caller holding an incumbent
+    /// can ask how the incumbent did, which a single winner cannot answer.
+    pub totals: Vec<(String, f64)>,
 }
 
 /// Where an agent's index lives: with the agent, never anywhere else.
@@ -166,6 +186,18 @@ pub fn index_path(base_root: &Path) -> PathBuf {
 pub struct Agent {
     pub name: String,
     pub root: PathBuf,
+    /// Whether this base can be chosen as the one who **answers**, as opposed to one
+    /// that gets read.
+    ///
+    /// **The two are not the same thing and conflating them misrouted a real question.**
+    /// `decisions/` is attached to the fleet so every agent can read the records, and the
+    /// router duly offered it as the agent who should reply. A library is not a librarian.
+    ///
+    /// The discriminator is `agent.txt`, which needs no new configuration because its own
+    /// header already says what it is for: *read by the orchestrator to name and route*. A
+    /// base that does not declare a name and a role has not claimed the job. That keeps
+    /// ADR-0011's rule that the fleet is found by shape rather than declared in a list.
+    pub routable: bool,
     store: Store,
 }
 
@@ -238,7 +270,8 @@ impl Memory {
 
             entries.extend(index::build(&base));
             aliases.extend(base.aliases.clone());
-            agents.push(Agent { name: name_of(&root), root, store });
+            let routable = root.join("agent.txt").is_file();
+            agents.push(Agent { name: name_of(&root), root, routable, store });
         }
 
         Ok(Memory {
@@ -611,8 +644,38 @@ impl Memory {
     /// otherwise, and that is the property that makes this fold legitimate rather than
     /// merely convenient.
     pub fn choose_agent_by_keyword(&self, hits: &[index::Hit<'_>]) -> Option<AgentChoice> {
-        tally(hits.iter().map(|h| (h.entry.base.as_str(), h.score as f64)))
+        let routable: Vec<&str> = self
+            .agents
+            .iter()
+            .filter(|a| a.routable)
+            .map(|a| a.name.as_str())
+            .collect();
+
+        tally(
+            hits.iter()
+                .filter(|h| routable.iter().any(|r| r.eq_ignore_ascii_case(&h.entry.base)))
+                .map(|h| (h.entry.base.as_str(), h.score as f64)),
+        )
     }
+
+    /// **Corpus share normalisation was built, measured and removed on 2026-08-18.**
+    ///
+    /// The proposal: agent choice sums scores per base, so a base with twice the entries
+    /// collects twice the votes for reasons unrelated to the question. Steve holds 59 of
+    /// 139 tracked files and won a question about agent memory architecture on one file
+    /// about connecting Claude to Meta Ads. Dividing each hit by the base's share of the
+    /// map should turn the sum into a density.
+    ///
+    /// Two measurements killed it. `kb eval` scored **12/13 either way**, so it bought
+    /// nothing on the gold set. And replaying the real conversation showed the mechanism
+    /// is backwards for what it was aimed at: dividing by share means a **small** base is
+    /// divided by a small number, so normalisation *boosts* small bases rather than
+    /// levelling them. It swapped one volume bias for the mirror image.
+    ///
+    /// What actually fixed the Steve misroute was excluding non-agent bases, measured
+    /// separately and kept. The volume concern is real and still open; the answer is not
+    /// this. Left as a comment rather than dead code so the next person meets the
+    /// measurement instead of rediscovering the idea.
 
 
     /// True when the full text index has no chunks for anything the keywords ranked,
@@ -662,6 +725,7 @@ fn tally<'a>(weighted: impl Iterator<Item = (&'a str, f64)>) -> Option<AgentChoi
         files,
         margin: if runner_up > 0.0 { score / runner_up } else { f64::INFINITY },
         contenders: totals.len(),
+        totals: totals.iter().map(|(n, w, _)| (n.clone(), *w)).collect(),
     })
 }
 
@@ -936,6 +1000,17 @@ mod tests {
 
     /// One base answering and no other base having anything to say is the one case
     /// where an absent runner-up really is maximum confidence, unlike at file level.
+    /// Stickiness: the incumbent keeps the conversation unless the challenger clears
+    /// SWITCH_MARGIN. The real case, replayed: "yes, run it and measure" scored 28.44 for
+    /// the nutrition base because a recipes file contains the word "out", against 16.07
+    /// for the architect who was already answering. 28.44 / 16.07 is 1.77, under 2.0, so
+    /// the conversation stays where it was.
+    #[test]
+    fn a_challenger_that_does_not_clear_the_switch_margin_does_not_take_the_conversation() {
+        assert!(28.44 / 16.07 < SWITCH_MARGIN, "a continuation does not flip the agent");
+        assert!(180.0 / 16.07 >= SWITCH_MARGIN, "a real topic change still does");
+    }
+
     #[test]
     fn a_single_agent_scoring_alone_has_no_contender() {
         let m = empty_memory();

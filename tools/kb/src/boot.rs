@@ -140,6 +140,30 @@ pub fn brief(memory: &Memory, root: &Path, req: &Request, top: usize) -> Briefin
     };
 
     let previous = last_agent(root, &req.session);
+
+    // Stickiness. A follow-up like "yes, run it and measure" carries no domain content
+    // and still matches something somewhere: that exact message routed to the nutrition
+    // agent at 28.44 because a recipes file contains the word "out". The floor cannot
+    // catch it, because the floor asks whether anything matched and not whether anything
+    // about *this domain* matched. So the agent already holding the conversation keeps
+    // it unless a challenger beats it by SWITCH_MARGIN.
+    let agent = match (&previous, &answer.agent) {
+        (Some(prev), Some(choice)) if !prev.eq_ignore_ascii_case(&agent) => {
+            let incumbent = choice
+                .totals
+                .iter()
+                .find(|(name, _)| name.eq_ignore_ascii_case(prev))
+                .map(|(_, w)| *w)
+                .unwrap_or(0.0);
+            if incumbent > 0.0 && choice.score < incumbent * crate::memory::SWITCH_MARGIN {
+                prev.clone()
+            } else {
+                agent
+            }
+        }
+        _ => agent,
+    };
+
     let switched = previous.as_deref() != Some(agent.as_str());
     remember_agent(root, &req.session, &agent);
 

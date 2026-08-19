@@ -46,6 +46,9 @@ pub struct Row {
     pub confidence: Confidence,
     pub micros: u128,
     pub keyword_micros: u128,
+    /// Bases that are allowed to be an answer's owner. Empty means "not filtered",
+    /// which is what the unit tests want.
+    pub routable: Vec<String>,
 }
 
 impl Row {
@@ -73,11 +76,30 @@ impl Row {
     /// three questions in the current set are answerable from the architect's notes
     /// or from the decision records, and grading them against one arbitrary choice
     /// would manufacture failures.
+    /// Bases that can answer, as opposed to bases that can be read. Set from the fleet
+    /// before grading, because an attached base like the decision records is a shared
+    /// library every agent reads and none of them *is*.
+    pub fn set_routable(&mut self, routable: &[String]) {
+        self.routable = routable.to_vec();
+    }
+
+    /// True when no acceptable answer lives in a base that could answer.
+    ///
+    /// Six of the nineteen questions are answered only from the attached decision
+    /// records. There is no correct agent to grade against for those, so they are
+    /// excluded from the agent denominator and **counted out loud** rather than being
+    /// silently scored as misses, which would understate the router by a third.
+    pub fn has_no_routable_owner(&self) -> bool {
+        !self.answers.is_empty() && self.correct_agents().is_empty()
+    }
+
     pub fn correct_agents(&self) -> Vec<&str> {
         let mut out: Vec<&str> = Vec::new();
         for a in &self.answers {
             if let Some((agent, _)) = a.split_once('/') {
-                if !out.contains(&agent) {
+                let routable = self.routable.is_empty()
+                    || self.routable.iter().any(|r| r.eq_ignore_ascii_case(agent));
+                if routable && !out.contains(&agent) {
                     out.push(agent);
                 }
             }
@@ -159,6 +181,9 @@ pub fn stale_answers(rows: &[(String, Vec<String>)], memory: &Memory) -> Vec<Str
 }
 
 pub fn run(memory: &Memory, rows: &[(String, Vec<String>)], top: usize) -> Vec<Row> {
+    let routable: Vec<String> =
+        memory.agents.iter().filter(|a| a.routable).map(|a| a.name.clone()).collect();
+    let _ = &routable;
     rows.iter()
         .map(|(question, answers)| {
             // The whole call, timed as a caller would pay for it. `ask` does one
@@ -186,6 +211,12 @@ pub fn run(memory: &Memory, rows: &[(String, Vec<String>)], top: usize) -> Vec<R
                 confidence: answer.confidence,
                 micros,
                 keyword_micros,
+                routable: memory
+                    .agents
+                    .iter()
+                    .filter(|a| a.routable)
+                    .map(|a| a.name.clone())
+                    .collect(),
             }
         })
         .collect()
@@ -196,7 +227,7 @@ pub fn run(memory: &Memory, rows: &[(String, Vec<String>)], top: usize) -> Vec<R
 /// across runs rather than depending on hash order.
 pub fn best_fixed_agent(rows: &[Row]) -> Option<(String, usize)> {
     let mut counts: BTreeMap<&str, usize> = BTreeMap::new();
-    for row in rows.iter().filter(|r| !r.expects_abstention()) {
+    for row in rows.iter().filter(|r| !r.expects_abstention() && !r.has_no_routable_owner()) {
         for agent in row.correct_agents() {
             *counts.entry(agent).or_insert(0) += 1;
         }
@@ -210,6 +241,8 @@ pub struct Summary {
     pub keyword_hits: usize,
     pub agent_hits: usize,
     pub keyword_agent_hits: usize,
+    /// The agent-level denominator: answerable questions that have an owner at all.
+    pub ownable: usize,
     pub baseline_agent: String,
     pub baseline_hits: usize,
     /// Questions the router got wrong and also flagged as a guess. The number that
@@ -231,6 +264,8 @@ pub struct Summary {
 
 pub fn summarise(rows: &[Row]) -> Summary {
     let answerable: Vec<&Row> = rows.iter().filter(|r| !r.expects_abstention()).collect();
+    let ownable: Vec<&&Row> =
+        answerable.iter().filter(|r| !r.has_no_routable_owner()).collect();
     let (baseline_agent, baseline_hits) =
         best_fixed_agent(rows).unwrap_or_else(|| ("none".into(), 0));
 
@@ -262,8 +297,9 @@ pub fn summarise(rows: &[Row]) -> Summary {
         answerable: answerable.len(),
         file_hits: answerable.iter().filter(|r| r.file_hit()).count(),
         keyword_hits: answerable.iter().filter(|r| r.keyword_hit()).count(),
-        agent_hits: answerable.iter().filter(|r| r.agent_hit()).count(),
-        keyword_agent_hits: answerable.iter().filter(|r| r.keyword_agent_hit()).count(),
+        agent_hits: ownable.iter().filter(|r| r.agent_hit()).count(),
+        keyword_agent_hits: ownable.iter().filter(|r| r.keyword_agent_hit()).count(),
+        ownable: ownable.len(),
         baseline_agent,
         baseline_hits,
         misses_flagged,
@@ -297,6 +333,7 @@ mod tests {
                 files: 1,
                 margin: 2.0,
                 contenders: 2,
+                totals: Vec::new(),
             }),
             keyword_agent: agent.map(|a| AgentChoice {
                 agent: a.into(),
@@ -304,6 +341,7 @@ mod tests {
                 files: 1,
                 margin: 2.0,
                 contenders: 2,
+                totals: Vec::new(),
             }),
             confidence: Confidence {
                 verdict: Verdict::Hit,
@@ -313,6 +351,7 @@ mod tests {
             },
             micros: 100,
             keyword_micros: 40,
+            routable: Vec::new(),
         }
     }
 

@@ -736,21 +736,27 @@ fn cmd_eval(gold_path: &Path, paths: &[&str], all: bool, top: usize) -> ExitCode
     println!(
         "AGENT  fused   {}/{}  ({:.0}%)",
         s.agent_hits,
-        s.answerable,
-        pct(s.agent_hits, s.answerable)
+        s.ownable,
+        pct(s.agent_hits, s.ownable)
     );
     println!(
         "       keyword {}/{}  ({:.0}%)",
         s.keyword_agent_hits,
-        s.answerable,
-        pct(s.keyword_agent_hits, s.answerable)
+        s.ownable,
+        pct(s.keyword_agent_hits, s.ownable)
     );
+    if s.ownable < s.answerable {
+        println!(
+            "       ({} question(s) excluded: answered only from an attached base, which              can be read but cannot be the agent who answers)",
+            s.answerable - s.ownable
+        );
+    }
     println!(
         "       always-{}   {}/{}  ({:.0}%), the best a fixed choice can do on this set",
         s.baseline_agent,
         s.baseline_hits,
-        s.answerable,
-        pct(s.baseline_hits, s.answerable)
+        s.ownable,
+        pct(s.baseline_hits, s.ownable)
     );
     let best = s.agent_hits.max(s.keyword_agent_hits);
     let delta = best as i64 - s.baseline_hits as i64;
