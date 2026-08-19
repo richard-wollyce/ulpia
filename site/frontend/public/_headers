@@ -1,0 +1,23 @@
+# Cloudflare Pages reads this file and applies it to static responses; it is never
+# served itself. It mirrors the headers set in site/server/src/main.rs, so the page
+# behaves identically whether the Rust binary or Pages is in front of it.
+#
+# The mechanism that shapes this file: matching rules INHERIT rather than override.
+# A request that matches two patterns receives both rules' headers, so writing
+# Cache-Control twice would emit it twice rather than replace it. A more specific
+# rule therefore deletes the inherited value with "! " before setting its own.
+
+/*
+  Content-Security-Policy: default-src 'none'; style-src 'self'; script-src 'self'; img-src 'self'; font-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'
+  X-Content-Type-Options: nosniff
+  Referrer-Policy: no-referrer
+  Permissions-Policy: camera=(), microphone=(), geolocation=()
+
+# Only /assets/ carries content hashes, so only /assets/ may promise immutability:
+# a change there produces a new filename, never a new body under an old name.
+# Everything else (the HTML, theme.js, anim.js, favicon.svg) keeps the Pages default
+# of "public, max-age=0, must-revalidate", which revalidates on every request exactly
+# as the binary's "no-cache" does, and answers 304 from the ETag when nothing moved.
+/assets/*
+  ! Cache-Control
+  Cache-Control: public, max-age=31536000, immutable
