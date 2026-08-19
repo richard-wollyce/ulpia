@@ -14,4 +14,4 @@ pages_build_output_dir = "dist"
 [[d1_databases]]
 binding = "DB"
 database_name = "ulpia-subscribers"
-database_id = "PASTE_AFTER_CREATING"
+database_id = "44a852fe-5885-41f4-9579-75190daf90a7"
