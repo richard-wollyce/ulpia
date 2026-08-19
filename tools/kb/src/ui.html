@@ -144,6 +144,26 @@ a.file:hover { color: var(--accent); border-bottom-color: var(--accent); }
   font-size: .78rem; color: var(--ink-2); margin-bottom: .15rem; }
 .turn.you .who { color: var(--accent); }
 .turn .said { white-space: pre-wrap; }
+/* A rendered answer is prose, not a log line: the pre-wrap that keeps a plain
+   message's line breaks would double every margin once the markdown became real
+   elements. */
+.turn .said.md { white-space: normal; }
+.turn .said.md > :first-child { margin-top: 0; }
+.turn .said.md h1 { font-size: 1.3rem; font-weight: 600; margin: 1rem 0 .4rem; }
+.turn .said.md h2 { font-size: 1.15rem; font-weight: 600; margin: 1rem 0 .35rem; }
+.turn .said.md h3 { font-size: 1.02rem; font-weight: 600; margin: .9rem 0 .3rem; }
+.turn .said.md p { margin: 0 0 .6rem; }
+.turn .said.md ul, .turn .said.md ol { margin: 0 0 .6rem; padding-left: 1.3rem; }
+.turn .said.md li { margin: 0 0 .2rem; }
+.turn .said.md code { font-family: var(--monof); font-size: .85em; }
+.turn .said.md pre { background: var(--cover); color: var(--cover-ink);
+  font-family: var(--monof); font-size: var(--size-mono); line-height: 1.5;
+  padding: .7rem .9rem; overflow-x: auto; margin: 0 0 .7rem; }
+.turn .said.md pre code { font-size: inherit; }
+.turn .said.md blockquote { border-left: 3px solid var(--rule); padding-left: .8rem;
+  color: var(--ink-2); margin: 0 0 .6rem; }
+.turn .said.md table { margin: 0 0 .7rem; }
+.turn .said.md hr { border: none; border-top: 1px solid var(--rule); margin: 1rem 0; }
 .turn.meta { font-family: var(--monof); font-size: var(--size-mono);
   color: var(--ink-2); }
 .turn.meta.err { color: var(--accent); }
@@ -298,35 +318,66 @@ function renderMd(text) {
   }
   const lines = text.split('\n');
   let out = fm ? `<div class="fm">${esc(fm)}</div>` : '';
-  let inFence = false, fence = [], inList = false, para = [];
+  let inFence = false, fence = [], list = null, para = [], table = null;
+  /* Escaped first, always: every replacement below runs on text a note or a model
+     wrote, and the only reason this is safe to put in innerHTML is that esc() has
+     already been applied. Nothing here ever inserts an attribute. */
   const inline = s => esc(s)
     .replace(/`([^`]+)`/g, '<code>$1</code>')
     .replace(/\*\*([^*]+)\*\*/g, '<b>$1</b>')
-    .replace(/\*([^*]+)\*/g, '<i>$1</i>')
+    .replace(/(^|[\s(])\*([^*\n]+)\*/g, '$1<i>$2</i>')
     .replace(/\[\[([^\]]+)\]\]/g, '<i>$1</i>');
   const flushP = () => { if (para.length) { out += `<p>${inline(para.join(' '))}</p>`; para = []; } };
-  const flushL = () => { if (inList) { out += '</ul>'; inList = false; } };
+  const flushL = () => { if (list) { out += `</${list}>`; list = null; } };
+  const flushT = () => {
+    if (!table) return;
+    out += '<table>';
+    table.forEach((row, i) => {
+      const cell = i === 0 ? 'th' : 'td';
+      out += '<tr>' + row.map(c => `<${cell}>${inline(c)}</${cell}>`).join('') + '</tr>';
+    });
+    out += '</table>';
+    table = null;
+  };
+  const flushAll = () => { flushP(); flushL(); flushT(); };
+  const cells = l => l.replace(/^\||\|$/g, '').split('|').map(c => c.trim());
+
   for (const raw of lines) {
     if (raw.trimStart().startsWith('```')) {
-      flushP(); flushL();
-      if (inFence) { out += `<pre>${esc(fence.join('\n'))}</pre>`; fence = []; }
+      flushAll();
+      if (inFence) { out += `<pre><code>${esc(fence.join('\n'))}</code></pre>`; fence = []; }
       inFence = !inFence; continue;
     }
     if (inFence) { fence.push(raw); continue; }
     const l = raw.trimEnd();
-    if (!l.trim()) { flushP(); flushL(); continue; }
+    if (!l.trim()) { flushAll(); continue; }
     let m;
-    if ((m = l.match(/^(#{1,3})\s+(.*)/))) { flushP(); flushL();
-      const h = m[1].length; out += `<h${h}>${inline(m[2])}</h${h}>`; continue; }
-    if ((m = l.match(/^\s*[-*]\s+(.*)/))) { flushP();
-      if (!inList) { out += '<ul>'; inList = true; }
+
+    /* A table is a run of pipe rows; the dashes row is the header rule and is
+       consumed rather than rendered. */
+    if (l.trim().startsWith('|') && l.includes('|', 1)) {
+      flushP(); flushL();
+      if (/^[\s|:-]+$/.test(l)) continue;
+      (table = table || []).push(cells(l.trim()));
+      continue;
+    }
+    flushT();
+
+    if ((m = l.match(/^(#{1,4})\s+(.*)/))) { flushP(); flushL();
+      const h = Math.min(m[1].length, 3); out += `<h${h}>${inline(m[2])}</h${h}>`; continue; }
+    if (/^\s*([-*_])(\s*\1){2,}\s*$/.test(l)) { flushAll(); out += '<hr>'; continue; }
+    if ((m = l.match(/^\s*\d+[.)]\s+(.*)/))) { flushP();
+      if (list !== 'ol') { flushL(); out += '<ol>'; list = 'ol'; }
+      out += `<li>${inline(m[1])}</li>`; continue; }
+    if ((m = l.match(/^\s*[-*+]\s+(.*)/))) { flushP();
+      if (list !== 'ul') { flushL(); out += '<ul>'; list = 'ul'; }
       out += `<li>${inline(m[1])}</li>`; continue; }
     if (l.startsWith('>')) { flushP(); flushL();
       out += `<blockquote>${inline(l.replace(/^>\s?/, ''))}</blockquote>`; continue; }
     para.push(l.trim());
   }
-  flushP(); flushL();
-  if (inFence) out += `<pre>${esc(fence.join('\n'))}</pre>`;
+  flushAll();
+  if (inFence) out += `<pre><code>${esc(fence.join('\n'))}</code></pre>`;
   return out;
 }
 
@@ -468,6 +519,16 @@ function say(cls, who, text) {
   $('#deskscroll').scrollTop = $('#deskscroll').scrollHeight;
   return d.querySelector('.said');
 }
+
+/* An answer is prose, so it is set as prose. The raw markdown is kept on the node
+   and the whole turn is re-rendered on each delta, because a heading or a table
+   can arrive split across two events and rendering the fragments separately would
+   leave the syntax showing, which is the bug this fixes. */
+function setProse(node, raw) {
+  node.dataset.raw = raw;
+  node.className = 'said md';
+  node.innerHTML = renderMd(raw);
+}
 function sendDesk() {
   if (busy) return;
   const m = $('#deskmsg').value.trim();
@@ -488,8 +549,9 @@ function sendDesk() {
       tools.innerHTML += `<span class="toolchip">${esc(e.text)}</span>`;
     }
     else if (e.kind === 'assistant') {
-      if (!answer) answer = say('', 'the fleet', '');
-      answer.textContent += (answer.textContent ? '\n\n' : '') + e.text;
+      if (!answer) { answer = say('', 'the fleet', ''); answer.dataset.raw = ''; }
+      const raw = (answer.dataset.raw ? answer.dataset.raw + '\n\n' : '') + e.text;
+      setProse(answer, raw);
       $('#deskscroll').scrollTop = $('#deskscroll').scrollHeight;
     }
     else if (e.kind === 'error') { say('meta err', '', e.text); }
