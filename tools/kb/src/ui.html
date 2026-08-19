@@ -122,7 +122,11 @@ body {
   color: var(--ink-2); font-size: var(--size-small); font-style: italic;
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
-nav { margin-left: auto; display: flex; align-items: center; gap: 0; }
+/* Three doors, not six tabs. The desk is where you speak; the library is where
+   the books are; the system is the machinery underneath. A door that holds one
+   room opens it; a door that holds two lists them. */
+nav { margin-left: auto; display: flex; align-items: center; gap: 0.1rem; }
+.door { position: relative; }
 nav button {
   background: none; border: 0; color: var(--ink-2);
   font-family: var(--serif); font-size: var(--size-small);
@@ -138,8 +142,23 @@ nav button:hover { color: var(--ink); }
 nav button.on { color: var(--ink); }
 nav button.on::after { transform: scaleX(1); }
 nav button:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
-/* The rule that separates doing from inspecting. */
-nav .navrule { width: 1px; align-self: stretch; margin: 0.7rem 0.6rem; background: var(--chrome-rule); }
+.door > button .caret {
+  display: inline-block; margin-left: 0.35rem; font-size: 0.62em;
+  transform: translateY(-0.1em); opacity: 0.75;
+}
+.rooms {
+  position: absolute; top: calc(100% + 0.1rem); right: 0; z-index: 20;
+  background: var(--ground); border: 1px solid var(--rule);
+  box-shadow: 0 0.5rem 1.5rem -0.5rem color-mix(in srgb, #000 45%, transparent);
+  min-width: 10.5rem; padding: 0.25rem 0; display: none;
+}
+.door[data-open] .rooms { display: block; }
+.rooms button {
+  display: block; width: 100%; text-align: left; padding: 0.4rem 0.9rem;
+  font-size: var(--size-small);
+}
+.rooms button::after { left: 0.9rem; right: auto; width: 1rem; bottom: 0.2rem; }
+.rooms button:hover { background: color-mix(in srgb, var(--ink) 5%, transparent); color: var(--ink); }
 
 /* ------------------------------------------------------------- the lamp */
 html:not([data-js]) .lamp-toggle { display: none; }
@@ -460,12 +479,21 @@ footer {
   <div class="sub" id="sub">opening the library&hellip;</div>
   <nav>
     <button data-p="desk">the desk</button>
-    <button data-p="catalog">the catalog</button>
-    <button data-p="stacks">the stacks</button>
-    <span class="navrule"></span>
-    <button data-p="fleet" class="on">the fleet</button>
-    <button data-p="blocks">blocks</button>
-    <button data-p="doctor">doctor</button>
+    <span class="door" data-door="library">
+      <button type="button" aria-haspopup="true" aria-expanded="false">the library<span class="caret">&#9662;</span></button>
+      <span class="rooms" role="menu">
+        <button data-p="catalog" role="menuitem">the catalog</button>
+        <button data-p="stacks" role="menuitem">the stacks</button>
+      </span>
+    </span>
+    <span class="door" data-door="system">
+      <button type="button" aria-haspopup="true" aria-expanded="false">the system<span class="caret">&#9662;</span></button>
+      <span class="rooms" role="menu">
+        <button data-p="agents" role="menuitem">agents</button>
+        <button data-p="blocks" role="menuitem">blocks</button>
+        <button data-p="conservation" role="menuitem">conservation</button>
+      </span>
+    </span>
     <button type="button" class="lamp-toggle" aria-label="Color scheme: light, press to change">
       <svg viewBox="0 0 28 28" width="26" height="26" aria-hidden="true" focusable="false">
         <g class="glow">
@@ -489,12 +517,13 @@ footer {
 </header>
 
 <main>
-  <section class="pane on" id="p-fleet">
+  <section class="pane on" id="p-agents">
     <div class="head">
-      <h2>The fleet</h2>
-      <p class="lede">Who works here, and which of them the router may put a question to.</p>
+      <h2>The agents</h2>
+      <p class="lede">Who works here. Each one is a base the router may put a question to.</p>
     </div>
     <div class="cards" id="fleetcards"></div>
+    <p class="hint" id="sharednote" style="margin-top:1.4rem"></p>
   </section>
 
   <section class="pane" id="p-catalog">
@@ -539,10 +568,12 @@ footer {
     <div class="cards" id="blocksout" style="grid-template-columns:repeat(auto-fill,minmax(19rem,1fr))"></div>
   </section>
 
-  <section class="pane" id="p-doctor">
+  <section class="pane" id="p-conservation">
     <div class="head">
-      <h2>Doctor</h2>
-      <p class="lede">What the linter would say, and the reload for when files changed on disk.</p>
+      <h2>Conservation</h2>
+      <p class="lede">The condition of the collection: links that lead nowhere, notes no
+        question can reach, entries the catalog never listed. And the reload, for when the
+        files changed on disk.</p>
     </div>
     <div class="toolbar"><button class="act" id="reload">re-read the library</button></div>
     <div id="checkout"></div>
@@ -576,15 +607,60 @@ const api = p => fetch(p).then(r => { if (!r.ok) throw new Error(r.status); retu
   paint();
 })();
 
-/* tabs */
-document.querySelectorAll('nav button[data-p]').forEach(b => b.onclick = () => {
-  document.querySelectorAll('nav button[data-p]').forEach(x => x.classList.remove('on'));
-  document.querySelectorAll('.pane').forEach(x => x.classList.remove('on'));
-  b.classList.add('on');
-  $('#p-' + b.dataset.p).classList.add('on');
-  if (b.dataset.p === 'stacks' && !stacksDrawn) drawStacks();
-  if (b.dataset.p === 'desk') $('#deskmsg').focus();
+/* Doors and rooms.
+   Click is the source of truth: hover only opens a door while another is
+   already open, which is how a menu bar behaves and why a stray mouse crossing
+   the header does not flap menus open. Escape and a click outside close. */
+function closeDoors(except) {
+  document.querySelectorAll('.door').forEach(d => {
+    if (d === except) return;
+    delete d.dataset.open;
+    d.querySelector(':scope > button').setAttribute('aria-expanded', 'false');
+  });
+}
+document.querySelectorAll('.door').forEach(door => {
+  const head = door.querySelector(':scope > button');
+  head.addEventListener('click', e => {
+    e.stopPropagation();
+    const open = 'open' in door.dataset;
+    closeDoors();
+    if (!open) { door.dataset.open = ''; head.setAttribute('aria-expanded', 'true'); }
+  });
+  door.addEventListener('mouseenter', () => {
+    if (document.querySelector('.door[data-open]')) {
+      closeDoors(door);
+      door.dataset.open = '';
+      head.setAttribute('aria-expanded', 'true');
+    }
+  });
 });
+document.addEventListener('click', () => closeDoors());
+document.addEventListener('keydown', e => {
+  if (e.key !== 'Escape') return;
+  const open = document.querySelector('.door[data-open]');
+  if (open) { closeDoors(); open.querySelector(':scope > button').focus(); }
+});
+
+/* Rooms. A door wears the mark when the room behind it is the one you are in,
+   so the header still says where you are once the menu has closed. */
+function show(name) {
+  document.querySelectorAll('nav button[data-p]').forEach(x => x.classList.remove('on'));
+  document.querySelectorAll('.door > button').forEach(x => x.classList.remove('on'));
+  document.querySelectorAll('.pane').forEach(x => x.classList.remove('on'));
+
+  const btn = document.querySelector(`nav button[data-p="${name}"]`);
+  if (btn) {
+    btn.classList.add('on');
+    const door = btn.closest('.door');
+    if (door) door.querySelector(':scope > button').classList.add('on');
+  }
+  $('#p-' + name).classList.add('on');
+  if (name === 'stacks' && !stacksDrawn) drawStacks();
+  if (name === 'desk') $('#deskmsg').focus();
+  closeDoors();
+}
+document.querySelectorAll('nav button[data-p]').forEach(b =>
+  b.addEventListener('click', e => { e.stopPropagation(); show(b.dataset.p); }));
 
 const CLOTH = ['--cloth-1','--cloth-2','--cloth-3','--cloth-4','--cloth-5','--cloth-6'];
 let clothOf = {};
@@ -702,17 +778,32 @@ const fileLink = (base, rel) =>
 /* -------------------------------------------------------------------- fleet */
 function loadFleet() {
   api('/api/fleet').then(f => {
-    $('#sub').textContent = `${f.agents.length} bases, ${f.entries} entries, ${f.aliases} aliases` +
-      (f.private ? ' (private layer included)' : '');
+    /* Cloth is assigned over every base, agents and shared alike, because the
+       stacks shelve all of them and a colour must mean one base everywhere. */
     f.agents.forEach((a, i) => clothOf[a.name.toLowerCase()] = CLOTH[i % CLOTH.length]);
-    $('#fleetcards').innerHTML = f.agents.map(a => `
+
+    /* The fleet is the agents. A base with no agent.txt is machinery the system
+       needs and nobody would be glad to meet on this panel: it is shelved with
+       everything else and counted here, not given a card of its own. */
+    const agents = f.agents.filter(a => a.routable);
+    const shared = f.agents.filter(a => !a.routable);
+
+    $('#sub').textContent =
+      `${agents.length} agents, ${f.entries} entries, ${f.aliases} aliases` +
+      (f.private ? ' (private layer included)' : '');
+
+    $('#fleetcards').innerHTML = agents.map(a => `
       <div class="card" style="--cloth:${cloth(a.name)}">
-        <h3>${esc(a.name)}${a.routable
-          ? '<span class="tag route">answers</span>'
-          : '<span class="tag">read by all, answers nothing</span>'}</h3>
+        <h3>${esc(a.name)}</h3>
         <div class="role">${esc(a.role || 'no role declared in agent.txt')}</div>
         <div class="meta">${a.files} tracked files</div>
       </div>`).join('');
+
+    $('#sharednote').innerHTML = shared.length
+      ? `Plus ${shared.length} shared base${shared.length === 1 ? '' : 's'} the whole fleet
+         reads and none of them is: ${shared.map(s => esc(s.name.toLowerCase())).join(', ')}.
+         They shelve in <a class="file" onclick="show('stacks')">the stacks</a> like everything else.`
+      : '';
   }).catch(e => $('#sub').textContent = 'the server went away: ' + e);
 }
 
