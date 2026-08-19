@@ -317,3 +317,23 @@
   Search for: `phone`, `celular`, `PWA`, `websocket`, `SSE`, `envelope`, `event stream`,
   `streaming`, `LAN`, `bind`, `token`, `secure context`, `service worker`, `remote access`,
   `acesso remoto`, `mobile`, `desk transport`.
+
+- **[[0024-the-person-is-one-base]]** 🟢 accepted 2026-08-19. **The person is one base every
+  agent reads, and never an agent that answers.** Written after the desk answered "quem sou eu"
+  with "the base does not cover it", which was half wrong and the right half was worse: the same
+  human was recorded twice, in two languages, in two private folders, while two agents had no
+  user block at all. The cost was paid in public the same day, when the router woke the marketing
+  agent to answer a question about Richard's own site and CV and that agent could not read the
+  file saying personal presence is half his twelve month goal. Richard argued for a global file
+  over per-agent scoping and was right, for a mechanism reason: **N copies of a person drift, and
+  the gaps are invisible from inside any one agent.** The correction his version needed is that
+  **global is about ownership, not residency**, so the person is one base with a small resident
+  core and retrieved domain files. `fleet/profile/` has no `agent.txt`, so the router reads it and
+  can never elect it, because a person is not an agent. It is tracked, unlike the per-agent
+  profile folders, because **Vesta refuses to serve what git does not track, so an untracked base
+  is unroutable by construction**. Measured: the architect's resident payload fell from 9,689 to
+  2,708 bytes while three agents gained the file. Carries the class of error it exposed, that a
+  profile assembled by asking about goals misses the job.
+  Search for: `who am i`, `quem sou eu`, `user`, `usuario`, `perfil`, `profile`, `persona`,
+  `richard`, `human`, `humano`, `global file`, `arquivo global`, `escopo`, `scope`, `user block`,
+  `resident`, `shared base`, `base compartilhada`, `identity`, `identidade`.
