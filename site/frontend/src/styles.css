@@ -297,8 +297,146 @@ html:not([data-js]) .lamp-toggle {
   clip-path: none;
 }
 
+/* Dark holds the glow at opacity 0, not display none, so going dark can fade
+ * (spec 17.D: display cannot animate). clip-path: none so the fade dims the
+ * full glow instead of snapping to half first. */
 :root[data-theme="dark"] .lamp-toggle .glow {
-  display: none;
+  opacity: 0;
+  clip-path: none;
+}
+
+/* ---- the lamp performs its lighting (spec 17). The page flips at 0ms and
+ * gates nothing; the lamp performs in parallel. Everything below is scoped
+ * under .pressed, added by the script on first press, so nothing animates at
+ * page load or on a stored-state restore: the lamp only ever performs a press
+ * the visitor made. Only opacity and transform animate. ---- */
+
+.lamp-toggle .ray,
+.lamp-toggle .chain-group {
+  transform-box: view-box;
+}
+
+.lamp-toggle .ray-left {
+  transform-origin: 10.2px 2.5px;
+}
+
+.lamp-toggle .ray-right {
+  transform-origin: 17.8px 2.5px;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  /* The press: chain tug, every press. Three identical keyframe blocks under
+   * three names, because a CSS animation restarts only when its computed
+   * animation-name changes; every press changes data-theme, so the per-state
+   * alias is the restart mechanism. */
+  @keyframes chain-tug-a {
+    0% {
+      transform: translateY(0);
+      animation-timing-function: ease-in;
+    }
+    40% {
+      transform: translateY(1.25px);
+      animation-timing-function: cubic-bezier(0.34, 1.56, 0.64, 1);
+    }
+    100% {
+      transform: translateY(0);
+    }
+  }
+
+  @keyframes chain-tug-b {
+    0% {
+      transform: translateY(0);
+      animation-timing-function: ease-in;
+    }
+    40% {
+      transform: translateY(1.25px);
+      animation-timing-function: cubic-bezier(0.34, 1.56, 0.64, 1);
+    }
+    100% {
+      transform: translateY(0);
+    }
+  }
+
+  @keyframes chain-tug-c {
+    0% {
+      transform: translateY(0);
+      animation-timing-function: ease-in;
+    }
+    40% {
+      transform: translateY(1.25px);
+      animation-timing-function: cubic-bezier(0.34, 1.56, 0.64, 1);
+    }
+    100% {
+      transform: translateY(0);
+    }
+  }
+
+  :root:not([data-theme]) .lamp-toggle.pressed .chain-group {
+    animation: chain-tug-a 250ms;
+  }
+
+  :root[data-theme="light"] .lamp-toggle.pressed .chain-group {
+    animation: chain-tug-b 250ms;
+  }
+
+  :root[data-theme="dark"] .lamp-toggle.pressed .chain-group {
+    animation: chain-tug-c 250ms;
+  }
+
+  /* The catch: entering light, the filament blinks before it holds. The 100ms
+   * delay keeps the light behind the pull; backwards fill holds opacity 0
+   * through the delay so the light never precedes it. */
+  @keyframes lamp-catch {
+    0% {
+      opacity: 0;
+    }
+    30% {
+      opacity: 1;
+    }
+    55% {
+      opacity: 0.15;
+    }
+    100% {
+      opacity: 1;
+    }
+  }
+
+  :root[data-theme="light"] .lamp-toggle.pressed .shade-fill,
+  :root[data-theme="light"] .lamp-toggle.pressed .beam {
+    animation: lamp-catch 450ms ease-in-out 100ms backwards;
+  }
+
+  /* The light escapes: rays scale out from the shade corners once the
+   * filament holds. */
+  @keyframes ray-out {
+    from {
+      transform: scale(0);
+      opacity: 0;
+    }
+    to {
+      transform: scale(1);
+      opacity: 1;
+    }
+  }
+
+  :root[data-theme="light"] .lamp-toggle.pressed .ray {
+    animation: ray-out 200ms cubic-bezier(0.33, 1, 0.68, 1) 400ms backwards;
+  }
+
+  /* Going dark: one fast fade, no flicker. Filaments catch slowly and die
+   * instantly; darkness does not flicker. */
+  @keyframes lamp-off {
+    from {
+      opacity: 1;
+    }
+    to {
+      opacity: 0;
+    }
+  }
+
+  :root[data-theme="dark"] .lamp-toggle.pressed .glow {
+    animation: lamp-off 120ms ease-in;
+  }
 }
 
 /* ---- hero: the opening of a book, on paper, under the shelf ---- */

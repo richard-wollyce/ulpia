@@ -19,6 +19,9 @@
       btn.setAttribute("aria-label", "Color scheme: " + cur() + ", press to change");
     }
     btn.addEventListener("click", function () {
+      // The .pressed gate (spec 17.B): animations exist only after a real
+      // press, so a stored-state restore never performs at page load.
+      btn.classList.add("pressed");
       var n = cycle[(cycle.indexOf(cur()) + 1) % 3];
       if (n === "auto") { delete root.dataset.theme; } else { root.dataset.theme = n; }
       try {
