@@ -284,3 +284,22 @@
   Search for: `commit`, `git commit`, `concurrency`, `concurrent sessions`, `multiple agents`,
   `git add -A`, `pathspec`, `index.lock`, `pre-commit`, `hook`, `core.hooksPath`, `kb commit`,
   `sweep`, `audit trail`, `worktree`, `lease`, `commitar`, `sessoes simultaneas`.
+
+- **[[0022-the-fleet-boots-the-agent]]** 🟢 accepted 2026-08-18. **The fleet boots the agent,
+  the agent does not boot itself.** Richard's framing and it is the decision: a runtime gives us
+  a model, and how that model runs in the workspace is our software's call. The old mechanism was
+  a static conditional in `CLAUDE.md` naming one agent literally, so a nutrition question still
+  woke the architect, and the identity choice sat with whichever model parsed the sentence.
+  Replaced by `kb boot` on a **`UserPromptSubmit` hook**, which is the only surface in this
+  runtime where our software speaks before the model does: for that event and two others, and no
+  others, stdout is injected as the model's context. It routes with `Memory::ask`, emits the
+  winning agent's constitution **only when the routed agent changes** (tracked per session, since
+  the constitution is ~55 KB), emits the roster and refuses to pick when below ADR-0020's gate,
+  reads only what git tracks, and **always exits 0** because exit 2 on this event erases the
+  user's message. Rejected an MCP tool as the same failure as prose in a better costume, since a
+  tool is still invoked at the model's discretion. Costs **355 ms per message**, isolated by
+  experiment: 60 ms process start, 280 ms opening five bases, 5 ms routing, so the router is not
+  what makes it slow and a resident server is the fix when it is worth one.
+  Search for: `boot`, `hook`, `UserPromptSubmit`, `who am i`, `identity`, `which agent answers`,
+  `agent selection`, `constitution injection`, `session`, `plugged in`, `runtime`, `settings.json`,
+  `CLAUDE.md`, `orchestration`, `quem responde`, `qual agente`, `roteamento automatico`.

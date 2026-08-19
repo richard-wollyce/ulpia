@@ -6,7 +6,7 @@
 
 
 use kb::checks::{Finding, Level};
-use kb::{base, blocks, checks, commit, eval, index, init, mcp, memory, remember, store, write};
+use kb::{base, blocks, boot, checks, commit, eval, index, init, mcp, memory, remember, store, write};
 use base::Base;
 use std::path::Path;
 use std::process::ExitCode;
@@ -25,6 +25,7 @@ usage:
     kb blocks [path] [--emit]
     kb eval <gold.tsv> [path]... [--top N] [--all]
     kb commit <path>... -m <message>
+    kb boot [path]... [--top N] [--all]
     kb serve [path]... [--top N] [--all]
 
     path        base to work on, defaults to the current directory
@@ -137,6 +138,7 @@ fn main() -> ExitCode {
             let message = flag_value(&args, "-m").unwrap_or_default();
             cmd_commit(&positional, &message)
         }
+        "boot" => cmd_boot(&paths_or_default(&positional), all, top),
         "eval" => {
             if positional.is_empty() {
                 eprintln!("kb: eval needs a gold file\n");
@@ -568,6 +570,39 @@ fn cmd_route(question: &str, paths: &[&str], all: bool, top: usize, hybrid: bool
     ExitCode::SUCCESS
 }
 
+
+// ---------------------------------------------------------------------------
+// boot
+// ---------------------------------------------------------------------------
+
+/// The `UserPromptSubmit` hook entry point: the fleet routing a message before the model
+/// sees it.
+///
+/// **Always exits 0.** Exit 2 on this event blocks the prompt and erases it, and exit 1
+/// shows the user a hook error. Neither is an acceptable outcome for a routing step that
+/// failed: the message is the user's and it must reach the model whatever the router
+/// thinks. So every failure path here prints nothing and succeeds.
+fn cmd_boot(paths: &[&str], all: bool, top: usize) -> ExitCode {
+    use std::io::Read;
+
+    let mut stdin = String::new();
+    if std::io::stdin().read_to_string(&mut stdin).is_err() {
+        return ExitCode::SUCCESS;
+    }
+    let Some(req) = boot::parse_request(&stdin) else {
+        return ExitCode::SUCCESS;
+    };
+
+    let given: Vec<&Path> = paths.iter().map(Path::new).collect();
+    let Ok(memory) = memory::Memory::open(&given, all) else {
+        return ExitCode::SUCCESS;
+    };
+
+    let root = given.first().copied().unwrap_or_else(|| Path::new("."));
+    let briefing = boot::brief(&memory, root, &req, top);
+    print!("{}", briefing.text);
+    ExitCode::SUCCESS
+}
 
 // ---------------------------------------------------------------------------
 // commit

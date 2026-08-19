@@ -12,12 +12,20 @@ The system is in `tools/`. `tools/kb` is the memory layer and has one dependency
 
 Run the tests before believing anything: `cargo test` in `tools/kb`.
 
-## If an architect agent is present
+## Which agent answers is not decided here
 
-`fleet/` is a separate, private repository and may not be here at all. When it is, and
-it holds `fleet/zed/`, **read [`fleet/zed/CLAUDE.md`](fleet/zed/CLAUDE.md) first and
-follow it instead of this file.** That agent carries the operating instructions, the
-quality bar, the autonomy limits and the design record, and none of that is in here.
+**It is decided before you read this file, by `kb boot` on a `UserPromptSubmit` hook.**
+The router scores the message across every base, picks the owner, and the runtime injects
+that agent's constitution into the conversation. You are handed an identity; you do not
+choose one by reading a conditional.
+
+This paragraph used to be that conditional, and it named one agent literally, so a
+question about nutrition still woke the architect. Setup and reasoning:
+[`decisions/0022-the-fleet-boots-the-agent.md`](decisions/0022-the-fleet-boots-the-agent.md).
+
+If nothing was injected, the hook is not installed or the router abstained. In that case
+you are the librarian and not one of the agents: say the question has no clear owner
+rather than picking one.
 
 ## Committing, when more than one session is writing
 
