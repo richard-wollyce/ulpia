@@ -182,7 +182,7 @@
         </p>
         <p>
           What happens to an address afterwards is in the
-          <a href="/privacy">privacy notice</a>. The product holds the same
+          <a href="/privacy/">privacy notice</a>. The product holds the same
           position as the page.
         </p>
       </details>
@@ -251,13 +251,16 @@
             <p class="consent-note">
               You can leave from any message. We store your address to send
               those messages and for nothing else.
-              <a href="/privacy" target="_blank" rel="noopener">Privacy notice</a>
+              <a href="/privacy/" target="_blank" rel="noopener">Privacy notice</a>
               ·
-              <a href="/terms" target="_blank" rel="noopener">Terms of use</a>
+              <a href="/terms/" target="_blank" rel="noopener">Terms of use</a>
             </p>
+            <!-- DOM order matches visual order: the primary action sits on the
+                 right, nearest the pointer and the thumb, and the keyboard
+                 walks the same direction the eye does. -->
             <div class="actions">
-              <button type="submit" class="submit">Tell me when it opens</button>
               <button type="button" class="dismiss">Not now</button>
+              <button type="submit" class="submit">Tell me when it opens</button>
             </div>
           </form>
         </div>

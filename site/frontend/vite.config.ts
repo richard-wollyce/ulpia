@@ -47,6 +47,8 @@ export default defineConfig({
       input: {
         index: resolve(__dirname, "index.html"),
         404: resolve(__dirname, "404.html"),
+        privacy: resolve(__dirname, "privacy/index.html"),
+        terms: resolve(__dirname, "terms/index.html"),
       },
     },
   },
