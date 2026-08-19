@@ -1,0 +1,17 @@
+# Cloudflare Pages project configuration.
+#
+# The site is static; this file exists so the subscribe endpoint can reach the
+# database. `functions/` is compiled by Pages into routes by filename, so
+# functions/api/subscribe.ts answers /api/subscribe.
+
+name = "ulpia"
+compatibility_date = "2026-08-19"
+pages_build_output_dir = "dist"
+
+# Created once with: npx wrangler d1 create ulpia-subscribers
+# That command prints the database_id; paste it below. It is an identifier, not a
+# secret, and it is useless without an authenticated account.
+[[d1_databases]]
+binding = "DB"
+database_name = "ulpia-subscribers"
+database_id = "PASTE_AFTER_CREATING"

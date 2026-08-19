@@ -7,8 +7,11 @@
 # Cache-Control twice would emit it twice rather than replace it. A more specific
 # rule therefore deletes the inherited value with "! " before setting its own.
 
+# connect-src and form-action are 'self' because the subscribe modal posts to our
+# own /api/subscribe. Without connect-src the fetch would be blocked by our own
+# policy, since it falls back to default-src 'none'.
 /*
-  Content-Security-Policy: default-src 'none'; style-src 'self'; script-src 'self'; img-src 'self'; font-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'
+  Content-Security-Policy: default-src 'none'; style-src 'self'; script-src 'self'; img-src 'self'; font-src 'self'; connect-src 'self'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'
   X-Content-Type-Options: nosniff
   Referrer-Policy: no-referrer
   Permissions-Policy: camera=(), microphone=(), geolocation=()
