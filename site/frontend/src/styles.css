@@ -257,52 +257,55 @@ html:not([data-js]) .lamp-toggle {
   outline-offset: 2px;
 }
 
-.lamp-toggle .lamp {
+/* The lamp, redrawn seen (spec 18.C): every coordinate below was rendered and
+ * looked at before shipping. The stem is solid because matter is constant;
+ * the light (shade fill, rays) is what comes and goes. The chain is the
+ * accent pull of the reference, one merged object so it never splits into a
+ * floating dot. Two states, no third: lit in light, off in dark. */
+.lamp-toggle .ray {
   stroke: var(--chrome-ink);
-}
-
-/* The lit grammar (spec 16.B): the shade's interior fills (the object holds
- * the light), rays are pure strokes, the down beam is stroked geometry with
- * the wash inside it, per law 1's first amendment. */
-.lamp-toggle .glow {
-  stroke: var(--chrome-ink);
-  fill: var(--lamp-glow);
-  /* Auto: half lit, the cut landing on the stem, the lamp's own axis. */
-  clip-path: url(#lamp-half);
-}
-
-.lamp-toggle .glow .ray {
+  stroke-width: 1.5;
+  stroke-linecap: round;
   fill: none;
 }
 
-/* The pull-chain: the part of a lamp a hand knows to reach for, on a control
- * a hand presses. Accent in both schemes; the ground-colored casing
- * guarantees its edge on every field it crosses (gold on the light wash is
- * 1.62:1 without it). */
-.lamp-toggle .chain-casing {
-  stroke: var(--ground);
+.lamp-toggle .shade-fill {
+  fill: var(--lamp-glow);
+}
+
+.lamp-toggle .shade-line {
+  fill: none;
+  stroke: var(--chrome-ink);
+  stroke-width: 1.75;
+  stroke-linejoin: round;
+}
+
+.lamp-toggle .stem {
+  fill: var(--chrome-ink);
+  stroke: var(--chrome-ink);
+  stroke-width: 0.5;
+  stroke-linejoin: round;
+}
+
+.lamp-toggle .base {
+  stroke: var(--chrome-ink);
+  stroke-width: 1.75;
+  stroke-linecap: round;
 }
 
 .lamp-toggle .chain {
   stroke: var(--accent);
+  stroke-width: 1.4;
+  stroke-linecap: round;
 }
 
 .lamp-toggle .chain-pull {
   fill: var(--accent);
-  stroke: var(--ground);
-  stroke-width: 1;
 }
 
-:root[data-theme="light"] .lamp-toggle .glow {
-  clip-path: none;
-}
-
-/* Dark holds the glow at opacity 0, not display none, so going dark can fade
- * (spec 17.D: display cannot animate). clip-path: none so the fade dims the
- * full glow instead of snapping to half first. */
+/* Dark: the lamp is off. Opacity, not display, so going dark can fade. */
 :root[data-theme="dark"] .lamp-toggle .glow {
   opacity: 0;
-  clip-path: none;
 }
 
 /* ---- the lamp performs its lighting (spec 17). The page flips at 0ms and
@@ -316,12 +319,16 @@ html:not([data-js]) .lamp-toggle {
   transform-box: view-box;
 }
 
-.lamp-toggle .ray-left {
-  transform-origin: 10.2px 2.5px;
+.lamp-toggle .ray-c {
+  transform-origin: 14px 3.6px;
 }
 
-.lamp-toggle .ray-right {
-  transform-origin: 17.8px 2.5px;
+.lamp-toggle .ray-l {
+  transform-origin: 10.1px 4.3px;
+}
+
+.lamp-toggle .ray-r {
+  transform-origin: 17.9px 4.3px;
 }
 
 @media (prefers-reduced-motion: no-preference) {
@@ -357,30 +364,12 @@ html:not([data-js]) .lamp-toggle {
     }
   }
 
-  @keyframes chain-tug-c {
-    0% {
-      transform: translateY(0);
-      animation-timing-function: ease-in;
-    }
-    40% {
-      transform: translateY(1.25px);
-      animation-timing-function: cubic-bezier(0.34, 1.56, 0.64, 1);
-    }
-    100% {
-      transform: translateY(0);
-    }
-  }
-
-  :root:not([data-theme]) .lamp-toggle.pressed .chain-group {
+  :root[data-theme="light"] .lamp-toggle.pressed .chain-group {
     animation: chain-tug-a 250ms;
   }
 
-  :root[data-theme="light"] .lamp-toggle.pressed .chain-group {
-    animation: chain-tug-b 250ms;
-  }
-
   :root[data-theme="dark"] .lamp-toggle.pressed .chain-group {
-    animation: chain-tug-c 250ms;
+    animation: chain-tug-b 250ms;
   }
 
   /* The catch: entering light, the filament blinks before it holds. The 100ms
@@ -401,8 +390,7 @@ html:not([data-js]) .lamp-toggle {
     }
   }
 
-  :root[data-theme="light"] .lamp-toggle.pressed .shade-fill,
-  :root[data-theme="light"] .lamp-toggle.pressed .beam {
+  :root[data-theme="light"] .lamp-toggle.pressed .shade-fill {
     animation: lamp-catch 450ms ease-in-out 100ms backwards;
   }
 
