@@ -355,3 +355,20 @@
   Search for: `open source`, `publico`, `public`, `publish`, `licenca`, `license`, `skeleton`,
   `person skeleton`, `kb init`, `privacidade`, `privacy`, `private line`, `shape`, `estrutura`,
   `declarar usuario`, `declare the human`, `template`, `drift test`.
+
+- **[[0026-a-wikilink-stops-at-the-base-edge]]** 🟢 accepted 2026-08-19. **A wikilink resolves
+  inside its own base and nowhere else**, in the linter and in the reading room alike. Written
+  because moving a file between bases exposed the two disagreeing: `kb check` scoped links to one
+  base while the reading room resolved fleet-wide, so the same file was simultaneously fine and
+  broken. **Privacy decided it, not tidiness:** a base is where privacy is decided here, the
+  decision records reached the public root only after an audit that converted eight files' worth
+  of wikilinks whose targets stay private, and fleet-wide resolution would make that audit
+  permanent work. Two further arguments: two bases can hold the same stem, so fleet-wide has no
+  correct answer only a discovery order; and a base may be opened alone, so a link that resolves
+  only when a sibling is mounted is a coincidence of mounting. Crossing a base is now **written
+  out as a path**, which rebuilt the stacks' ribbons on an honest source and revealed they had
+  been measuring nothing. The linter names the other base in the error, so the rule is teachable
+  rather than merely enforced.
+  Search for: `wikilink`, `link`, `broken link`, `E01`, `base scope`, `escopo`, `cross-base`,
+  `resolucao`, `resolve`, `privacy boundary`, `fronteira`, `ribbon`, `fita`, `stacks`, `Z38`,
+  `convention`, `convencao`.

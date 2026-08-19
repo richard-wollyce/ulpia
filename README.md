@@ -202,6 +202,12 @@ fleet/<name>/
   decisions/  protocols/  templates/
 ```
 
+**A `[[wikilink]]` stops at the edge of its base.** It resolves inside that base and
+nowhere else, and both the linter and the reading room enforce the same rule. To point at
+another agent's file, write the path. The reason is privacy rather than tidiness: a base is
+a privacy boundary, and a link that silently crossed one is how a reference to private
+material lands in a file you meant to publish. Writing the path out means you knew.
+
 `MAP.md` is doing more work than it looks. Every entry carries a `Search for:` line with
 the words a real question would use, and that line is what the keyword scorer matches.
 An entry without one is an entry nothing can reach.
@@ -278,7 +284,7 @@ Early, used daily, and honest about which is which.
 
 | | |
 |---|---|
-| `tools/kb` | Works. 172 tests. One dependency. |
+| `tools/kb` | Works. 173 tests. One dependency. |
 | `kb ui` | The reading room, set in the site's own type and palette: the fleet, the catalog, the stacks (shelves and book spines, ribbons where another agent works the document), the desk (chat routed by the same boot hook as every session), block budgets, doctor. One embedded page plus three Garamond faces, loopback only. |
 | `tools/tray` | Windows only, and young. |
 | `site` | The page at [ulpia.io](https://ulpia.io). Static front, one Rust binary behind it. |

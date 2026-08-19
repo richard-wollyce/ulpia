@@ -587,6 +587,8 @@ fn api_stacks(state: &State) -> Value {
             }
             let id = format!("{}/{}", name, file.rel);
             let entry = cites.entry(id.clone()).or_default();
+
+            // Wikilinks: inside the base, or broken. Same rule as the linter.
             for (_, target) in checks::wikilinks(&file.text) {
                 match resolve(state, name, &target) {
                     Some(to) => {
@@ -603,6 +605,18 @@ fn api_stacks(state: &State) -> Value {
                             entry.1.push(target);
                         }
                     }
+                }
+            }
+
+            // Written-out paths: the only way to point at another base, and therefore
+            // the only thing a ribbon can honestly be made of.
+            for to in cross_base_refs(state, name, &file.text) {
+                if !entry.0.contains(&to) {
+                    entry.0.push(to.clone());
+                    cited_by
+                        .entry(to)
+                        .or_default()
+                        .push((name.clone(), file.rel.clone()));
                 }
             }
         }
@@ -679,26 +693,82 @@ fn api_stacks(state: &State) -> Value {
     out
 }
 
+/// A `[[wikilink]]` resolves **inside its own base and nowhere else**, which is the same
+/// rule `kb check` enforces. Z38 was the two disagreeing: this function used to try the
+/// home base and then the whole fleet, so the reading room drew edges the linter called
+/// broken, and moving one file between bases produced both behaviours at once.
+///
+/// **Base scope wins, and the deciding argument is privacy rather than tidiness.** A base
+/// is a privacy boundary: the fleet repository is gitignored by the public one, and
+/// `yaron/profile/` is gitignored inside the fleet. A link that silently resolves across
+/// that boundary is how a reference to private material lands in a publishable file with
+/// nobody noticing, and the publication audit already had to undo exactly that by hand.
+///
+/// Two more reasons it would be wrong the other way. A base is addressed by path and may
+/// be opened alone (ADR-0008), so a link that only resolves when a sibling happens to be
+/// mounted is not a link, it is a coincidence of mounting. And two agents may hold the
+/// same stem, which they do, so fleet-wide resolution has no correct answer, only a
+/// discovery order.
+///
+/// Crossing a base is therefore written out in full, as a path, which is what the
+/// publication audit produced and what [`cross_base_refs`] reads.
 fn resolve(state: &State, home: &str, stem: &str) -> Option<String> {
-    let hit = |name: &str, base: &Base| -> Option<String> {
-        base.files
-            .iter()
-            .find(|f| f.stem.eq_ignore_ascii_case(stem))
-            .map(|f| format!("{}/{}", name, f.rel))
-    };
-    if let Some((name, base)) = state.bases.iter().find(|(n, _)| n == home) {
-        if let Some(found) = hit(name, base) {
-            return Some(found);
-        }
-    }
+    let (name, base) = state.bases.iter().find(|(n, _)| n == home)?;
+    base.files
+        .iter()
+        .find(|f| f.stem.eq_ignore_ascii_case(stem))
+        .map(|f| format!("{}/{}", name, f.rel))
+}
+
+/// Explicit references to another base, written as `<base>/<path>.md` in the prose.
+///
+/// This is what a cross-base citation looks like now that wikilinks stop at the base
+/// edge, so it is what a ribbon has to be built from. It is also the more honest signal:
+/// the author wrote the whole path, meaning they knew they were pointing outside.
+///
+/// A reference is only counted when the named base actually holds that file, so a path
+/// that merely looks like one (`profile/profile.md` inside Yaron's own base, which is his
+/// local folder) does not manufacture a ribbon.
+fn cross_base_refs(state: &State, home: &str, text: &str) -> Vec<String> {
+    let mut out = Vec::new();
     for (name, base) in &state.bases {
-        if name != home {
-            if let Some(found) = hit(name, base) {
-                return Some(found);
+        if name == home {
+            continue;
+        }
+        let needle = format!("{name}/");
+        let mut from = 0usize;
+        while let Some(hit) = text[from..].find(&needle) {
+            let start = from + hit;
+            from = start + needle.len();
+
+            // A path is a whole word: `profile/x.md` counts, `../profile/x.md` and
+            // `yaron/profile/x.md` do not, because those name something else.
+            let preceded_by_path_char = start > 0
+                && text[..start]
+                    .chars()
+                    .next_back()
+                    .is_some_and(|c| c == '/' || c == '.' || c.is_alphanumeric() || c == '-');
+            if preceded_by_path_char {
+                continue;
+            }
+
+            let rest = &text[from..];
+            let end = rest.find(".md").map(|i| i + 3);
+            let Some(end) = end else { continue };
+            let rel = &rest[..end - 3];
+            if rel.is_empty() || rel.contains(char::is_whitespace) || rel.contains("..") {
+                continue;
+            }
+            let rel = format!("{rel}.md");
+            if base.files.iter().any(|f| f.rel == rel) {
+                let id = format!("{name}/{rel}");
+                if !out.contains(&id) {
+                    out.push(id);
+                }
             }
         }
     }
-    None
+    out
 }
 
 fn api_blocks(state: &State) -> Value {
@@ -857,9 +927,74 @@ mod tests {
         assert_eq!(broken, &vec![Value::Str("missing-note".into())]);
     }
 
+    /// Z38, decided and applied: a wikilink stops at the base edge, in the reading
+    /// room exactly as in the linter. The version before this resolved fleet-wide, so
+    /// the two disagreed about the same file.
+    #[test]
+    fn a_wikilink_does_not_reach_into_another_base() {
+        let dir = std::env::temp_dir()
+            .join("kb-ui-scope")
+            .join(format!("{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        for agent in ["alfa", "beta"] {
+            let root = dir.join("fleet").join(agent);
+            std::fs::create_dir_all(root.join("knowledge")).expect("mkdir");
+            std::fs::write(root.join("agent.txt"), "name = X
+role = t
+").expect("a");
+            std::fs::write(root.join("MAP.md"), "# MAP
+
+- **[[a]]** x
+  Search for: `x`
+")
+                .expect("map");
+        }
+        std::fs::write(dir.join("fleet/alfa/knowledge/only-in-alfa.md"), "# A
+
+x
+")
+            .expect("w");
+        // beta points at a stem that exists only in alfa, two ways: as a wikilink,
+        // which must break, and as a written path, which must count.
+        std::fs::write(
+            dir.join("fleet/beta/knowledge/pointer.md"),
+            "# B
+
+See [[only-in-alfa]] and alfa/knowledge/only-in-alfa.md.
+",
+        )
+        .expect("w");
+
+        let state = State::open(&[dir.as_path()], true).expect("opens");
+        assert_eq!(
+            resolve(&state, "beta", "only-in-alfa"),
+            None,
+            "a wikilink must not reach across the base edge"
+        );
+        assert_eq!(
+            resolve(&state, "alfa", "only-in-alfa").as_deref(),
+            Some("alfa/knowledge/only-in-alfa.md"),
+            "and must still resolve at home"
+        );
+        assert_eq!(
+            cross_base_refs(&state, "beta", "See alfa/knowledge/only-in-alfa.md here"),
+            vec!["alfa/knowledge/only-in-alfa.md"],
+            "a written path is the way across, so it is what a ribbon counts"
+        );
+        assert!(
+            cross_base_refs(&state, "beta", "see ../alfa/knowledge/only-in-alfa.md").is_empty(),
+            "a relative path out of the tree is not a fleet reference"
+        );
+        assert!(
+            cross_base_refs(&state, "alfa", "alfa/knowledge/only-in-alfa.md").is_empty(),
+            "a base citing itself is not a cross-base reference"
+        );
+    }
+
     /// The multi-agent mark: a ribbon appears only for a citation arriving from
     /// another base, because a ribbon says "another agent works here" and a base
-    /// citing its own book says nothing of the kind.
+    /// citing its own book says nothing of the kind. Since Z38 the citation has to
+    /// be a written path, because a wikilink stops at the base edge.
     #[test]
     fn a_ribbon_marks_a_citation_from_another_base_and_only_that() {
         let dir = std::env::temp_dir()
@@ -884,7 +1019,7 @@ mod tests {
         .expect("w");
         std::fs::write(
             dir.join("fleet/verso/knowledge/versos-note.md"),
-            "# Verso\n\nSee [[only-prosa-has-this]].\n",
+            "# Verso\n\nSee prosa/knowledge/only-prosa-has-this.md.\n",
         )
         .expect("w");
 

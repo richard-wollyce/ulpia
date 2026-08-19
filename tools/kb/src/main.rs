@@ -366,11 +366,22 @@ fn cmd_check(paths: &[&str], all: bool, strict: bool) -> ExitCode {
     let given: Vec<&Path> = paths.iter().map(Path::new).collect();
     let bases = memory::expand_roots(&given);
 
+    // Every base's stems, gathered before any base is graded, so a broken link can be
+    // told the one thing that makes it actionable: whether the note exists somewhere
+    // else. The rule does not change, the message does. See `elsewhere`.
+    let mut stems: Vec<(String, Vec<String>)> = Vec::new();
+    for path in &bases {
+        if let Ok(base) = Base::discover(path, all) {
+            let name = label(&base).to_string();
+            stems.push((name, base.files.iter().map(|f| f.stem.clone()).collect()));
+        }
+    }
+
     for (i, path) in bases.iter().enumerate() {
         if i > 0 {
             println!();
         }
-        match check_one(path, all) {
+        match check_one(path, all, &stems) {
             Ok((e, w)) => {
                 errors += e;
                 warnings += w;
@@ -389,9 +400,47 @@ fn cmd_check(paths: &[&str], all: bool, strict: bool) -> ExitCode {
     }
 }
 
-fn check_one(path: &Path, all: bool) -> std::io::Result<(usize, usize)> {
+/// Which other base holds a note by this stem, if any.
+///
+/// **This does not relax the rule, it teaches it.** A `[[wikilink]]` resolves inside its
+/// own base and nowhere else, because a base is a privacy boundary and a link that
+/// crosses one silently is how private material gets referenced from a publishable file.
+/// So a link to another base's note is still an error. It is simply an error with an
+/// obvious fix, and saying "this lives in yaron, write the path" is the difference
+/// between a rule that gets followed and a rule that gets worked around.
+fn elsewhere(stems: &[(String, Vec<String>)], home: &str, target: &str) -> Option<String> {
+    stems
+        .iter()
+        .find(|(name, list)| {
+            name != home && list.iter().any(|s| s.eq_ignore_ascii_case(target))
+        })
+        .map(|(name, _)| name.clone())
+}
+
+fn check_one(
+    path: &Path,
+    all: bool,
+    stems: &[(String, Vec<String>)],
+) -> std::io::Result<(usize, usize)> {
     let base = Base::discover(path, all)?;
-    let findings = checks::run(&base);
+    let mut findings = checks::run(&base);
+
+    let home = label(&base).to_string();
+    for finding in &mut findings {
+        if finding.code != "E01" {
+            continue;
+        }
+        // The target is between the brackets in the message the check built.
+        let Some(open) = finding.message.find("[[") else { continue };
+        let Some(close) = finding.message[open..].find("]]") else { continue };
+        let target = &finding.message[open + 2..open + close];
+        if let Some(other) = elsewhere(stems, &home, target) {
+            finding.message = format!(
+                "broken link [[{target}]]: that note is in {other}, not here. A wikilink \
+                 stops at the base edge, so write the path instead"
+            );
+        }
+    }
 
     let map = base.map.clone().unwrap_or_else(|| "none".to_string());
     let scope = if base.tracked_only {
