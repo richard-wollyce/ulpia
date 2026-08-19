@@ -5,14 +5,33 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="color-scheme" content="light dark">
 <title>Ulpia</title>
+<script>
+/* Scheme init, ported from the site's theme.js (spec 18.D) and sharing its
+   storage key, so the reading room and ulpia.io agree on this machine. Two
+   states, no auto. Synchronous so the attribute is set before first paint. */
+(function () {
+  var root = document.documentElement, S = "ulpia-scheme", v = null;
+  try { v = localStorage.getItem(S); } catch (e) {}
+  if (v !== "light" && v !== "dark") {
+    v = matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+  }
+  root.dataset.theme = v;
+  root.dataset.js = "";
+})();
+</script>
 <style>
-/* The reading room, set in the design system of ulpia.io. The spec is Aldo's
-   fleet/aldo/knowledge/ulpia-landing-design.md and its tokens are copied, not
-   reinterpreted. The two ground laws travel with the palette:
+/* The reading room, in the design system of ulpia.io. The spec is Aldo's
+   fleet/aldo/knowledge/ulpia-landing-design.md; tokens are copied from the
+   built site, not reinterpreted. Two ground laws travel with the palette:
      1. Gold exists only on cover material. On paper it is ornament at best.
-     2. Red exists only on paper. In dark mode nothing is paper, so no red.
-   In dark the page becomes the cover and gold takes the hierarchy roles:
-   rubrication in the light, illumination in the dark. */
+     2. Red exists only on paper. In dark nothing is paper, so no red.
+   In dark the page becomes the cover and gold takes the hierarchy roles.
+
+   One departure from the landing page, named because it is a design decision
+   and not an oversight: **the reading room is an instrument, not a page.** The
+   book measure and the 20px reading size govern prose (the open page, the
+   desk); chrome and data run one step down, because a table set at reading
+   size is a table you scroll instead of read. */
 @font-face { font-family: 'EB Garamond'; font-style: normal; font-weight: 400;
   src: url(/font/400) format('woff2'); font-display: swap; }
 @font-face { font-family: 'EB Garamond'; font-style: italic; font-weight: 400;
@@ -22,219 +41,467 @@
 
 :root {
   color-scheme: light;
-  --ground: #f6f1e7; --ink: #241d16; --ink-2: #5a5044;
-  --accent: #a63325; --rule: #dacfc0; --panel: #fbf8f1;
-  --cover: #12100d; --gold: #c9a860; --cover-ink: #ede3d2;
-  --serif: 'EB Garamond', 'Iowan Old Style', Palatino, Georgia, serif;
+  --ground: #f6f1e7;
+  --ink: #241d16;
+  --ink-2: #5a5044;
+  --accent: #a63325;
+  --rule: #dacfc0;
+  --chrome-ink: #241d16;
+  --chrome-rule: #dacfc0;
+  --lamp-glow: #ead9a8;
+  --plate: #ede5d5;
+  --plate-ink: #241d16;
+  --plate-ink-2: #5a5044;
+  --panel: #fbf8f1;
+  --shelf: #cdbfa9;
+  --shelf-edge: #b6a48a;
+  --cover: #12100d;
+  --gold: #c9a860;
+
+  --serif: 'EB Garamond', Georgia, 'Times New Roman', serif;
   --monof: ui-monospace, 'Cascadia Mono', Consolas, monospace;
-  --size-body: clamp(1.0rem, 0.95rem + 0.25vw, 1.125rem);
-  --size-small: clamp(0.875rem, 0.813rem + 0.31vw, 1rem);
-  --size-mono: clamp(0.72rem, 0.68rem + 0.2vw, 0.8rem);
+
+  /* Prose keeps the book's scale. */
+  --size-read: clamp(1.0625rem, 1rem + 0.31vw, 1.1875rem);
+  /* Chrome and data sit one step down, deliberately. */
+  --size-body: clamp(0.9375rem, 0.906rem + 0.16vw, 1rem);
+  --size-small: clamp(0.8125rem, 0.781rem + 0.16vw, 0.875rem);
+  --size-mono: clamp(0.6875rem, 0.656rem + 0.16vw, 0.75rem);
+  --size-wordmark: clamp(1rem, 0.938rem + 0.31vw, 1.125rem);
+  --measure: 32rem;
+  --pad-page: clamp(1rem, 3vw, 1.75rem);
 }
 @media (prefers-color-scheme: dark) {
-  :root {
+  :root:not([data-theme="light"]) {
     color-scheme: dark;
     --ground: #12100d; --ink: #e7ddcc; --ink-2: #ab9e89;
-    --accent: #c9a860; --rule: #3d3320; --panel: #191510;
+    --accent: #c9a860; --rule: #3d3320;
+    --chrome-ink: #c9a860; --chrome-rule: #55452b; --lamp-glow: #c9a860;
+    --plate: #211b16; --plate-ink: #ede3d2; --plate-ink-2: #ac9c87;
+    --panel: #191510; --shelf: #2c2418; --shelf-edge: #3d3320;
   }
 }
-/* Book cloth, one bolt per agent. Muted so the spines read as a shelf and not a
-   chart; the same six hold on paper and on the cover. */
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --ground: #12100d; --ink: #e7ddcc; --ink-2: #ab9e89;
+  --accent: #c9a860; --rule: #3d3320;
+  --chrome-ink: #c9a860; --chrome-rule: #55452b; --lamp-glow: #c9a860;
+  --plate: #211b16; --plate-ink: #ede3d2; --plate-ink-2: #ac9c87;
+  --panel: #191510; --shelf: #2c2418; --shelf-edge: #3d3320;
+}
+
+/* Book cloth, one bolt per base. Chosen to read as a shelf rather than a
+   chart: close in value, far apart in hue, and legible against both grounds. */
 :root {
-  --cloth-1: #7d3b32; --cloth-2: #55613f; --cloth-3: #46586e;
-  --cloth-4: #96733a; --cloth-5: #64465f; --cloth-6: #3f6159;
+  --cloth-1: #7d3b32; --cloth-2: #4e6047; --cloth-3: #3f5771;
+  --cloth-4: #8a6d3a; --cloth-5: #5f4560; --cloth-6: #3c6260;
 }
 
 * { box-sizing: border-box; margin: 0; }
-body { background: var(--ground); color: var(--ink); font-family: var(--serif);
-  font-size: var(--size-body); line-height: 1.5;
-  height: 100vh; display: flex; flex-direction: column; }
-header { display: flex; align-items: baseline; gap: 1.2rem;
-  padding: .7rem 1.4rem; border-bottom: 1px solid var(--rule); }
-header .wordmark { font-size: 1.2rem; font-weight: 600; letter-spacing: .06em; }
-header .sub { color: var(--ink-2); font-size: var(--size-small); font-style: italic; }
-nav { margin-left: auto; display: flex; gap: .1rem; flex-wrap: wrap; }
-nav button { background: none; border: none; border-bottom: 2px solid transparent;
-  color: var(--ink-2); font-family: var(--serif); font-size: var(--size-small);
-  letter-spacing: .02em; padding: .3rem .7rem; cursor: pointer; }
-nav button.on { color: var(--ink); border-bottom-color: var(--accent); }
+html, body { height: 100%; }
+body {
+  background: var(--ground); color: var(--ink);
+  font-family: var(--serif); font-size: var(--size-body); line-height: 1.5;
+  display: flex; flex-direction: column;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* ---------------------------------------------------------------- the band */
+.band {
+  background: var(--ground);
+  border-bottom: 1px solid var(--chrome-rule);
+  display: flex; align-items: center; gap: 1.5rem;
+  padding: 0 var(--pad-page); min-height: 3.5rem; flex: none;
+}
+.wordmark {
+  font-size: var(--size-wordmark); line-height: 1;
+  text-transform: uppercase; letter-spacing: 0.3em;
+  color: var(--chrome-ink); font-weight: 400; white-space: nowrap;
+}
+.sub {
+  color: var(--ink-2); font-size: var(--size-small); font-style: italic;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+nav { margin-left: auto; display: flex; align-items: center; gap: 0; }
+nav button {
+  background: none; border: 0; color: var(--ink-2);
+  font-family: var(--serif); font-size: var(--size-small);
+  padding: 0.45rem 0.7rem; cursor: pointer; position: relative;
+  white-space: nowrap; transition: color 120ms ease-out;
+}
+nav button::after {
+  content: ""; position: absolute; left: 0.7rem; right: 0.7rem; bottom: 0.15rem;
+  height: 1px; background: var(--accent); transform: scaleX(0);
+  transition: transform 140ms cubic-bezier(0.33, 1, 0.68, 1);
+}
 nav button:hover { color: var(--ink); }
-main { flex: 1; overflow: hidden; display: flex; }
-.pane { flex: 1; overflow: auto; padding: 1.4rem; display: none; }
+nav button.on { color: var(--ink); }
+nav button.on::after { transform: scaleX(1); }
+nav button:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+/* The rule that separates doing from inspecting. */
+nav .navrule { width: 1px; align-self: stretch; margin: 0.7rem 0.6rem; background: var(--chrome-rule); }
+
+/* ------------------------------------------------------------- the lamp */
+html:not([data-js]) .lamp-toggle { display: none; }
+.lamp-toggle {
+  display: inline-flex; align-items: center; justify-content: center;
+  min-width: 2.5rem; min-height: 2.5rem; padding: 0.4rem; margin-left: 0.4rem;
+  background: transparent; border: 0; cursor: pointer;
+  transition: background-color 120ms ease-out;
+}
+.lamp-toggle:hover { background: color-mix(in srgb, var(--chrome-ink) 8%, transparent); }
+.lamp-toggle:active { background: color-mix(in srgb, var(--chrome-ink) 12%, transparent); }
+.lamp-toggle:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.lamp-toggle .ray { stroke: var(--chrome-ink); stroke-width: 1.5; stroke-linecap: round; fill: none; }
+.lamp-toggle .shade-fill { fill: var(--lamp-glow); }
+.lamp-toggle .shade-line { fill: none; stroke: var(--chrome-ink); stroke-width: 1.75; stroke-linejoin: round; }
+.lamp-toggle .stem { fill: var(--chrome-ink); stroke: var(--chrome-ink); stroke-width: 0.5; stroke-linejoin: round; }
+.lamp-toggle .base { stroke: var(--chrome-ink); stroke-width: 1.75; stroke-linecap: round; }
+.lamp-toggle .chain { stroke: var(--accent); stroke-width: 1.4; stroke-linecap: round; }
+.lamp-toggle .chain-pull { fill: var(--accent); }
+.lamp-toggle .ray-c { transform-origin: 14px 3.6px; }
+.lamp-toggle .ray-l { transform-origin: 10.1px 4.3px; }
+.lamp-toggle .ray-r { transform-origin: 17.9px 4.3px; }
+:root[data-theme="dark"] .lamp-toggle .glow { opacity: 0; }
+
+@media (prefers-reduced-motion: no-preference) {
+  /* Three identical blocks under three names: a CSS animation restarts only
+     when its computed animation-name changes, and every press changes
+     data-theme, so the per-state alias is the restart mechanism. */
+  @keyframes chain-tug-a {
+    0%   { transform: translateY(0); animation-timing-function: ease-in; }
+    40%  { transform: translateY(1.25px); animation-timing-function: cubic-bezier(0.34, 1.56, 0.64, 1); }
+    100% { transform: translateY(0); }
+  }
+  @keyframes chain-tug-b {
+    0%   { transform: translateY(0); animation-timing-function: ease-in; }
+    40%  { transform: translateY(1.25px); animation-timing-function: cubic-bezier(0.34, 1.56, 0.64, 1); }
+    100% { transform: translateY(0); }
+  }
+  :root[data-theme="light"] .lamp-toggle.pressed .chain-group { animation: chain-tug-a 250ms; }
+  :root[data-theme="dark"]  .lamp-toggle.pressed .chain-group { animation: chain-tug-b 250ms; }
+
+  /* The catch: entering light, the filament blinks before it holds. */
+  @keyframes lamp-catch {
+    0% { opacity: 0; } 30% { opacity: 1; } 55% { opacity: 0.15; } 100% { opacity: 1; }
+  }
+  :root[data-theme="light"] .lamp-toggle.pressed .shade-fill {
+    animation: lamp-catch 270ms ease-in-out 60ms backwards;
+  }
+  @keyframes ray-out { from { transform: scale(0); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+  :root[data-theme="light"] .lamp-toggle.pressed .ray {
+    animation: ray-out 120ms cubic-bezier(0.33, 1, 0.68, 1) 240ms backwards;
+  }
+  /* Filaments catch slowly and die instantly; darkness does not flicker. */
+  @keyframes lamp-off { from { opacity: 1; } to { opacity: 0; } }
+  :root[data-theme="dark"] .lamp-toggle.pressed .glow { animation: lamp-off 120ms ease-in; }
+}
+
+/* ---------------------------------------------------------------- layout */
+main { flex: 1; display: flex; min-height: 0; }
+.pane { flex: 1; overflow: auto; padding: var(--pad-page); display: none; min-width: 0; }
 .pane.on { display: block; }
-h2 { font-size: 1.15rem; font-weight: 600; margin-bottom: .8rem; }
+.head { max-width: 52rem; margin-bottom: 1.1rem; }
+h2 { font-size: 1.25rem; font-weight: 600; line-height: 1.2; }
+.lede { color: var(--ink-2); font-size: var(--size-small); margin-top: 0.2rem; }
 .hint { color: var(--ink-2); font-size: var(--size-small); }
-button.act { background: none; border: 1px solid var(--rule); color: var(--ink);
-  font-family: var(--serif); font-size: var(--size-small); padding: .45rem 1rem;
-  cursor: pointer; }
-button.act:hover { border-color: var(--ink-2); }
+button.act {
+  background: none; border: 1px solid var(--rule); color: var(--ink);
+  font-family: var(--serif); font-size: var(--size-small);
+  padding: 0.4rem 0.95rem; cursor: pointer;
+  transition: border-color 120ms ease-out, background-color 120ms ease-out;
+}
+button.act:hover { border-color: var(--ink-2); background: color-mix(in srgb, var(--ink) 4%, transparent); }
+button.act:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 
-/* fleet */
-.cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: .9rem; }
-.card { background: var(--panel); border: 1px solid var(--rule); padding: 1rem 1.1rem; }
-.card h3 { font-size: 1.05rem; font-weight: 600; margin-bottom: .25rem; }
-.card .role { color: var(--ink-2); font-size: var(--size-small); min-height: 2.6em; }
-.card .meta { font-family: var(--monof); font-size: var(--size-mono);
-  color: var(--ink-2); margin-top: .6rem; }
-.tag { font-size: .72rem; font-style: italic; color: var(--ink-2); margin-left: .4rem; }
-.tag.route { color: var(--accent); }
+/* ---------------------------------------------------------------- fleet */
+.cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(15rem, 1fr)); gap: 0.9rem; max-width: 64rem; }
+.card {
+  background: var(--panel); border: 1px solid var(--rule);
+  border-top: 2px solid var(--cloth); padding: 0.95rem 1.05rem;
+}
+.card h3 { font-size: 1.05rem; font-weight: 600; line-height: 1.2; }
+.card .role { color: var(--ink-2); font-size: var(--size-small); margin-top: 0.3rem; min-height: 2.8em; }
+.card .meta { font-family: var(--monof); font-size: var(--size-mono); color: var(--ink-2); margin-top: 0.7rem; }
+.tag { font-size: 0.72rem; font-style: italic; color: var(--ink-2); margin-left: 0.4rem; }
+.tag.route { color: var(--accent); font-style: normal; font-variant: small-caps; letter-spacing: 0.06em; }
 
-/* catalog */
-.askrow { display: flex; gap: .6rem; margin-bottom: 1rem; max-width: 52rem; }
-.askrow input { flex: 1; background: var(--panel); color: var(--ink);
-  border: 1px solid var(--rule); padding: .55rem .8rem;
-  font-family: var(--serif); font-size: var(--size-body); }
-.verdict { font-size: var(--size-small); padding: .6rem .9rem; margin-bottom: 1rem;
-  border-left: 3px solid var(--rule); background: var(--panel); max-width: 52rem; }
-.verdict b { font-variant: small-caps; letter-spacing: .05em; }
-.verdict b.hit { color: var(--accent); }
-.verdict b.guess, .verdict b.nothing { color: var(--ink-2); }
-table { border-collapse: collapse; width: 100%; font-size: var(--size-small); }
-th { text-align: left; font-variant: small-caps; letter-spacing: .06em;
-  font-weight: 400; color: var(--ink-2); padding: .3rem .6rem;
-  border-bottom: 1px solid var(--rule); font-size: .8rem; }
-td { padding: .45rem .6rem; border-bottom: 1px solid var(--rule); vertical-align: top; }
-td.n { font-family: var(--monof); font-size: var(--size-mono); color: var(--ink-2);
-  white-space: nowrap; }
-a.file { color: var(--ink); text-decoration: none;
-  border-bottom: 1px dotted var(--ink-2); cursor: pointer; }
+/* --------------------------------------------------------------- catalog */
+.askrow { display: flex; gap: 0.5rem; max-width: 52rem; margin-bottom: 1rem; }
+.askrow input {
+  flex: 1; background: var(--panel); color: var(--ink);
+  border: 1px solid var(--rule); padding: 0.5rem 0.75rem;
+  font-family: var(--serif); font-size: var(--size-body);
+}
+.askrow input:focus-visible { outline: 2px solid var(--accent); outline-offset: -1px; }
+.verdict {
+  font-size: var(--size-small); padding: 0.6rem 0.9rem; margin-bottom: 1rem;
+  border-left: 2px solid var(--accent); background: var(--panel); max-width: 52rem;
+}
+.verdict b { font-variant: small-caps; letter-spacing: 0.06em; color: var(--accent); }
+.verdict .num { font-family: var(--monof); font-size: var(--size-mono); color: var(--ink-2); }
+table { border-collapse: collapse; width: 100%; max-width: 64rem; font-size: var(--size-small); }
+th {
+  text-align: left; font-variant: small-caps; letter-spacing: 0.07em; font-weight: 400;
+  color: var(--ink-2); padding: 0.25rem 0.6rem; border-bottom: 1px solid var(--rule);
+}
+td { padding: 0.4rem 0.6rem; border-bottom: 1px solid var(--rule); vertical-align: top; }
+tbody tr:hover { background: color-mix(in srgb, var(--ink) 3%, transparent); }
+td.n { font-family: var(--monof); font-size: var(--size-mono); color: var(--ink-2); white-space: nowrap; }
+a.file { color: var(--ink); text-decoration: none; border-bottom: 1px solid var(--rule); cursor: pointer; }
 a.file:hover { color: var(--accent); border-bottom-color: var(--accent); }
-.bars { margin: .8rem 0 1.2rem; max-width: 460px; }
-.bar { display: grid; grid-template-columns: 96px 1fr 64px; gap: .6rem;
-  align-items: center; font-family: var(--monof); font-size: var(--size-mono);
-  color: var(--ink-2); margin-bottom: .3rem; }
-.bar .track { background: var(--panel); border: 1px solid var(--rule); height: 9px; }
-.bar .fill { height: 100%; opacity: .85; background: var(--accent); }
+.bars { margin: 0.7rem 0 1.2rem; max-width: 30rem; }
+.bar {
+  display: grid; grid-template-columns: 6rem 1fr 4rem; gap: 0.6rem; align-items: center;
+  font-family: var(--monof); font-size: var(--size-mono); color: var(--ink-2); margin-bottom: 0.25rem;
+}
+.bar .track { background: var(--panel); border: 1px solid var(--rule); height: 0.6rem; }
+.bar .fill { height: 100%; }
+.bar .who { font-family: var(--serif); font-size: var(--size-small); color: var(--ink); }
 
-/* the stacks */
-#p-stacks { padding: 1.4rem 1.6rem 2.5rem; }
-.shelfhead { display: flex; align-items: baseline; gap: .8rem; margin: 1.6rem 0 .2rem; }
-.shelfhead:first-child { margin-top: .2rem; }
-.shelfhead h3 { font-size: 1.05rem; font-weight: 600; }
-.shelfhead .office { font-style: italic; color: var(--ink-2); font-size: var(--size-small); }
-.shelf { display: flex; align-items: flex-end; gap: 2px; min-height: 128px;
-  padding: 0 .6rem 0; border-bottom: 6px solid var(--rule); overflow-x: auto; }
-.gapbetween { width: 1.1rem; flex: none; }
-.book { position: relative; flex: none; cursor: pointer;
-  border: 1px solid rgba(0,0,0,.28); border-bottom: none;
+/* ------------------------------------------------------------ the stacks */
+#p-stacks { padding-bottom: 3rem; }
+.bookcase { max-width: 72rem; }
+.shelfhead { display: flex; align-items: baseline; gap: 0.7rem; margin: 1.9rem 0 0.55rem; }
+.shelfhead:first-child { margin-top: 0.2rem; }
+.shelfhead h3 {
+  font-size: 1rem; font-weight: 600; letter-spacing: 0.02em;
+  display: flex; align-items: baseline; gap: 0.5rem;
+}
+.shelfhead h3::before {
+  content: ""; width: 0.55rem; height: 0.55rem; background: var(--cloth);
+  display: inline-block; transform: translateY(-0.05rem);
+}
+.shelfhead .count { font-family: var(--monof); font-size: var(--size-mono); color: var(--ink-2); }
+.shelfhead .office { font-style: italic; color: var(--ink-2); font-size: var(--size-small); margin-left: auto; }
+
+/* A shelf is a board with books standing on it. The board has thickness and
+   throws a shadow up onto the books, which is what makes the row read as a
+   shelf rather than a bar chart. */
+.shelfwrap { position: relative; }
+.shelf {
+  display: flex; align-items: flex-end; gap: 1px;
+  min-height: 9.5rem; padding: 0 0.75rem;
+  overflow-x: auto; overflow-y: hidden;
+  scrollbar-width: thin;
+}
+.board {
+  height: 0.5rem; background: var(--shelf);
+  border-top: 1px solid var(--shelf-edge);
+  box-shadow: 0 1px 0 color-mix(in srgb, var(--shelf-edge) 70%, transparent),
+              0 3px 6px -3px color-mix(in srgb, #000 45%, transparent);
+}
+.book {
+  position: relative; flex: none; cursor: pointer;
   display: flex; align-items: flex-end; justify-content: center;
-  transition: transform .08s; }
-.book:hover { transform: translateY(-5px); }
-.book .spine { writing-mode: vertical-rl; font-family: var(--serif);
-  font-size: .68rem; letter-spacing: .02em; color: #f2e9d8;
-  padding: 6px 0 8px; overflow: hidden; text-overflow: ellipsis;
-  white-space: nowrap; max-height: 100%; text-shadow: 0 0 2px rgba(0,0,0,.35); }
-.book .ribbon { position: absolute; top: -6px; width: 5px; height: 22px;
-  border: 1px solid rgba(0,0,0,.3); }
-.folderlabel { font-variant: small-caps; letter-spacing: .08em; color: var(--ink-2);
-  font-size: .72rem; align-self: flex-end; padding: 0 .3rem .2rem;
-  writing-mode: vertical-rl; rotate: 180deg; flex: none; }
+  border-radius: 1px 1px 0 0;
+  transition: transform 140ms cubic-bezier(0.33, 1, 0.68, 1);
+  /* The spine's own light: a cloth binding is not flat. */
+  background-image: linear-gradient(
+    100deg,
+    color-mix(in srgb, #000 22%, transparent) 0%,
+    transparent 14%,
+    transparent 74%,
+    color-mix(in srgb, #000 26%, transparent) 100%);
+}
+.book::after {
+  /* Head cap: the top edge catches the room's light. */
+  content: ""; position: absolute; inset: 0 0 auto 0; height: 2px;
+  background: color-mix(in srgb, #fff 26%, transparent);
+}
+.book:hover { transform: translateY(-0.6rem); }
+.book:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.book .spine {
+  writing-mode: vertical-rl; rotate: 180deg;
+  font-family: var(--serif); font-size: 0.72rem; letter-spacing: 0.015em;
+  color: #f4ecdd; padding: 0.55rem 0 0.5rem;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-height: 100%;
+  text-shadow: 0 1px 1px color-mix(in srgb, #000 55%, transparent);
+}
+.book .ribbon {
+  position: absolute; top: -0.45rem; width: 0.28rem; height: 1.5rem;
+  border-radius: 0 0 1px 1px;
+  box-shadow: 0 1px 2px color-mix(in srgb, #000 40%, transparent);
+}
+/* A card divider between folders, the way a real drawer is organised. */
+.divider {
+  flex: none; align-self: flex-end; width: 1.35rem; height: 11rem;
+  background: var(--panel); border: 1px solid var(--rule); border-bottom: 0;
+  border-radius: 0.35rem 0.35rem 0 0;
+  display: flex; align-items: center; justify-content: center;
+  margin: 0 0.2rem;
+}
+.divider span {
+  writing-mode: vertical-rl; rotate: 180deg;
+  font-variant: small-caps; letter-spacing: 0.1em; font-size: 0.66rem;
+  color: var(--ink-2); white-space: nowrap; overflow: hidden;
+  text-overflow: ellipsis; max-height: 9.5rem;
+}
+.legend { display: flex; flex-wrap: wrap; gap: 0.9rem; margin-top: 1.6rem; font-size: var(--size-small); color: var(--ink-2); }
+.legend i { display: inline-block; width: 0.55rem; height: 0.55rem; margin-right: 0.35rem; vertical-align: -0.02rem; }
 
-/* the desk */
+/* --------------------------------------------------------------- the desk */
 #p-desk { display: none; flex-direction: column; padding: 0; }
 #p-desk.on { display: flex; }
-#deskscroll { flex: 1; overflow-y: auto; padding: 1.4rem; }
-#deskin { display: flex; gap: .6rem; padding: .9rem 1.4rem;
-  border-top: 1px solid var(--rule); background: var(--panel); }
-#deskin textarea { flex: 1; background: var(--ground); color: var(--ink);
-  border: 1px solid var(--rule); padding: .55rem .8rem; resize: none;
-  font-family: var(--serif); font-size: var(--size-body); min-height: 2.6rem; }
-.turn { max-width: 46rem; margin: 0 auto 1.1rem; }
-.turn .who { font-variant: small-caps; letter-spacing: .08em;
-  font-size: .78rem; color: var(--ink-2); margin-bottom: .15rem; }
+#deskscroll { flex: 1; overflow-y: auto; padding: var(--pad-page) var(--pad-page) 1.5rem; }
+#deskin {
+  display: flex; gap: 0.5rem; align-items: flex-end;
+  padding: 0.75rem var(--pad-page); border-top: 1px solid var(--rule); background: var(--panel);
+}
+#deskin textarea {
+  flex: 1; background: var(--ground); color: var(--ink); border: 1px solid var(--rule);
+  padding: 0.5rem 0.7rem; resize: none; font-family: var(--serif);
+  font-size: var(--size-read); line-height: 1.45; max-height: 40vh;
+}
+#deskin textarea:focus-visible { outline: 2px solid var(--accent); outline-offset: -1px; }
+.turn { max-width: var(--measure); margin: 0 auto 1.3rem; font-size: var(--size-read); }
+.turn .who {
+  font-variant: small-caps; letter-spacing: 0.09em; font-size: 0.75rem;
+  color: var(--ink-2); margin-bottom: 0.15rem;
+}
 .turn.you .who { color: var(--accent); }
+.turn.you .said { padding-left: 0.8rem; border-left: 2px solid var(--rule); }
 .turn .said { white-space: pre-wrap; }
-/* A rendered answer is prose, not a log line: the pre-wrap that keeps a plain
-   message's line breaks would double every margin once the markdown became real
-   elements. */
 .turn .said.md { white-space: normal; }
 .turn .said.md > :first-child { margin-top: 0; }
-.turn .said.md h1 { font-size: 1.3rem; font-weight: 600; margin: 1rem 0 .4rem; }
-.turn .said.md h2 { font-size: 1.15rem; font-weight: 600; margin: 1rem 0 .35rem; }
-.turn .said.md h3 { font-size: 1.02rem; font-weight: 600; margin: .9rem 0 .3rem; }
-.turn .said.md p { margin: 0 0 .6rem; }
-.turn .said.md ul, .turn .said.md ol { margin: 0 0 .6rem; padding-left: 1.3rem; }
-.turn .said.md li { margin: 0 0 .2rem; }
-.turn .said.md code { font-family: var(--monof); font-size: .85em; }
-.turn .said.md pre { background: var(--cover); color: var(--cover-ink);
-  font-family: var(--monof); font-size: var(--size-mono); line-height: 1.5;
-  padding: .7rem .9rem; overflow-x: auto; margin: 0 0 .7rem; }
+.turn .said.md h1 { font-size: 1.3rem; font-weight: 600; margin: 1rem 0 0.4rem; line-height: 1.25; }
+.turn .said.md h2 { font-size: 1.15rem; font-weight: 600; margin: 1rem 0 0.35rem; line-height: 1.25; }
+.turn .said.md h3 { font-size: 1.02rem; font-weight: 600; margin: 0.9rem 0 0.3rem; }
+.turn .said.md p { margin: 0 0 0.6rem; }
+.turn .said.md ul, .turn .said.md ol { margin: 0 0 0.6rem; padding-left: 1.3rem; }
+.turn .said.md li { margin: 0 0 0.2rem; }
+.turn .said.md code { font-family: var(--monof); font-size: 0.85em; }
+.turn .said.md pre {
+  background: var(--plate); color: var(--plate-ink); font-family: var(--monof);
+  font-size: var(--size-mono); line-height: 1.5; padding: 0.7rem 0.9rem;
+  overflow-x: auto; margin: 0 0 0.7rem; border: 1px solid var(--rule);
+}
 .turn .said.md pre code { font-size: inherit; }
-.turn .said.md blockquote { border-left: 3px solid var(--rule); padding-left: .8rem;
-  color: var(--ink-2); margin: 0 0 .6rem; }
-.turn .said.md table { margin: 0 0 .7rem; }
-.turn .said.md hr { border: none; border-top: 1px solid var(--rule); margin: 1rem 0; }
-.turn.meta { font-family: var(--monof); font-size: var(--size-mono);
-  color: var(--ink-2); }
+.turn .said.md blockquote { border-left: 2px solid var(--rule); padding-left: 0.8rem; color: var(--ink-2); margin: 0 0 0.6rem; }
+.turn .said.md table { margin: 0 0 0.7rem; font-size: 0.9em; }
+.turn .said.md hr { border: 0; border-top: 1px solid var(--rule); margin: 1rem 0; }
+.turn.meta { font-family: var(--monof); font-size: var(--size-mono); color: var(--ink-2); }
 .turn.meta.err { color: var(--accent); }
-.toolchip { display: inline-block; font-family: var(--monof); font-size: .7rem;
-  border: 1px solid var(--rule); padding: .05rem .45rem; margin: 0 .25rem .25rem 0;
-  color: var(--ink-2); }
+.toolchip {
+  display: inline-block; font-family: var(--monof); font-size: 0.68rem;
+  border: 1px solid var(--rule); padding: 0.05rem 0.4rem;
+  margin: 0 0.25rem 0.25rem 0; color: var(--ink-2);
+}
 
-/* the page (viewer) */
-#pageview { width: 0; transition: width .15s; overflow: hidden;
-  border-left: 1px solid var(--rule); background: var(--ground);
-  display: flex; flex-direction: column; }
+/* -------------------------------------------------------------- the page */
+#pageview {
+  width: 0; transition: width 160ms cubic-bezier(0.33, 1, 0.68, 1);
+  overflow: hidden; border-left: 1px solid var(--rule);
+  background: var(--ground); display: flex; flex-direction: column; flex: none;
+}
 #pageview.open { width: min(52%, 44rem); }
-#pageview .phead { display: flex; align-items: baseline; gap: .8rem;
-  padding: .7rem 1.2rem; border-bottom: 1px solid var(--rule); }
-#pageview .phead .where { font-family: var(--monof); font-size: var(--size-mono);
-  color: var(--ink-2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-#pageview .phead button { margin-left: auto; background: none; border: none;
-  color: var(--ink-2); cursor: pointer; font-size: 1.1rem; }
-#pagebody { flex: 1; overflow-y: auto; padding: 1.6rem 2rem 3rem; }
-#pagebody .inner { max-width: 32rem; margin: 0 auto; }
-#pagebody h1 { font-size: 1.5rem; font-weight: 600; margin: 0 0 .6rem; line-height: 1.25; }
-#pagebody h2 { font-size: 1.2rem; margin: 1.2rem 0 .4rem; }
-#pagebody h3 { font-size: 1.05rem; margin: 1rem 0 .3rem; }
-#pagebody p { margin: 0 0 .7rem; }
-#pagebody li { margin: 0 0 .25rem; }
-#pagebody ul, #pagebody ol { margin: 0 0 .7rem; padding-left: 1.4rem; }
-#pagebody code { font-family: var(--monof); font-size: .82em; }
-#pagebody pre { background: var(--cover); color: var(--cover-ink);
+#pageview .phead {
+  display: flex; align-items: center; gap: 0.8rem; flex: none;
+  padding: 0.55rem var(--pad-page); border-bottom: 1px solid var(--rule);
+}
+#pageview .where {
+  font-family: var(--monof); font-size: var(--size-mono); color: var(--ink-2);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+#pageview .phead button { margin-left: auto; background: none; border: 0; color: var(--ink-2); cursor: pointer; font-size: 1.2rem; line-height: 1; padding: 0.2rem 0.4rem; }
+#pageview .phead button:hover { color: var(--accent); }
+#pagebody { flex: 1; overflow-y: auto; padding: 1.8rem var(--pad-page) 4rem; }
+#pagebody .inner { max-width: var(--measure); margin: 0 auto; font-size: var(--size-read); }
+#pagebody h1 { font-size: 1.6rem; font-weight: 600; margin: 0 0 0.7rem; line-height: 1.2; }
+#pagebody h2 { font-size: 1.25rem; margin: 1.5rem 0 0.4rem; line-height: 1.25; }
+#pagebody h3 { font-size: 1.08rem; margin: 1.1rem 0 0.3rem; }
+#pagebody p { margin: 0 0 0.75rem; }
+#pagebody li { margin: 0 0 0.25rem; }
+#pagebody ul, #pagebody ol { margin: 0 0 0.75rem; padding-left: 1.4rem; }
+#pagebody code { font-family: var(--monof); font-size: 0.84em; }
+#pagebody pre {
+  background: var(--plate); color: var(--plate-ink); border: 1px solid var(--rule);
   font-family: var(--monof); font-size: var(--size-mono); line-height: 1.5;
-  padding: .8rem 1rem; overflow-x: auto; margin: 0 0 .8rem; }
-#pagebody blockquote { border-left: 3px solid var(--rule); padding-left: .9rem;
-  color: var(--ink-2); margin: 0 0 .7rem; }
-#pagebody .fm { font-family: var(--monof); font-size: var(--size-mono);
-  color: var(--ink-2); border: 1px solid var(--rule); padding: .5rem .8rem;
-  margin-bottom: 1rem; white-space: pre-wrap; }
-.pagerefs { border-top: 1px solid var(--rule); margin-top: 1.4rem; padding-top: .8rem; }
-.pagerefs .lbl { font-variant: small-caps; letter-spacing: .08em;
-  font-size: .78rem; color: var(--ink-2); }
-.pagerefs ul { list-style: none; padding: 0; margin: .2rem 0 .8rem; }
+  padding: 0.8rem 1rem; overflow-x: auto; margin: 0 0 0.85rem;
+}
+#pagebody blockquote { border-left: 2px solid var(--rule); padding-left: 0.9rem; color: var(--ink-2); margin: 0 0 0.75rem; }
+#pagebody table { font-size: 0.88em; }
+#pagebody .fm {
+  font-family: var(--monof); font-size: var(--size-mono); color: var(--ink-2);
+  background: var(--panel); border: 1px solid var(--rule);
+  padding: 0.55rem 0.8rem; margin-bottom: 1.2rem; white-space: pre-wrap;
+}
+.pagerefs { border-top: 1px solid var(--rule); margin-top: 1.8rem; padding-top: 0.9rem; }
+.pagerefs .lbl { font-variant: small-caps; letter-spacing: 0.08em; font-size: 0.78rem; color: var(--ink-2); }
+.pagerefs ul { list-style: none; padding: 0; margin: 0.2rem 0 0.9rem; }
 .pagerefs .missing { color: var(--accent); font-style: italic; }
 
 .lvl-error { color: var(--accent); font-family: var(--monof); font-size: var(--size-mono); }
 .lvl-warning { color: var(--ink-2); font-family: var(--monof); font-size: var(--size-mono); }
-footer { padding: .4rem 1.4rem; border-top: 1px solid var(--rule);
-  color: var(--ink-2); font-size: .72rem; font-style: italic; }
-.toolbar { display: flex; gap: .8rem; margin-bottom: 1rem; align-items: center; }
+footer {
+  padding: 0.4rem var(--pad-page); border-top: 1px solid var(--rule); flex: none;
+  color: var(--ink-2); font-size: 0.72rem; font-style: italic;
+}
+.toolbar { display: flex; gap: 0.8rem; align-items: baseline; margin-bottom: 1rem; flex-wrap: wrap; }
+
+@media (max-width: 46rem) {
+  .sub { display: none; }
+  main { position: relative; }
+  /* Narrow: the page is not a panel that grows out of the side, it is a sheet
+     laid over the room. `width: auto` between left and right rather than a
+     percentage, because animating width from zero left it collapsed here: the
+     transition is what the sheet does not want. */
+  #pageview { transition: none; }
+  #pageview.open {
+    position: absolute; inset: 0; width: auto; z-index: 5;
+    border-left: 0; box-shadow: 0 0 2rem color-mix(in srgb, #000 35%, transparent);
+  }
+}
 </style>
 </head>
 <body>
-<header>
+<header class="band">
   <p class="wordmark">Ulpia</p>
   <div class="sub" id="sub">opening the library&hellip;</div>
   <nav>
-    <button data-p="fleet" class="on">fleet</button>
-    <button data-p="catalog">catalog</button>
-    <button data-p="stacks">the stacks</button>
     <button data-p="desk">the desk</button>
+    <button data-p="catalog">the catalog</button>
+    <button data-p="stacks">the stacks</button>
+    <span class="navrule"></span>
+    <button data-p="fleet" class="on">the fleet</button>
     <button data-p="blocks">blocks</button>
     <button data-p="doctor">doctor</button>
+    <button type="button" class="lamp-toggle" aria-label="Color scheme: light, press to change">
+      <svg viewBox="0 0 28 28" width="26" height="26" aria-hidden="true" focusable="false">
+        <g class="glow">
+          <path class="ray ray-c" d="M 14 1.2 L 14 3.6" />
+          <path class="ray ray-l" d="M 8.6 2.6 L 10.1 4.3" />
+          <path class="ray ray-r" d="M 19.4 2.6 L 17.9 4.3" />
+          <path class="shade-fill" d="M 6 13.5 L 10.5 5.5 L 17.5 5.5 L 22 13.5 Z" />
+        </g>
+        <g class="lamp">
+          <path class="shade-line" d="M 6 13.5 L 10.5 5.5 L 17.5 5.5 L 22 13.5 Z" />
+          <path class="stem" d="M 12.6 13.5 C 11.9 14.3, 11.1 15.0, 11.1 16.1 C 11.1 17.6, 12.9 18.2, 12.9 19.5 C 12.9 20.6, 10.6 20.9, 10.6 22.2 L 17.4 22.2 C 17.4 20.9, 15.1 20.6, 15.1 19.5 C 15.1 18.2, 16.9 17.6, 16.9 16.1 C 16.9 15.0, 16.1 14.3, 15.4 13.5 Z" />
+          <path class="base" d="M 9 24.25 L 19 24.25" />
+          <g class="chain-group">
+            <path class="chain" d="M 19 14.35 L 19 16.35" />
+            <circle class="chain-pull" cx="19" cy="17.15" r="1.05" />
+          </g>
+        </g>
+      </svg>
+    </button>
   </nav>
 </header>
+
 <main>
   <section class="pane on" id="p-fleet">
-    <h2>Who is in the fleet</h2>
+    <div class="head">
+      <h2>The fleet</h2>
+      <p class="lede">Who works here, and which of them the router may put a question to.</p>
+    </div>
     <div class="cards" id="fleetcards"></div>
   </section>
 
   <section class="pane" id="p-catalog">
-    <h2>The catalog</h2>
-    <p class="hint" style="margin-bottom:.8rem">Ask where a question goes. This is the
-      router itself, deciding in the open.</p>
+    <div class="head">
+      <h2>The catalog</h2>
+      <p class="lede">Ask where a question goes. This is the router itself, deciding in the open.</p>
+    </div>
     <div class="askrow">
       <input id="q" placeholder="quanto de proteina eu preciso por refeicao" autocomplete="off">
       <button class="act" id="go">consult</button>
@@ -242,12 +509,21 @@ footer { padding: .4rem 1.4rem; border-top: 1px solid var(--rule);
     <div id="askout"></div>
   </section>
 
-  <section class="pane" id="p-stacks"><div id="stacksout"></div></section>
+  <section class="pane" id="p-stacks">
+    <div class="head">
+      <h2>The stacks</h2>
+      <p class="lede">One shelf per base, spines by size, grouped by folder. A ribbon marks a
+        book another agent cites.</p>
+    </div>
+    <div class="bookcase" id="stacksout"></div>
+    <div class="legend" id="legend"></div>
+  </section>
 
   <section class="pane" id="p-desk">
-    <div id="deskscroll"><div class="turn meta" id="deskhello">
-      The desk. What you write here is routed by Vesta through the same hook that
-      routes every session, and answered by the agent it chooses.</div></div>
+    <div id="deskscroll">
+      <div class="turn meta" id="deskhello">The desk. What you write here is routed by Vesta
+        through the same hook that routes every session, and answered by the agent it chooses.</div>
+    </div>
     <div id="deskin">
       <textarea id="deskmsg" rows="1" placeholder="write to the fleet"></textarea>
       <button class="act" id="desksend">send</button>
@@ -255,47 +531,64 @@ footer { padding: .4rem 1.4rem; border-top: 1px solid var(--rule);
   </section>
 
   <section class="pane" id="p-blocks">
-    <h2>The constitutions, block by block</h2>
-    <p class="hint" style="margin-bottom:1rem">Resident blocks are paid for by every
-      question afterwards. Order is by stability, because prefix caching reuses the
-      prompt only up to the first token that differs.</p>
-    <div id="blocksout"></div>
+    <div class="head">
+      <h2>The constitutions</h2>
+      <p class="lede">Resident blocks are paid for by every question afterwards. Order is by
+        stability, because prefix caching reuses the prompt only up to the first token that differs.</p>
+    </div>
+    <div class="cards" id="blocksout" style="grid-template-columns:repeat(auto-fill,minmax(19rem,1fr))"></div>
   </section>
 
   <section class="pane" id="p-doctor">
-    <div class="toolbar">
-      <h2 style="margin:0">Doctor</h2>
-      <button class="act" id="reload">re-read the library</button>
-      <span class="hint">the linter's findings, and the reload for when files changed on disk</span>
+    <div class="head">
+      <h2>Doctor</h2>
+      <p class="lede">What the linter would say, and the reload for when files changed on disk.</p>
     </div>
+    <div class="toolbar"><button class="act" id="reload">re-read the library</button></div>
     <div id="checkout"></div>
   </section>
 
   <aside id="pageview">
-    <div class="phead"><span class="where" id="pwhere"></span><button id="pclose">&times;</button></div>
+    <div class="phead"><span class="where" id="pwhere"></span><button id="pclose" aria-label="close">&times;</button></div>
     <div id="pagebody"><div class="inner" id="pinner"></div></div>
   </aside>
 </main>
 <footer>served from 127.0.0.1 only &middot; tracked files only &middot; the index is derived and the files are the truth</footer>
+
 <script>
 "use strict";
 const $ = s => document.querySelector(s);
-const esc = s => s.replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const esc = s => String(s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 const api = p => fetch(p).then(r => { if (!r.ok) throw new Error(r.status); return r.json(); });
 
-document.querySelectorAll('nav button').forEach(b => b.onclick = () => {
-  document.querySelectorAll('nav button').forEach(x => x.classList.remove('on'));
+/* the lamp */
+(function () {
+  const root = document.documentElement, S = "ulpia-scheme";
+  const btn = document.querySelector('.lamp-toggle');
+  const paint = () => btn.setAttribute('aria-label', 'Color scheme: ' + root.dataset.theme + ', press to change');
+  btn.addEventListener('click', () => {
+    btn.classList.add('pressed');
+    const n = root.dataset.theme === 'dark' ? 'light' : 'dark';
+    root.dataset.theme = n;
+    try { localStorage.setItem(S, n); } catch (e) {}
+    paint();
+  });
+  paint();
+})();
+
+/* tabs */
+document.querySelectorAll('nav button[data-p]').forEach(b => b.onclick = () => {
+  document.querySelectorAll('nav button[data-p]').forEach(x => x.classList.remove('on'));
   document.querySelectorAll('.pane').forEach(x => x.classList.remove('on'));
   b.classList.add('on');
   $('#p-' + b.dataset.p).classList.add('on');
   if (b.dataset.p === 'stacks' && !stacksDrawn) drawStacks();
+  if (b.dataset.p === 'desk') $('#deskmsg').focus();
 });
 
-/* one bolt of cloth per agent */
 const CLOTH = ['--cloth-1','--cloth-2','--cloth-3','--cloth-4','--cloth-5','--cloth-6'];
 let clothOf = {};
-const cloth = name =>
-  `var(${clothOf[name.toLowerCase()] || '--cloth-1'})`;
+const cloth = name => `var(${clothOf[String(name).toLowerCase()] || '--cloth-1'})`;
 
 /* ------------------------------------------------- the page (shared viewer) */
 let stacksData = null;
@@ -308,8 +601,9 @@ function bookMeta(base, rel) {
   return null;
 }
 
-/* A page is set, not dumped: the markdown gets the smallest honest rendering,
-   on escaped text only, so a note cannot script the room it is read in. */
+/* Markdown, set as prose. Escaped first, always: every replacement runs on text
+   a note or a model wrote, and that escape is the only reason the result is
+   safe in innerHTML. Nothing here ever inserts an attribute. */
 function renderMd(text) {
   let fm = '';
   if (text.startsWith('---')) {
@@ -319,9 +613,6 @@ function renderMd(text) {
   const lines = text.split('\n');
   let out = fm ? `<div class="fm">${esc(fm)}</div>` : '';
   let inFence = false, fence = [], list = null, para = [], table = null;
-  /* Escaped first, always: every replacement below runs on text a note or a model
-     wrote, and the only reason this is safe to put in innerHTML is that esc() has
-     already been applied. Nothing here ever inserts an attribute. */
   const inline = s => esc(s)
     .replace(/`([^`]+)`/g, '<code>$1</code>')
     .replace(/\*\*([^*]+)\*\*/g, '<b>$1</b>')
@@ -352,9 +643,6 @@ function renderMd(text) {
     const l = raw.trimEnd();
     if (!l.trim()) { flushAll(); continue; }
     let m;
-
-    /* A table is a run of pipe rows; the dashes row is the header rule and is
-       consumed rather than rendered. */
     if (l.trim().startsWith('|') && l.includes('|', 1)) {
       flushP(); flushL();
       if (/^[\s|:-]+$/.test(l)) continue;
@@ -362,7 +650,6 @@ function renderMd(text) {
       continue;
     }
     flushT();
-
     if ((m = l.match(/^(#{1,4})\s+(.*)/))) { flushP(); flushL();
       const h = Math.min(m[1].length, 3); out += `<h${h}>${inline(m[2])}</h${h}>`; continue; }
     if (/^\s*([-*_])(\s*\1){2,}\s*$/.test(l)) { flushAll(); out += '<hr>'; continue; }
@@ -388,25 +675,25 @@ function openFile(base, rel) {
       $('#pwhere').textContent = base + '/' + rel;
       let html = renderMd(t);
       const meta = bookMeta(base, rel);
+      const link = c => { const i = c.indexOf('/');
+        return `<li><a class="file" onclick="openFile('${esc(c.slice(0,i))}','${esc(c.slice(i+1))}')">${esc(c)}</a></li>`; };
       if (meta && (meta.cites.length || meta.cited_by.length || meta.broken.length)) {
         html += '<div class="pagerefs">';
-        if (meta.cites.length) html += `<div class="lbl">this work cites</div><ul>` +
-          meta.cites.map(c => { const i = c.indexOf('/');
-            return `<li><a class="file" onclick="openFile('${esc(c.slice(0,i))}','${esc(c.slice(i+1))}')">${esc(c)}</a></li>`; }).join('') + '</ul>';
-        if (meta.cited_by.length) html += `<div class="lbl">cited by</div><ul>` +
-          meta.cited_by.map(c => { const i = c.indexOf('/');
-            return `<li><a class="file" onclick="openFile('${esc(c.slice(0,i))}','${esc(c.slice(i+1))}')">${esc(c)}</a></li>`; }).join('') + '</ul>';
-        if (meta.broken.length) html += `<div class="lbl">cites a missing work</div><ul>` +
-          meta.broken.map(c => `<li class="missing">${esc(c)}</li>`).join('') + '</ul>';
+        if (meta.cites.length) html += `<div class="lbl">this work cites</div><ul>${meta.cites.map(link).join('')}</ul>`;
+        if (meta.cited_by.length) html += `<div class="lbl">cited by</div><ul>${meta.cited_by.map(link).join('')}</ul>`;
+        if (meta.broken.length) html += `<div class="lbl">cites a missing work</div><ul>${
+          meta.broken.map(c => `<li class="missing">${esc(c)}</li>`).join('')}</ul>`;
         html += '</div>';
       }
       $('#pinner').innerHTML = html;
       $('#pageview').classList.add('open');
       $('#pagebody').scrollTop = 0;
     })
-    .catch(() => { $('#pwhere').textContent = 'not served';
+    .catch(() => {
+      $('#pwhere').textContent = 'not served';
       $('#pinner').innerHTML = '<p class="hint">That file is not in the tracked set this server was allowed to read.</p>';
-      $('#pageview').classList.add('open'); });
+      $('#pageview').classList.add('open');
+    });
 }
 $('#pclose').onclick = () => $('#pageview').classList.remove('open');
 const fileLink = (base, rel) =>
@@ -415,13 +702,15 @@ const fileLink = (base, rel) =>
 /* -------------------------------------------------------------------- fleet */
 function loadFleet() {
   api('/api/fleet').then(f => {
-    $('#sub').textContent = `${f.agents.length} agents, ${f.entries} entries, ${f.aliases} aliases` +
+    $('#sub').textContent = `${f.agents.length} bases, ${f.entries} entries, ${f.aliases} aliases` +
       (f.private ? ' (private layer included)' : '');
     f.agents.forEach((a, i) => clothOf[a.name.toLowerCase()] = CLOTH[i % CLOTH.length]);
     $('#fleetcards').innerHTML = f.agents.map(a => `
-      <div class="card" style="border-top:3px solid ${cloth(a.name)}">
-        <h3>${esc(a.name)}${a.routable ? '<span class="tag route">answers</span>' : '<span class="tag">the record office</span>'}</h3>
-        <div class="role">${esc(a.role || 'role not set in agent.txt')}</div>
+      <div class="card" style="--cloth:${cloth(a.name)}">
+        <h3>${esc(a.name)}${a.routable
+          ? '<span class="tag route">answers</span>'
+          : '<span class="tag">read by all, answers nothing</span>'}</h3>
+        <div class="role">${esc(a.role || 'no role declared in agent.txt')}</div>
         <div class="meta">${a.files} tracked files</div>
       </div>`).join('');
   }).catch(e => $('#sub').textContent = 'the server went away: ' + e);
@@ -433,24 +722,24 @@ function ask() {
   if (!q) return;
   $('#askout').innerHTML = '<p class="hint">consulting&hellip;</p>';
   api('/api/route?q=' + encodeURIComponent(q)).then(r => {
-    let h = '';
-    h += `<div class="verdict">the catalog says <b class="${r.verdict}">${r.verdict}</b>
-      &nbsp;&middot;&nbsp; keyword score ${r.score.toFixed(2)} against floor ${r.floor.toFixed(1)}
-      &nbsp;&middot;&nbsp; margin ${r.margin.toFixed(2)}</div>`;
+    let h = `<div class="verdict">the catalog says <b>${esc(r.verdict)}</b>
+      <span class="num">&nbsp;&middot;&nbsp; keyword ${r.score.toFixed(2)} against floor ${r.floor.toFixed(1)}
+      &nbsp;&middot;&nbsp; margin ${r.margin.toFixed(2)}</span></div>`;
     if (r.agent) {
       const top = Math.max(...r.agent.totals.map(t => t.score));
-      h += `<div class="bars"><div class="hint" style="margin-bottom:.4rem">
-        this belongs to <b>${esc(r.agent.name)}</b> (${r.agent.files} files voted, ${r.agent.contenders} contender${r.agent.contenders===1?'':'s'})</div>` +
-        r.agent.totals.map(t => `<div class="bar"><span>${esc(t.name)}</span>
+      h += `<div class="bars"><div class="hint" style="margin-bottom:.45rem">this belongs to
+        <b>${esc(r.agent.name)}</b>, ${r.agent.files} file${r.agent.files===1?'':'s'} voting,
+        ${r.agent.contenders} contender${r.agent.contenders===1?'':'s'}</div>` +
+        r.agent.totals.map(t => `<div class="bar"><span class="who">${esc(t.name)}</span>
           <span class="track"><span class="fill" style="width:${(100*t.score/top).toFixed(0)}%;background:${cloth(t.name)}"></span></span>
           <span>${t.score.toFixed(3)}</span></div>`).join('') + '</div>';
     }
     if (r.found && r.found.length) {
-      h += `<table><tr><th>open this</th><th>why</th><th>matched</th><th>keyword</th></tr>` +
+      h += `<table><thead><tr><th>open this</th><th>why</th><th>matched</th><th>keyword</th></tr></thead><tbody>` +
         r.found.map(f => `<tr>
           <td>${fileLink(f.base, f.rel)}${f.heading ? `<div class="hint">${esc(f.heading)}: ${esc(f.excerpt || '')}</div>` : ''}</td>
           <td class="n">${esc(f.why)}</td><td class="n">${esc(f.matched)}</td>
-          <td class="n">${f.keyword.toFixed(1)}</td></tr>`).join('') + '</table>';
+          <td class="n">${f.keyword.toFixed(1)}</td></tr>`).join('') + '</tbody></table>';
     } else if (r.verdict !== 'empty') {
       h += '<p class="hint">nothing matched, in either scorer.</p>';
     }
@@ -462,78 +751,82 @@ $('#q').addEventListener('keydown', e => { if (e.key === 'Enter') ask(); });
 
 /* --------------------------------------------------------------- the stacks */
 let stacksDrawn = false;
-const jitter = s => { let h = 0; for (const c of s) h = (h * 31 + c.charCodeAt(0)) | 0;
-  return Math.abs(h); };
+const hash = s => { let h = 0; for (const c of s) h = (h * 31 + c.charCodeAt(0)) | 0; return Math.abs(h); };
 function drawStacks() {
   stacksDrawn = true;
   api('/api/stacks').then(g => {
     stacksData = g;
     let out = '';
     for (const shelf of g.shelves) {
-      out += `<div class="shelfhead"><h3>${esc(shelf.agent)}</h3>` +
-        (shelf.routable ? '' : '<span class="office">the record office: read by every agent, owned by none</span>') +
-        `</div><div class="shelf">`;
-      /* group by folder, keep shelf order stable */
+      out += `<div class="shelfhead">
+        <h3 style="--cloth:${cloth(shelf.agent)}">${esc(shelf.agent)}</h3>
+        <span class="count">${shelf.books.length} volumes</span>` +
+        (shelf.routable ? '' : '<span class="office">read by every agent, answers nothing</span>') +
+        `</div><div class="shelfwrap"><div class="shelf">`;
+
       const groups = [];
       for (const b of shelf.books) {
         const g0 = groups.find(x => x.folder === b.folder);
         if (g0) g0.books.push(b); else groups.push({ folder: b.folder, books: [b] });
       }
       groups.forEach((grp, gi) => {
-        if (gi) out += '<div class="gapbetween"></div>';
-        if (grp.folder) out += `<div class="folderlabel">${esc(grp.folder)}</div>`;
+        if (grp.folder) out += `<div class="divider"><span>${esc(grp.folder)}</span></div>`;
+        else if (gi) out += `<div class="divider"><span>root</span></div>`;
         for (const b of grp.books) {
-          const w = Math.max(15, Math.min(34, 8 + 3.4 * Math.log2(1 + b.bytes / 800)));
-          const hgt = 88 + (jitter(b.stem) % 34);
+          /* Width from size, height varied but plausible: real shelves hold
+             books between roughly four fifths and full height, never random. */
+          const w = Math.max(17, Math.min(38, 9 + 3.6 * Math.log2(1 + b.bytes / 700)));
+          const h = 7.4 + (hash(b.stem) % 26) / 10;
           const label = b.title || b.stem;
           const ribbons = b.ribbons.map((r, i) =>
-            `<span class="ribbon" style="background:${cloth(r)};right:${4 + i * 8}px" title="${esc(r)} works here"></span>`).join('');
-          out += `<div class="book" style="width:${w.toFixed(0)}px;height:${hgt}px;background:${cloth(shelf.agent)}"
+            `<span class="ribbon" style="background:${cloth(r)};right:${0.25 + i * 0.42}rem" title="cited by ${esc(r)}"></span>`).join('');
+          out += `<div class="book" tabindex="0" role="button"
+            style="width:${w.toFixed(0)}px;height:${h.toFixed(1)}rem;background-color:${cloth(shelf.agent)}"
             onclick="openFile('${esc(shelf.agent)}','${esc(b.rel)}')"
-            title="${esc(label)}${b.ribbons.length ? ' · ribbons: ' + esc(b.ribbons.join(', ')) : ''}">
+            onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();openFile('${esc(shelf.agent)}','${esc(b.rel)}')}"
+            title="${esc(label)}${b.ribbons.length ? ' · cited by ' + esc(b.ribbons.join(', ')) : ''}">
             ${ribbons}<span class="spine">${esc(b.stem)}</span></div>`;
         }
       });
-      out += '</div>';
+      out += '</div><div class="board"></div></div>';
     }
-    $('#stacksout').innerHTML = out ||
-      '<p class="hint">the shelves are empty, which means discovery found no bases.</p>';
+    $('#stacksout').innerHTML = out || '<p class="hint">the shelves are empty: discovery found no bases.</p>';
+    $('#legend').innerHTML = g.shelves.map(s =>
+      `<span><i style="background:${cloth(s.agent)}"></i>${esc(s.agent)}</span>`).join('') +
+      '<span style="font-style:italic">a ribbon on a spine marks a book another base cites</span>';
   });
 }
 
 /* ----------------------------------------------------------------- the desk */
 const chatId = (() => {
   let id = sessionStorage.getItem('ulpia-desk');
-  if (!id) { id = 'desk-' + Math.random().toString(36).slice(2, 10);
-    sessionStorage.setItem('ulpia-desk', id); }
+  if (!id) { id = 'desk-' + Math.random().toString(36).slice(2, 10); sessionStorage.setItem('ulpia-desk', id); }
   return id;
 })();
 let busy = false;
 function say(cls, who, text) {
   const d = document.createElement('div');
   d.className = 'turn ' + cls;
-  d.innerHTML = (who ? `<div class="who">${esc(who)}</div>` : '') +
-    `<div class="said"></div>`;
+  d.innerHTML = (who ? `<div class="who">${esc(who)}</div>` : '') + `<div class="said"></div>`;
   d.querySelector('.said').textContent = text;
   $('#deskscroll').appendChild(d);
   $('#deskscroll').scrollTop = $('#deskscroll').scrollHeight;
   return d.querySelector('.said');
 }
-
-/* An answer is prose, so it is set as prose. The raw markdown is kept on the node
-   and the whole turn is re-rendered on each delta, because a heading or a table
-   can arrive split across two events and rendering the fragments separately would
-   leave the syntax showing, which is the bug this fixes. */
+/* The raw markdown is kept on the node and the whole turn re-rendered on each
+   delta, because a heading or a table can arrive split across two events and
+   rendering the fragments separately would leave the syntax showing. */
 function setProse(node, raw) {
   node.dataset.raw = raw;
   node.className = 'said md';
   node.innerHTML = renderMd(raw);
 }
+function grow(t) { t.style.height = 'auto'; t.style.height = Math.min(t.scrollHeight, window.innerHeight * 0.4) + 'px'; }
 function sendDesk() {
   if (busy) return;
   const m = $('#deskmsg').value.trim();
   if (!m) return;
-  $('#deskmsg').value = '';
+  $('#deskmsg').value = ''; grow($('#deskmsg'));
   say('you', 'you', m);
   busy = true; $('#desksend').textContent = '…';
   const status = say('meta', '', 'taken to the desk…');
@@ -542,7 +835,7 @@ function sendDesk() {
   const finish = () => { busy = false; $('#desksend').textContent = 'send'; es.close(); };
   es.onmessage = ev => {
     let e; try { e = JSON.parse(ev.data); } catch { return; }
-    if (e.kind === 'routed') { status.textContent = e.text; }
+    if (e.kind === 'routed') status.textContent = e.text;
     else if (e.kind === 'tool') {
       if (!tools) { const d = document.createElement('div'); d.className = 'turn meta';
         $('#deskscroll').appendChild(d); tools = d; }
@@ -550,16 +843,16 @@ function sendDesk() {
     }
     else if (e.kind === 'assistant') {
       if (!answer) { answer = say('', 'the fleet', ''); answer.dataset.raw = ''; }
-      const raw = (answer.dataset.raw ? answer.dataset.raw + '\n\n' : '') + e.text;
-      setProse(answer, raw);
+      setProse(answer, (answer.dataset.raw ? answer.dataset.raw + '\n\n' : '') + e.text);
       $('#deskscroll').scrollTop = $('#deskscroll').scrollHeight;
     }
-    else if (e.kind === 'error') { say('meta err', '', e.text); }
-    else if (e.kind === 'done') { finish(); }
+    else if (e.kind === 'error') say('meta err', '', e.text);
+    else if (e.kind === 'done') finish();
   };
   es.onerror = () => { if (busy) { if (!answer) status.textContent += ' (the stream closed)'; finish(); } };
 }
 $('#desksend').onclick = sendDesk;
+$('#deskmsg').addEventListener('input', e => grow(e.target));
 $('#deskmsg').addEventListener('keydown', e => {
   if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendDesk(); }
 });
@@ -571,12 +864,12 @@ function loadBlocks() {
       const resident = a.blocks.filter(x => x.mode === 'resident');
       const total = resident.reduce((s, x) => s + x.bytes, 0);
       const top = Math.max(1, ...a.blocks.map(x => x.bytes));
-      return `<div class="card" style="margin-bottom:1rem;border-top:3px solid ${cloth(a.agent)}">
-        <h3>${esc(a.agent)} <span class="tag">${(total/1024).toFixed(1)} KB resident</span></h3>
-        <div class="bars" style="margin-bottom:.2rem">` +
+      return `<div class="card" style="--cloth:${cloth(a.agent)}">
+        <h3>${esc(a.agent)}<span class="tag">${(total / 1024).toFixed(1)} KB resident</span></h3>
+        <div class="bars" style="margin:.7rem 0 0">` +
         a.blocks.map(x => `<div class="bar"><span>[${esc(x.name)}]</span>
-          <span class="track"><span class="fill" style="width:${(100*x.bytes/top).toFixed(0)}%;opacity:${x.mode==='resident'?'.9':'.35'};background:${cloth(a.agent)}"></span></span>
-          <span>${(x.bytes/1024).toFixed(1)} KB</span></div>` +
+          <span class="track"><span class="fill" style="width:${(100 * x.bytes / top).toFixed(0)}%;opacity:${x.mode === 'resident' ? '.9' : '.3'};background:${cloth(a.agent)}"></span></span>
+          <span>${(x.bytes / 1024).toFixed(1)} KB</span></div>` +
           (x.missing.length ? `<div class="lvl-error">missing: ${x.missing.map(esc).join(', ')}</div>` : '')
         ).join('') + `</div></div>`;
     }).join('') || '<p class="hint">no blocks.txt found in any base.</p>';
@@ -587,17 +880,16 @@ function loadBlocks() {
 function loadCheck() {
   api('/api/check').then(c => {
     $('#checkout').innerHTML = c.findings.length
-      ? `<table><tr><th>base</th><th>level</th><th>code</th><th>where</th><th>finding</th></tr>` +
+      ? `<table><thead><tr><th>base</th><th>level</th><th>code</th><th>where</th><th>finding</th></tr></thead><tbody>` +
         c.findings.map(f => `<tr><td class="n">${esc(f.base)}</td>
           <td><span class="lvl-${esc(f.level)}">${esc(f.level)}</span></td>
           <td class="n">${esc(f.code)}</td>
           <td class="n">${esc(f.file)}:${f.line}</td>
-          <td>${esc(f.message)}</td></tr>`).join('') + '</table>'
+          <td>${esc(f.message)}</td></tr>`).join('') + '</tbody></table>'
       : '<p class="hint" style="font-style:italic">every base is clean.</p>';
   });
 }
-$('#reload').onclick = () =>
-  fetch('/api/reload', { method: 'POST' }).then(() => { stacksDrawn = false; boot(); });
+$('#reload').onclick = () => fetch('/api/reload', { method: 'POST' }).then(() => { stacksDrawn = false; boot(); });
 
 function boot() { loadFleet(); loadBlocks(); loadCheck(); }
 boot();
