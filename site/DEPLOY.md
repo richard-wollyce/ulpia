@@ -61,6 +61,41 @@ The first run creates the project and prints a `*.pages.dev` URL. Verify there b
 attaching the domain: a broken deploy behind the real name is a worse minute than a
 broken deploy behind a temporary one.
 
+## 3b. The mail records, before the domain moves
+
+**This bit the first deployment and will bite again on any zone that moves.** Moving
+nameservers to Cloudflare moves DNS, and DNS is where mail delivery is decided. The
+mail records for `ulpia.io` live at Hostinger and did not come across, so the domain
+resolved with no MX at all, which means `hello@ulpia.io` could not receive anything:
+not the Cloudflare verification message, and not the mail the page's only call to
+action promises.
+
+Recreate these in Cloudflare DNS, all of them **DNS only** (grey cloud, not proxied):
+mail records cannot be proxied, and a proxied `autoconfig` breaks mail client setup.
+
+| Type | Name | Value | Priority |
+|------|------|-------|----------|
+| MX | `@` | `mx1.hostinger.com` | 5 |
+| MX | `@` | `mx2.hostinger.com` | 10 |
+| TXT | `@` | `v=spf1 include:_spf.mail.hostinger.com ~all` | |
+| TXT | `_dmarc` | `v=DMARC1; p=none` | |
+| CNAME | `autoconfig` | `autoconfig.mail.hostinger.com` | |
+
+**Do not recreate the old `A @` record.** It pointed the apex at the previous web
+host; the apex belongs to Pages now and Cloudflare writes that record itself when the
+custom domain is attached.
+
+Verify from outside rather than from the dashboard, because the dashboard shows
+intent and DNS shows reality:
+
+```bash
+nslookup -type=mx ulpia.io 1.1.1.1
+```
+
+Then send a message to `hello@ulpia.io` from an unrelated address and confirm it
+arrives. The page promises that address answers; nothing else on this list matters
+if it does not.
+
 ## 4. The domain
 
 In the Pages project: Custom domains, add `ulpia.io`, then add `www.ulpia.io` and set
