@@ -9,6 +9,7 @@
     "preview": "vite preview"
   },
   "devDependencies": {
+    "@cloudflare/workers-types": "^5.20260819.1",
     "typescript": "^7.0.2",
     "vite": "^8.2.1"
   },
