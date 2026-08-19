@@ -24,14 +24,20 @@
   --accent: #a63325; /* the Mastery red at ink density, 5.98:1 */
   --rule: #dacfc0; /* hairlines, decorative only */
 
-  /* cover material, mode-invariant. Hex values estimated from photographs of
-   * the physical book; if Richard's eye disagrees on the built page, these
-   * move first, the ground laws do not. */
+  /* cover material. Hex values estimated from photographs of the physical
+   * book; if Richard's eye disagrees on the built page, these move first, the
+   * ground laws do not. */
   --cover: #12100d;
   --gold: #c9a860; /* 8.37:1 on cover */
   --gold-sheen: #d8be82; /* hover on cover material only */
   --gold-shadow: #a88c4e; /* borders on cover material, 5.90:1 */
-  --chrome-rule: transparent;
+
+  /* the band follows the page scheme (spec 15.A): a running head on paper in
+   * light, the cover spine in dark. The hairline does the separating in both. */
+  --chrome-ink: #241d16; /* wordmark and lamp linework, 14.78:1 */
+  --chrome-rule: #dacfc0; /* decorative tier */
+  --lamp-glow: #ead9a8; /* 1.24:1 on paper: ornament by law 1's first
+   * amendment; the state lives in the chrome-ink stroke, never in this wash */
 
   /* terminal, mode-invariant: the plate is cover material lying on the page.
    * Its accent is gold in both schemes, per law 1. */
@@ -74,7 +80,9 @@
     --ink-2: #ab9e89; /* 7.22:1 */
     --accent: #c9a860; /* gold takes the hierarchy roles, 8.37:1 */
     --rule: #3d3320;
+    --chrome-ink: #c9a860;
     --chrome-rule: #55452b;
+    --lamp-glow: #c9a860; /* in the dark the glow is legible light, 8.37:1 */
     --term-border: #55452b;
   }
 }
@@ -86,7 +94,9 @@
   --ink-2: #ab9e89;
   --accent: #c9a860;
   --rule: #3d3320;
+  --chrome-ink: #c9a860;
   --chrome-rule: #55452b;
+  --lamp-glow: #c9a860;
   --term-border: #55452b;
 }
 
@@ -177,13 +187,12 @@ a:active {
   color: var(--accent);
 }
 
-/* ---- the band: a full-bleed shelf of cover material, the library's chrome
- * above the open book. In light it separates from paper by itself (16.87:1);
- * in dark the band and the page are one material and the hairline carries the
- * boundary, the same mechanism as the terminal border. ---- */
+/* ---- the band: the library's chrome, following the page scheme (spec 15.A).
+ * A running head on paper in light, the Mastery interior's own convention; the
+ * cover spine in dark. The hairline carries the boundary in both. ---- */
 
 .band {
-  background: var(--cover);
+  background: var(--ground);
   border-bottom: 1px solid var(--chrome-rule);
   min-height: 3.75rem;
   display: flex;
@@ -205,62 +214,66 @@ a:active {
   line-height: 1;
   text-transform: uppercase;
   letter-spacing: 0.3em;
-  color: var(--gold);
+  color: var(--chrome-ink);
 }
 
-/* The switch: a segmented radio group, all three states visible, the active
- * one carried by fill inversion (a luminance flip legible without color
- * vision) plus aria-checked. Spec 14.B, remade from evidence after the verb
- * label failed its first real user: people read control labels as current
- * state, so the current state is what this control shows. Hidden entirely
- * until the script marks the html element, so no-JS visitors get no dead
- * control. */
-html:not([data-js]) .scheme-switch {
+/* The lamp (spec 15.B, from Richard's sketch): a single toggle whose icon IS
+ * the state display. Half lit for auto, cut on the lamp's own axis; lit for
+ * light; dark for dark. The state lives in the chrome-ink stroke at text-tier
+ * contrast; the gold wash is ornament by law 1's first amendment and binds
+ * nothing. States are driven entirely by the html attribute: the lamp shows
+ * the CHOICE, never the resolved scheme. Instant, no transition: a control
+ * must never be slower than its effect, and the press repaints the page in
+ * the same frame. Hidden until the script marks the html element, so no-JS
+ * visitors get no dead control. */
+html:not([data-js]) .lamp-toggle {
   display: none;
 }
 
-.scheme-switch {
+.lamp-toggle {
   display: inline-flex;
-  border: 1px solid var(--gold-shadow);
-  border-radius: 0;
-  background: transparent;
-}
-
-.scheme-switch [role="radio"] {
-  font: inherit;
-  font-weight: 600;
-  font-size: 0.75rem;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  color: var(--gold);
+  align-items: center;
+  justify-content: center;
+  min-width: 2.75rem;
+  min-height: 2.75rem;
+  padding: 0.625rem;
   background: transparent;
   border: 0;
   border-radius: 0;
-  padding: 0.5rem 0.75rem;
-  min-height: 2.75rem;
-  min-width: 3rem;
   cursor: pointer;
-  transition: color 120ms ease-out, background-color 120ms ease-out;
+  transition: background-color 120ms ease-out;
 }
 
-.scheme-switch [role="radio"] + [role="radio"] {
-  border-left: 1px solid var(--gold-shadow);
+.lamp-toggle:hover {
+  background: color-mix(in srgb, var(--chrome-ink) 8%, transparent);
 }
 
-.scheme-switch [role="radio"][aria-checked="true"] {
-  background: var(--gold);
-  color: var(--cover);
-  cursor: default;
+.lamp-toggle:active {
+  background: color-mix(in srgb, var(--chrome-ink) 12%, transparent);
 }
 
-.scheme-switch [role="radio"][aria-checked="false"]:hover {
-  color: var(--gold-sheen);
-  background: color-mix(in srgb, var(--gold) 8%, transparent);
-}
-
-.scheme-switch [role="radio"]:focus-visible {
-  outline: 2px solid var(--gold);
+.lamp-toggle:focus-visible {
+  outline: 2px solid var(--accent);
   outline-offset: 2px;
+}
+
+.lamp-toggle .lamp {
+  stroke: var(--chrome-ink);
+}
+
+.lamp-toggle .glow {
+  stroke: var(--chrome-ink);
+  fill: var(--lamp-glow);
+  /* Auto: half lit, the cut landing on the stem, the lamp's own axis. */
+  clip-path: url(#lamp-half);
+}
+
+:root[data-theme="light"] .lamp-toggle .glow {
+  clip-path: none;
+}
+
+:root[data-theme="dark"] .lamp-toggle .glow {
+  display: none;
 }
 
 /* ---- hero: the opening of a book, on paper, under the shelf ---- */

@@ -9,7 +9,8 @@
       content="A fleet of AI agents, each with its own knowledge base, and one memory layer under all of them. On your machine, in plain files, with no model in the retrieval path."
     />
     <meta name="color-scheme" content="light dark" />
-    <meta name="theme-color" content="#12100D" />
+    <meta name="theme-color" media="(prefers-color-scheme: light)" content="#F6F1E7" />
+    <meta name="theme-color" media="(prefers-color-scheme: dark)" content="#12100D" />
     <link rel="canonical" href="https://ulpia.io/" />
     <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
     <meta property="og:title" content="Ulpia" />
@@ -27,11 +28,20 @@
     <header class="band">
       <div class="band-inner">
         <p class="wordmark">Ulpia</p>
-        <div class="scheme-switch" role="radiogroup" aria-label="Color scheme">
-          <button type="button" role="radio" aria-checked="true" data-scheme="auto" tabindex="0">auto</button>
-          <button type="button" role="radio" aria-checked="false" data-scheme="light" tabindex="-1">light</button>
-          <button type="button" role="radio" aria-checked="false" data-scheme="dark" tabindex="-1">dark</button>
-        </div>
+        <button type="button" class="lamp-toggle" aria-label="Color scheme: auto, press to change">
+          <svg viewBox="0 0 24 24" width="24" height="24" aria-hidden="true" focusable="false">
+            <clipPath id="lamp-half"><rect x="12" y="0" width="12" height="24" /></clipPath>
+            <g class="glow" stroke-width="1">
+              <ellipse cx="12" cy="3.75" rx="2.75" ry="1.75" />
+              <ellipse cx="12" cy="16" rx="7" ry="3.5" />
+            </g>
+            <g class="lamp" fill="none" stroke-width="1.5" stroke-linejoin="round" stroke-linecap="round">
+              <path d="M 9.5 6 L 14.5 6 L 18 12 L 6 12 Z" />
+              <path d="M 12 12 L 12 19" />
+              <ellipse cx="12" cy="20" rx="4" ry="1.5" />
+            </g>
+          </svg>
+        </button>
       </div>
     </header>
 
