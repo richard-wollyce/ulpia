@@ -208,43 +208,59 @@ a:active {
   color: var(--gold);
 }
 
-/* The switch: a printed label in the chrome's material. The visible text is
- * the state a press will apply; the page itself already displays the current
- * one. Hidden entirely until the script marks the html element, so no-JS
- * visitors get no dead control. */
+/* The switch: a segmented radio group, all three states visible, the active
+ * one carried by fill inversion (a luminance flip legible without color
+ * vision) plus aria-checked. Spec 14.B, remade from evidence after the verb
+ * label failed its first real user: people read control labels as current
+ * state, so the current state is what this control shows. Hidden entirely
+ * until the script marks the html element, so no-JS visitors get no dead
+ * control. */
 html:not([data-js]) .scheme-switch {
   display: none;
 }
 
 .scheme-switch {
+  display: inline-flex;
+  border: 1px solid var(--gold-shadow);
+  border-radius: 0;
+  background: transparent;
+}
+
+.scheme-switch [role="radio"] {
   font: inherit;
   font-weight: 600;
-  font-size: 0.8125rem;
+  font-size: 0.75rem;
   letter-spacing: 0.08em;
   text-transform: uppercase;
   color: var(--gold);
   background: transparent;
-  border: 1px solid var(--gold-shadow);
+  border: 0;
   border-radius: 0;
-  padding: 0.5rem 0.875rem;
+  padding: 0.5rem 0.75rem;
   min-height: 2.75rem;
-  min-width: 5.5em;
+  min-width: 3rem;
   cursor: pointer;
-  transition: color 120ms ease-out, border-color 120ms ease-out,
-    background-color 120ms ease-out;
+  transition: color 120ms ease-out, background-color 120ms ease-out;
 }
 
-.scheme-switch:hover {
+.scheme-switch [role="radio"] + [role="radio"] {
+  border-left: 1px solid var(--gold-shadow);
+}
+
+.scheme-switch [role="radio"][aria-checked="true"] {
+  background: var(--gold);
+  color: var(--cover);
+  cursor: default;
+}
+
+.scheme-switch [role="radio"][aria-checked="false"]:hover {
   color: var(--gold-sheen);
-  border-color: var(--gold);
+  background: color-mix(in srgb, var(--gold) 8%, transparent);
 }
 
-.scheme-switch:active {
-  background: color-mix(in srgb, var(--gold) 12%, transparent);
-}
-
-.scheme-switch:focus-visible {
-  outline-color: var(--gold);
+.scheme-switch [role="radio"]:focus-visible {
+  outline: 2px solid var(--gold);
+  outline-offset: 2px;
 }
 
 /* ---- hero: the opening of a book, on paper, under the shelf ---- */
@@ -507,8 +523,74 @@ footer a:active {
   padding: 0.625rem 0.75rem;
 }
 
-/* The page's one script flips a lamp; nothing else moves. This rule exists so
- * a future edit cannot regress that silently. */
+/* ---- the animation system, spec 14.C. Two independent gates: every
+ * pre-hidden state and transition lives inside the no-preference media block
+ * AND under html[data-js], so reduced-motion visitors and no-JS visitors see
+ * everything instantly with no motion. Only opacity and transform ever
+ * animate: every element occupies its final box from first paint. All state
+ * is class toggles; the script writes no element.style. ---- */
+
+.subhead {
+  position: relative;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  /* The typing twin: the real text goes transparent while typing, keeping its
+   * exact layout and its place in the accessibility tree; the aria-hidden
+   * live span overlays it and types the same string in the same box. */
+  html[data-js] .is-typing .type-real {
+    color: transparent;
+  }
+
+  .type-live {
+    position: absolute;
+    inset: 0;
+  }
+
+  .type-live::after {
+    content: "";
+    border-right: 2px solid var(--accent);
+    margin-left: 1px;
+    /* Steady caret. No blink: nothing on this page loops. */
+  }
+
+  html[data-js] [data-anim="rise"],
+  html[data-js] [data-anim="hero"] {
+    opacity: 0;
+    transform: translateY(0.75rem);
+    transition: opacity 300ms cubic-bezier(0.33, 1, 0.68, 1),
+      transform 300ms cubic-bezier(0.33, 1, 0.68, 1);
+  }
+
+  html[data-js] [data-anim="hero"] {
+    transform: translateY(0.5rem);
+  }
+
+  html[data-js] [data-anim].is-shown {
+    opacity: 1;
+    transform: none;
+  }
+
+  /* Stagger within a section, assigned as classes at registration, capped at
+   * two followers so a group settles in 440ms, under the 500ms drag line. */
+  html[data-js] [data-anim].delay-1 {
+    transition-delay: 70ms;
+  }
+
+  html[data-js] [data-anim].delay-2 {
+    transition-delay: 140ms;
+  }
+
+  /* The focus guard and the failsafe reveal instantly: a keyboard user must
+   * never focus into an invisible block, and no script failure may leave
+   * content hidden. */
+  html[data-js] [data-anim].is-shown.instant {
+    transition: none;
+  }
+}
+
+/* Nothing loops, nothing replays; this rule exists so a future edit cannot
+ * regress that silently. */
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,

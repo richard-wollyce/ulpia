@@ -15,7 +15,11 @@
     <header class="band">
       <div class="band-inner">
         <p class="wordmark">Ulpia</p>
-        <button type="button" class="scheme-switch" aria-label="Color scheme: auto. Press for light.">light</button>
+        <div class="scheme-switch" role="radiogroup" aria-label="Color scheme">
+          <button type="button" role="radio" aria-checked="true" data-scheme="auto" tabindex="0">auto</button>
+          <button type="button" role="radio" aria-checked="false" data-scheme="light" tabindex="-1">light</button>
+          <button type="button" role="radio" aria-checked="false" data-scheme="dark" tabindex="-1">dark</button>
+        </div>
       </div>
     </header>
     <main>

@@ -20,43 +20,44 @@
     <meta property="og:url" content="https://ulpia.io/" />
     <meta property="og:type" content="website" />
     <script src="/theme.js"></script>
+    <script src="/anim.js" defer></script>
     <link rel="stylesheet" href="/src/styles.css" />
   </head>
   <body>
     <header class="band">
       <div class="band-inner">
         <p class="wordmark">Ulpia</p>
-        <button type="button" class="scheme-switch" aria-label="Color scheme: auto. Press for light.">light</button>
+        <div class="scheme-switch" role="radiogroup" aria-label="Color scheme">
+          <button type="button" role="radio" aria-checked="true" data-scheme="auto" tabindex="0">auto</button>
+          <button type="button" role="radio" aria-checked="false" data-scheme="light" tabindex="-1">light</button>
+          <button type="button" role="radio" aria-checked="false" data-scheme="dark" tabindex="-1">dark</button>
+        </div>
       </div>
     </header>
 
     <main>
       <section class="hero" aria-label="Ulpia">
         <h1>The memory is yours. The&nbsp;model is a guest.</h1>
-        <p class="subhead">
-          A fleet of AI agents, each with its own knowledge base, and one memory
-          layer under all of them. On your machine, in plain files, with no model
-          in the retrieval path.
-        </p>
-        <p class="cta-row">
+        <p class="subhead" data-anim="type"><span class="type-real">A fleet of AI agents, each with its own knowledge base, and one memory layer under all of them. On your machine, in plain files, with no model in the retrieval path.</span></p>
+        <p class="cta-row" data-anim="hero">
           <a class="cta-primary" href="mailto:hello@ulpia.io">Write to hello@ulpia.io</a>
         </p>
-        <p class="status-line">Pre-launch. Built daily.</p>
+        <p class="status-line" data-anim="hero">Pre-launch. Built daily.</p>
       </section>
 
       <section aria-labelledby="library">
         <h2 id="library">A library that lives with&nbsp;you.</h2>
-        <p class="opening">
+        <p class="opening" data-anim="rise">
           Ulpia is a library. Your notes, your decisions, your protocols:
           markdown files, in folders, in git, on your disk. Move the folder and
           everything moves with it.
         </p>
-        <p>
+        <p data-anim="rise">
           Vesta is its librarian. Ask her a question and she answers with the
           files that should open, without a model in the loop. When she is
           wrong, she says why, in words you can act on.
         </p>
-        <p>
+        <p data-anim="rise">
           Then you hand those files to whatever model you like. Yours, running
           locally. Claude, through MCP. Something else next year. The memory
           outlives the model.
@@ -65,7 +66,7 @@
 
       <section aria-labelledby="work">
         <h2 id="work">Watch her&nbsp;work.</h2>
-        <figure class="terminal">
+        <figure class="terminal" data-anim="rise">
           <pre tabindex="0" role="region" aria-label="Terminal output: kb route, with scores and agreement"><span class="t-dim">$</span> kb route "why is there no embedding model in the retrieval path" decisions --hybrid
 
 <span class="t-dim">question: why is there no embedding model in the retrieval path
@@ -76,13 +77,13 @@ indexed:  20 entries across 1 agents, 0 aliases</span>
   <span class="t-dim">0.030</span>  decisions 0015-expansion-split-by-distance.md          <span class="t-hit">keywords #8 + text #5</span></pre>
           <figcaption>Real output, uncut.</figcaption>
         </figure>
-        <p>
+        <p data-anim="rise">
           Two independent scorers read every question: a keyword index built
           from your own map, and full text search over the content. The signal
           is not the score, it is the agreement. A file both scorers found is a
           hit. A file only one found is a guess, and Vesta says so.
         </p>
-        <p>
+        <p data-anim="rise">
           When nothing matches, the base answers with its own vocabulary, so a
           miss teaches you what the library covers instead of teaching you to
           stop asking.
@@ -91,15 +92,15 @@ indexed:  20 entries across 1 agents, 0 aliases</span>
 
       <section aria-labelledby="trade">
         <h2 id="trade">The other&nbsp;trade.</h2>
-        <p>
+        <p data-anim="rise">
           Most memory layers put an embedding model between you and your own
           notes. That buys semantic matching, and it costs four things: you
           cannot run it offline, you cannot explain a bad result, you cannot
           reproduce yesterday's answer, and your notes have been somewhere you
           did not choose.
         </p>
-        <p>Ulpia takes the other trade.</p>
-        <ul class="properties">
+        <p data-anim="rise">Ulpia takes the other trade.</p>
+        <ul class="properties" data-anim="rise">
           <li><strong>Offline</strong>, because no network sits in the retrieval path.</li>
           <li><strong>Explainable</strong>, because every answer names the reason it was chosen.</li>
           <li>
@@ -112,13 +113,13 @@ indexed:  20 entries across 1 agents, 0 aliases</span>
 
       <section aria-labelledby="stands">
         <h2 id="stands">Where it&nbsp;stands.</h2>
-        <p>
+        <p data-anim="rise">
           Early, used daily, and honest about which is which. The core is
           tested. The tray app is young. Local model routing is not built yet.
           The licence is not chosen yet, and choosing well matters more to us
           than announcing fast.
         </p>
-        <p>
+        <p data-anim="rise">
           If that paragraph made you more curious instead of less, this is
           being built for you.
         </p>
@@ -126,7 +127,7 @@ indexed:  20 entries across 1 agents, 0 aliases</span>
 
       <section aria-labelledby="door">
         <h2 id="door">The doors are not open yet. The mail&nbsp;is.</h2>
-        <p>
+        <p data-anim="rise">
           Write to
           <a href="mailto:hello@ulpia.io">hello@ulpia.io</a> and we will write
           back when there is something you can install.
