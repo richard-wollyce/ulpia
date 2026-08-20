@@ -13,11 +13,21 @@ to be typed would contradict the product it is going to be writing about. The
 cost is time on a CPU, which is real and is stated by the tool rather than
 hidden: it prints the audio duration before it starts.
 
-Why Whisper rather than YouTube's own captions, which are free and instant:
-auto-captions arrive without punctuation, so the sentence boundaries have to be
-invented downstream by whoever adapts the text. Inventing sentence boundaries is
-exactly the step where someone else's voice creeps into a transcript, and this
-pipeline exists to keep one voice intact.
+Two ways in, and the choice is a real trade rather than a formality:
+
+  --captions  reads the track YouTube already generated. Instant, even on a long
+              video, which is why the online tools that feel magic are doing
+              exactly this. Measured cost: YouTube's automatic Portuguese arrives
+              with no punctuation and no capitals, so sentence boundaries have to
+              be decided downstream.
+
+  --asr       listens to the audio with faster-whisper. Slower, roughly the
+              length of the video on this CPU, and it returns punctuated,
+              capitalised text with better word accuracy.
+
+Default: captions when they exist, audio when they do not, because most of the
+time the words are the expensive part and the punctuation is not. Pass --asr when
+the recording matters enough to wait.
 """
 
 import argparse
@@ -26,6 +36,7 @@ import os
 import re
 import shutil
 import subprocess
+import unicodedata
 import sys
 import tempfile
 from pathlib import Path
@@ -47,8 +58,77 @@ def is_url(source: str) -> bool:
     return source.startswith("http://") or source.startswith("https://")
 
 
+def fetch_captions(source: str, workdir: Path, lang: str | None) -> tuple[str, list, str] | None:
+    """Return (text, segments, language) from YouTube's own track, or None.
+
+    Preference order matters: a track the uploader wrote is punctuated and
+    correct, and is worth more than anything a machine produces. The automatic
+    one is the fallback within the fallback.
+    """
+    listing = run(["yt-dlp", "--no-warnings", "--list-subs", source])
+    wanted = []
+    if lang:
+        wanted = [lang, f"{lang}-orig"]
+    else:
+        # -orig is the language actually spoken; the others are translations of
+        # it, and translating our own words back to us would be absurd.
+        for code in re.findall(r"^([a-z]{2}(?:-[A-Za-z]+)?)\s", listing, re.M):
+            if code.endswith("-orig"):
+                wanted.insert(0, code)
+            elif code not in wanted:
+                wanted.append(code)
+    if not wanted:
+        return None
+
+    for code in wanted[:3]:
+        out = workdir / "subs"
+        proc = subprocess.run(
+            ["yt-dlp", "--no-warnings", "--skip-download", "--write-subs",
+             "--write-auto-subs", "--sub-langs", code, "--sub-format", "srt",
+             "-o", str(out), source],
+            capture_output=True, text=True,
+        )
+        hits = sorted(workdir.glob("subs*.srt"))
+        if proc.returncode == 0 and hits:
+            return (*parse_srt(hits[0].read_text(encoding="utf-8")), code)
+    return None
+
+
+BLANK_LINE = re.compile(chr(10) + r"\s*" + chr(10))
+
+
+def parse_srt(raw: str) -> tuple[str, list]:
+    """SRT to plain text plus segments. yt-dlp already collapses the rolling
+    window that auto-captions use, so consecutive cues do not repeat."""
+    segments = []
+    for block in re.split(BLANK_LINE, raw.strip()):
+        lines = [l for l in block.splitlines() if l.strip()]
+        if len(lines) < 2:
+            continue
+        stamp = next((l for l in lines if "-->" in l), None)
+        if not stamp:
+            continue
+        body = " ".join(lines[lines.index(stamp) + 1:]).strip()
+        if not body:
+            continue
+
+        def secs(t):
+            h, m, rest = t.split(":")
+            s, ms = rest.replace(".", ",").split(",")
+            return int(h) * 3600 + int(m) * 60 + int(s) + int(ms) / 1000
+
+        a, b = [p.strip() for p in stamp.split("-->")]
+        segments.append({"start": round(secs(a), 2), "end": round(secs(b), 2), "text": body})
+    return " ".join(s["text"] for s in segments), segments
+
+
 def slugify(text: str) -> str:
-    text = re.sub(r"[^\w\s-]", "", text, flags=re.UNICODE).strip().lower()
+    # Accents are stripped rather than kept: the slug becomes a URL, and an
+    # address with combining marks is legal, ugly, and a trap for anyone who
+    # types it by hand or pastes it into a terminal.
+    text = unicodedata.normalize("NFKD", text)
+    text = "".join(c for c in text if not unicodedata.combining(c))
+    text = re.sub(r"[^A-Za-z0-9\s-]", "", text).strip().lower()
     return re.sub(r"[\s_-]+", "-", text)[:70] or "untitled"
 
 
@@ -90,14 +170,45 @@ def main() -> None:
                          "video into an afternoon")
     ap.add_argument("--language", default=None,
                     help="force a language code such as pt or en; detected when omitted")
+    mode = ap.add_mutually_exclusive_group()
+    mode.add_argument("--captions", action="store_true",
+                      help="use YouTube's own caption track and fail if there is none")
+    mode.add_argument("--asr", action="store_true",
+                      help="always listen to the audio, even when captions exist")
     args = ap.parse_args()
+
+    OUT_DIR.mkdir(parents=True, exist_ok=True)
+
+    # The fast path first, unless told otherwise.
+    if is_url(args.source) and not args.asr:
+        import tempfile as _t
+        with _t.TemporaryDirectory() as tmp:
+            title = run(["yt-dlp", "--no-warnings", "--print", "title", args.source]).strip()
+            got = fetch_captions(args.source, Path(tmp), args.language)
+        if got:
+            text, segments, code = got
+            stem = slugify(title)
+            (OUT_DIR / f"{stem}.txt").write_text(text, encoding="utf-8")
+            (OUT_DIR / f"{stem}.json").write_text(
+                json.dumps({"source": args.source, "title": title, "language": code,
+                            "method": "youtube-captions", "segments": segments},
+                           ensure_ascii=False, indent=1), encoding="utf-8")
+            print(f"scribe: took YouTube's own {code} track, {len(text.split())} words, instantly.")
+            if text[:400].count(".") + text[:400].count("?") < 2:
+                print("scribe: it arrived without punctuation, which is normal for an "
+                      "automatic track. Run again with --asr if that matters here.")
+            print(f"scribe: wrote transcripts/{stem}.txt and transcripts/{stem}.json")
+            return
+        if args.captions:
+            sys.exit("scribe: no caption track on that video")
+        print("scribe: no captions on that video, listening to the audio instead")
+    elif args.captions:
+        sys.exit("scribe: --captions only applies to a link")
 
     try:
         from faster_whisper import WhisperModel
     except ImportError:
         sys.exit("scribe: faster-whisper is not installed (pip install faster-whisper)")
-
-    OUT_DIR.mkdir(parents=True, exist_ok=True)
 
     with tempfile.TemporaryDirectory() as tmp:
         workdir = Path(tmp)
@@ -132,6 +243,7 @@ def main() -> None:
     (OUT_DIR / f"{stem}.txt").write_text(text, encoding="utf-8")
     (OUT_DIR / f"{stem}.json").write_text(
         json.dumps({"source": args.source, "title": title, "language": info.language,
+                    "method": f"whisper-{args.model}",
                     "duration_s": round(info.duration, 1), "segments": collected},
                    ensure_ascii=False, indent=1),
         encoding="utf-8",

@@ -20,6 +20,7 @@ import argparse
 import datetime
 import re
 import subprocess
+import unicodedata
 import sys
 from pathlib import Path
 
@@ -28,7 +29,12 @@ POSTS = REPO / "site" / "frontend" / "content" / "posts"
 
 
 def slugify(text: str) -> str:
-    text = re.sub(r"[^\w\s-]", "", text, flags=re.UNICODE).strip().lower()
+    # Accents are stripped rather than kept: the slug becomes a URL, and an
+    # address with combining marks is legal, ugly, and a trap for anyone who
+    # types it by hand or pastes it into a terminal.
+    text = unicodedata.normalize("NFKD", text)
+    text = "".join(c for c in text if not unicodedata.combining(c))
+    text = re.sub(r"[^A-Za-z0-9\s-]", "", text).strip().lower()
     return re.sub(r"[\s_-]+", "-", text)[:70]
 
 
