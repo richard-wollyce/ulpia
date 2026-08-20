@@ -64,8 +64,8 @@ says the thing that matters more than the placement: **nobody here operates syst
 
 ### Option C: a model reads the roster and the evidence, and names the owner
 
-- Cost: one model call per message. Measured at 13 to 16 seconds through the Claude Code
-  CLI on this machine, which is real and is the honest weakness of this decision.
+- Cost: one model call per message. Measured at 9 to 15 seconds through the Claude Code CLI
+  on this machine, and the honest weakness of this decision.
 - Failure mode: a model that invents an agent, handled by refusing any name off the roster;
   and a model that is unavailable, handled by falling back to the arithmetic.
 
@@ -109,9 +109,23 @@ rather than rediscovered.
 
 ## Consequences
 
-- **13 to 16 seconds are added to every message** through the CLI classifier. That is the
+- **9 to 15 seconds are added to every message** through the CLI classifier. That is the
   price of the decision and it is not hidden. The way down is a faster classifier, a local
   model or a resident process, and not a cheaper decision about when to think.
+
+  This line read *13 to 16* until 2026-08-20 and the real figure was **43 to 48**, over a
+  hook budget of 30. The gap was not the model and not the network. The classifier was
+  spawned with its working directory set to the fleet root, so the CLI inspected 11,510
+  files and 2.5 GB of build output on every message before reading a dossier that arrives
+  whole on stdin. It also loaded the fleet's `CLAUDE.md`, which is a contamination this
+  record's own isolation rules exist to prevent. Both are fixed by starting the process in
+  an empty directory outside the fleet.
+
+  **The lesson generalises past this bug.** The cost of a subprocess is not only what it
+  computes. It inherits a working directory, an environment and whatever a runtime decides
+  to read from them, and none of that appears in the design. It was found by measuring the
+  shipped path end to end rather than the piece being reasoned about, which is the same way
+  the stale binary was found and the same way it will be found next time.
 - Routing stops depending on whether anyone wrote the right word in a `Search for:` line.
   Aliases and keywords still serve retrieval, where they belong.
 - The fleet can now say **nobody here covers this**, which is the input to deciding whether
