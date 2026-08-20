@@ -63,7 +63,7 @@ impl std::fmt::Display for InitError {
     }
 }
 
-/// Creates the person's base at `<root>/fleet/profile`, or directly at `at`.
+/// Creates the person's base at `<root>/fleet/person`, or directly at `at`.
 ///
 /// **A fleet has agents and it has exactly one person, and the person is not an agent.**
 /// So this writes a base with a map, a gitignore and three empty files, and deliberately
@@ -71,7 +71,7 @@ impl std::fmt::Display for InitError {
 /// the one who answers, which is the rule ADR-0024 rests on and the code already enforces.
 ///
 /// It also writes no constitution, because a person does not boot. Agents reach the core
-/// file through a `[user]` block pointing at `../profile/core.md`, and `kb init` writes
+/// file through a `[user]` block pointing at `../person/core.md`, and `kb init` writes
 /// that block into every agent it creates.
 ///
 /// **The files come out empty on purpose.** This is the shape, published so anyone can
@@ -102,7 +102,7 @@ pub fn person(fleet: &Path, at: Option<&Path>) -> Result<Created, InitError> {
 }
 
 /// The directory the person's base lives in, beside the agents.
-pub const PERSON_DIR: &str = "profile";
+pub const PERSON_DIR: &str = "person";
 
 const PERSON_GITIGNORE: &str = "\
 # The index is derived from the markdown and rebuilt by `kb index`, so it is never
@@ -117,7 +117,7 @@ const PERSON_MAP: &str = "\
 > choose it as the one who answers: a person is not an agent.
 >
 > Every agent carries `core.md` resident, through a `[user]` block pointing at
-> `../profile/core.md`. The rest is retrieved when a question calls for it.
+> `../person/core.md`. The rest is retrieved when a question calls for it.
 >
 > **The shape is public and the content is not.** This file and the empty files beside it
 > describe how a fleet records the human it works for. What gets written into them is one
@@ -524,7 +524,7 @@ mod tests {
         assert!(
             published.is_dir(),
             "expected the published person skeleton at {}. Regenerate it with \
-             `kb init --person <tmp>` and move fleet/profile to the repository root.",
+             `kb init --person <tmp>` and move fleet/person to the repository root.",
             published.display()
         );
 

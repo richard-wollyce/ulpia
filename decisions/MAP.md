@@ -328,7 +328,7 @@
   over per-agent scoping and was right, for a mechanism reason: **N copies of a person drift, and
   the gaps are invisible from inside any one agent.** The correction his version needed is that
   **global is about ownership, not residency**, so the person is one base with a small resident
-  core and retrieved domain files. `fleet/profile/` has no `agent.txt`, so the router reads it and
+  core and retrieved domain files. `fleet/person/` has no `agent.txt`, so the router reads it and
   can never elect it, because a person is not an agent. It is tracked, unlike the per-agent
   profile folders, because **Vesta refuses to serve what git does not track, so an untracked base
   is unroutable by construction**. Measured: the architect's resident payload fell from 9,689 to
@@ -344,7 +344,7 @@
   shaped and how they relate is documentable and eventually public, while his own file must never
   transmit what is written about him. So the same split the fleet already makes for agents is made
   for the person. Public: `kb init --person`, the committed `person-skeleton/`, and the structural
-  rule. Private: `fleet/profile/`, every word. The part that makes it structural rather than
+  rule. Private: `fleet/person/`, every word. The part that makes it structural rather than
   advisory is that **`kb init` now writes a `[user]` block into every agent it creates**, so a new
   agent cannot be born not knowing who it works for, which is exactly how Steve came to answer a
   question about Richard's CV without knowing his name. Templates ship **empty with questions in
@@ -408,4 +408,14 @@
   demoted rather than deleted: it is still what makes a directory a base and still a resident
   constitution block worth up to 6,813 tokens.
   Search for: `keywords`, `palavras chave`, `search for`, `onde ficam as keywords`, `MAP.md`, `mapa`, `indice`, `index`, `como um arquivo e encontrado`, `nota invisivel`, `formato da nota`, `cabecalho da nota`, `why this file exists`, `proposito do arquivo`.
+
+
+- **[[0029-one-word-named-three-things]]** 🟢 accepted 2026-08-20. **The shared person
+  base is `person/`, because `profile` named three different things at once**: the shared base,
+  a tombstone inside Zed, and Yaron's private health data. Not a tidiness complaint: ui.rs
+  already carried a special case written around the collision. Supersedes only the directory
+  name in ADR-0024, whose decision that the person is one base is unchanged. Records what the
+  rename cost, including the fleet refusing to open when the emptied directory became a seventh
+  base under 0028's predicate, which is the privacy gate working rather than failing.
+  Search for: `profile`, `person`, `perfil`, `pessoa`, `nome da base`, `renomear base`, `colisao de nome`, `fleet/person`, `fleet/profile`, `onde mora o usuario`, `base do humano`.
 

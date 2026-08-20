@@ -4,7 +4,7 @@
 > choose it as the one who answers: a person is not an agent.
 >
 > Every agent carries `core.md` resident, through a `[user]` block pointing at
-> `../profile/core.md`. The rest is retrieved when a question calls for it.
+> `../person/core.md`. The rest is retrieved when a question calls for it.
 >
 > **The shape is public and the content is not.** This file and the empty files beside it
 > describe how a fleet records the human it works for. What gets written into them is one
