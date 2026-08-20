@@ -149,9 +149,26 @@ which the chunker already implements.
 
 This is the blocker, and it fails closed: `expand_roots` decides a directory is a base by
 asking whether it has a map. Remove the maps and **the fleet is not discovered at all**.
-`agent.txt` cannot replace it alone, because `profile` and `decisions` do not have one and are
-not supposed to. The predicate becomes: a directory is a base when it holds `agent.txt`, or is
-named in the fleet manifest's `attach` lines, or contains a `knowledge/` directory.
+
+**A marker file cannot replace it, and the first version of this record said it could.** That
+version proposed `agent.txt`, or an `attach` line, or a `knowledge/` directory. Checked
+against the six live bases afterwards, `fleet/profile` has none of the three: no `agent.txt`
+because it is not an agent, no `knowledge/` because it holds four files at its root, and no
+`attach` line because it is not attached. **The published predicate would have dropped
+Richard's own profile out of the fleet**, and `profile/core.md` is resident in every agent, so
+the symptom would have been the person quietly disappearing from retrieval rather than an
+error. MAP.md is, today, the only file all six bases share.
+
+The predicate is therefore not a marker at all. **A base is an immediate subdirectory of the
+fleet root**, which is what `fleet/` already means, plus the manifest's `attach` lines.
+`bases_in` already enumerates exactly those children and then filters them by `has_map`; the
+filter goes and the enumeration stays. The manifest already carries a `disable` list, so a
+directory that should not be a base is named there, which is an opt-out that exists and is
+read today rather than a new mechanism.
+
+The general shape, because this is the second time in two days: **a rule invented at a desk
+and checked afterwards is a rule that has not been checked.** Both alternatives in section 1
+were ruled out by running them. This one was not, and it was wrong.
 
 ### 5. `MAP.md` is demoted, not deleted, and this is where Richard's instruction is narrowed
 
