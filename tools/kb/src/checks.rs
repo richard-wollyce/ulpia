@@ -319,6 +319,33 @@ fn check_note(base: &Base, file: &MdFile, findings: &mut Vec<Finding>) {
                         file.stem, map.rel
                     ),
                 });
+            } else if !map_entries(&map.text).iter().any(|e| e.name == file.stem) {
+                // **E02 and the router read the map with different eyes, and this is where
+                // they used to disagree in silence.** E02 above accepts a `[[link]]`
+                // anywhere in the file; `map_entries` builds the router's index and takes
+                // only lines beginning `- **[[`. A note written as `- [[name]] : summary`
+                // therefore passed the linter and scored nothing, forever.
+                //
+                // Measured on 2026-08-19: seven of Aldo's eight notes were in the second
+                // shape. `kb check` printed `clean`, `kb route "IntersectionObserver scroll
+                // reveal"` answered "nothing matched" for a file containing that word, and
+                // the base contributed one entry to the router instead of eight. Correcting
+                // the seven lines took the fleet from 107 indexed entries to 114 and the
+                // same query to a first-place hit at 141.02.
+                //
+                // The file fix alone would leave the trap armed, so the detector is the fix.
+                findings.push(Finding {
+                    level: Level::Error,
+                    code: "E07",
+                    file: file.rel.clone(),
+                    line: 0,
+                    message: format!(
+                        "listed but unreadable: {} links [[{}]] without the `- **[[{}]]**` \
+                         entry form, so the router builds no entry for it and the file \
+                         scores zero on every question",
+                        map.rel, file.stem, file.stem
+                    ),
+                });
             }
         }
     }
