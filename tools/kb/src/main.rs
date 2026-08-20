@@ -818,17 +818,24 @@ fn cmd_eval(gold_path: &Path, paths: &[&str], all: bool, top: usize, classify: b
         s.answerable,
         pct(s.keyword_hits, s.answerable)
     );
+    // **The routing line goes first because it is the one that ships.** These two read as
+    // headline and footnote, and they were the other way round: the fused number sat where
+    // the eye lands while `Memory::ask` populates `Answer.agent` from
+    // `choose_agent_by_keyword` (memory.rs) and `boot::brief` routes on that. A day of
+    // measurements was quoted off the top line before anybody checked which function it
+    // called. An instrument that is easy to misread is a broken instrument.
     println!(
-        "AGENT  fused   {}/{}  ({:.0}%)",
-        s.agent_hits,
-        s.ownable,
-        pct(s.agent_hits, s.ownable)
-    );
-    println!(
-        "       keyword {}/{}  ({:.0}%)",
+        "AGENT  routes  {}/{}  ({:.0}%), the choice the hook actually makes",
         s.keyword_agent_hits,
         s.ownable,
         pct(s.keyword_agent_hits, s.ownable)
+    );
+    println!(
+        "       fused   {}/{}  ({:.0}%), the same fold over the fused list, which ADR-0018 \
+         measured and rejected. Kept so a regression in it cannot hide",
+        s.agent_hits,
+        s.ownable,
+        pct(s.agent_hits, s.ownable)
     );
     if s.ownable < s.answerable {
         println!(
@@ -851,8 +858,13 @@ fn cmd_eval(gold_path: &Path, paths: &[&str], all: bool, top: usize, classify: b
         s.ownable,
         pct(s.baseline_hits, s.ownable)
     );
-    let best = s.agent_hits.max(s.keyword_agent_hits);
-    let delta = best as i64 - s.baseline_hits as i64;
+    // **Against the number that ships, not the better of two.** This was
+    // `agent_hits.max(keyword_agent_hits)`, so the headline claimed whichever variant
+    // happened to be ahead. It read correctly only because the routing choice is currently
+    // the better one; the day the rejected fold won, the report would have credited routing
+    // with a score no user ever gets. A summary allowed to pick its own number is not a
+    // measurement.
+    let delta = s.keyword_agent_hits as i64 - s.baseline_hits as i64;
     println!(
         "       routing beats the fixed choice by {}{} question{}",
         if delta >= 0 { "+" } else { "-" },

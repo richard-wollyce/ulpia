@@ -40,8 +40,16 @@ pub struct Row {
     /// summary that reports only the path the code happens to call would hide a
     /// regression in whichever path it did not measure.
     pub keyword_top: Option<String>,
+    /// The fold over the FUSED list. **Not what the router does**, kept beside the one
+    /// that is so a regression in it cannot hide, per the note on `keyword_top` above.
+    ///
+    /// The name is the trap and it is left here as a warning rather than fixed silently:
+    /// this field is called `agent` and the live one is called `keyword_agent`, so the
+    /// unqualified name belongs to the variant nothing calls. `Memory::ask` builds
+    /// `Answer.agent` from `choose_agent_by_keyword`, and `boot::brief` routes on that.
     pub agent: Option<AgentChoice>,
-    /// The same choice folded from the keyword ranking instead of the fused one.
+    /// **The choice the hook actually makes**, folded from the keyword ranking.
+    /// `memory.rs` documents why it is the better of the two; this is the number to read.
     pub keyword_agent: Option<AgentChoice>,
     /// What the model said, when `kb eval --classify` ran one. The whole point of
     /// measuring it beside the arithmetic is that the choice between them is a
