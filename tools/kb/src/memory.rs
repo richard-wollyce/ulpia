@@ -861,7 +861,7 @@ fn looks_like_a_base(dir: &Path) -> bool {
 /// **No content test, and that is the change ADR-0028 needed.** This used to require a map
 /// file, so `has_map` was what made a directory an agent, and removing maps would have
 /// undiscovered the whole fleet. Worse, a marker file cannot replace it: checked against the
-/// six live bases, `fleet/profile` has no `agent.txt`, no `knowledge/` directory and no
+/// six live bases, `fleet/person` (then `fleet/profile`) has no `agent.txt`, no `knowledge/` directory and no
 /// `attach` line, so every marker proposed for it was wrong. It is a base because it sits in
 /// `fleet/`, and nothing else needs to be true.
 ///
@@ -962,9 +962,10 @@ mod tests {
     ///
     /// ADR-0028 first proposed that a directory is a base when it holds `agent.txt`, or is
     /// named in an `attach` line, or contains `knowledge/`. Checked against the six live
-    /// bases afterwards, `fleet/profile` has none of the three: it is not an agent, it holds
+    /// bases afterwards, `fleet/person` (named `fleet/profile` at the time) has none of the
+    /// three: it is not an agent, it holds
     /// four files at its root, and it is not attached. The published predicate would have
-    /// dropped the user's own profile out of the fleet, silently, because `profile/core.md`
+    /// dropped the user's own profile out of the fleet, silently, because `person/core.md`
     /// is resident in every agent and its disappearance reads as the person going quiet
     /// rather than as an error.
     ///

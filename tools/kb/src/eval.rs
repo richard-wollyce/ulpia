@@ -58,6 +58,8 @@ pub struct Row {
     pub confidence: Confidence,
     pub micros: u128,
     pub keyword_micros: u128,
+    /// What the classifier cost, which nothing measured before. See `Summary`.
+    pub classified_micros: u128,
     /// Bases that are allowed to be an answer's owner. Empty means "not filtered",
     /// which is what the unit tests want.
     pub routable: Vec<String>,
@@ -133,15 +135,42 @@ impl Row {
         }
     }
 
-    /// A classifier hit. **Abstention counts as correct on an abstain row**, which
-    /// the arithmetic cannot score at all: naming no owner for a question the fleet
-    /// does not cover is the right answer, not a miss.
+    /// A classifier hit, meaning **the hook would have routed to a correct agent**.
+    ///
+    /// **Coverage decides this and it used to be ignored.** `boot::brief` returns
+    /// `agent: None` for any verdict whose coverage is `Adjacent` or `Uncovered`: it prints
+    /// the coverage note and routes nobody, whatever owner was named. So a verdict of
+    /// `adjacent` naming exactly the right agent handed over no identity at all, and this
+    /// counted it as a hit.
+    ///
+    /// That is not a corner case. `classify::dossier` instructs the model, in as many
+    /// words, *when torn between covered and adjacent, answer adjacent*. The model score
+    /// could climb while routing got strictly quieter, and the number that was supposed to
+    /// price the classifier against the arithmetic would have moved the wrong way.
+    ///
+    /// Abstention is graded by `classified_abstained` instead, because this predicate is
+    /// only ever called over rows that have a routable owner, so its old abstain arm could
+    /// never be reached.
     pub fn classified_hit(&self) -> bool {
         let Some(v) = &self.classified else { return false };
+        if v.coverage != crate::classify::Coverage::Covered {
+            return false;
+        }
         match &v.owner {
             Some(o) => self.correct_agents().contains(&o.as_str()),
-            None => self.expects_abstention(),
+            None => false,
         }
+    }
+
+    /// Whether the classifier declined to route a question the gold set says to decline.
+    ///
+    /// Separate from `classified_hit` because the two are asked over different rows and the
+    /// old single predicate could only ever answer one of them. Naming no owner for a
+    /// question the fleet does not cover is the answer the whole classifier exists to give,
+    /// and until now `kb eval --classify` could not report a single number about it.
+    pub fn classified_abstained(&self) -> bool {
+        let Some(v) = &self.classified else { return false };
+        v.owner.is_none() || v.coverage != crate::classify::Coverage::Covered
     }
 }
 
@@ -240,7 +269,8 @@ pub fn run_with(
             let keyword_micros = kw_started.elapsed().as_micros();
             let _ = &keyword;
 
-            Row {
+            let mut classified_elapsed: u128 = 0;
+            let mut row = Row {
                 question: question.clone(),
                 answers: answers.clone(),
                 top: answer.found.first().map(|f| format!("{}/{}", f.base, f.path)),
@@ -260,13 +290,17 @@ pub fn run_with(
                 // `boot::brief` routes on exactly that field. Recomputing something the
                 // callee already computed is how the two drifted apart, so now it is read.
                 keyword_agent: answer.agent.clone(),
+                classified_micros: 0,
                 classified: if classify {
-                    crate::classify::run(
+                    let started = Instant::now();
+                    let v = crate::classify::run(
                         &classifier,
                         root,
                         &crate::classify::dossier(memory, question, &answer.found),
                         &roster,
-                    )
+                    );
+                    classified_elapsed = started.elapsed().as_micros();
+                    v
                 } else {
                     None
                 },
@@ -279,7 +313,9 @@ pub fn run_with(
                     .filter(|a| a.routable)
                     .map(|a| a.name.clone())
                     .collect(),
-            }
+            };
+            row.classified_micros = classified_elapsed;
+            row
         })
         .collect()
 }
@@ -319,12 +355,20 @@ pub struct Summary {
     pub hits_demoted: usize,
     /// Denominator for `hits_demoted`: keyword hits, since that is what the gate judges.
     pub gate_denominator: usize,
-    pub abstention_correct: bool,
-    pub abstention_expected: bool,
+    /// Abstain rows the deterministic gate correctly refused to call a hit.
+    ///
+    /// **Plural, and it was singular.** The summary found the FIRST abstain row and graded
+    /// only that one, while the gold set holds three and the per-question table grades all
+    /// of them. Two outcomes could regress to Hit without the summary moving.
+    pub abstention_correct: usize,
+    pub abstention_expected: usize,
+    /// The same question asked of the classifier, when one ran.
+    pub classified_abstention_correct: usize,
     pub hit_scores: Vec<f32>,
     pub miss_scores: Vec<f32>,
     pub total_micros: u128,
     pub keyword_micros: u128,
+    pub classified_micros: u128,
 }
 
 pub fn summarise(rows: &[Row]) -> Summary {
@@ -356,7 +400,7 @@ pub fn summarise(rows: &[Row]) -> Summary {
         }
     }
 
-    let abstention = rows.iter().find(|r| r.expects_abstention());
+    let abstains: Vec<&Row> = rows.iter().filter(|r| r.expects_abstention()).collect();
 
     Summary {
         answerable: answerable.len(),
@@ -373,14 +417,26 @@ pub fn summarise(rows: &[Row]) -> Summary {
         misses_total: miss_scores.len(),
         hits_demoted,
         gate_denominator: hit_scores.len(),
-        abstention_correct: abstention
-            .map(|r| r.confidence.verdict != Verdict::Hit)
-            .unwrap_or(false),
-        abstention_expected: abstention.is_some(),
+        abstention_correct: abstains
+            .iter()
+            .filter(|r| r.confidence.verdict != Verdict::Hit)
+            .count(),
+        abstention_expected: abstains.len(),
+        classified_abstention_correct: abstains
+            .iter()
+            .filter(|r| r.classified.is_some() && r.classified_abstained())
+            .count(),
         hit_scores,
         miss_scores,
         total_micros: rows.iter().map(|r| r.micros).sum(),
         keyword_micros: rows.iter().map(|r| r.keyword_micros).sum(),
+        // **The classifier's time, which was measured nowhere.** `micros` times
+        // `Memory::ask` and the classifier call is constructed after that window closes,
+        // so SPEED priced the deterministic half and printed "No model, no network" beside
+        // it. True of what it timed, and untrue of what `boot::brief` runs on every
+        // message: the classifier is where essentially all of the wall clock lives, 9 to 15
+        // seconds against 20 milliseconds.
+        classified_micros: rows.iter().map(|r| r.classified_micros).sum(),
     }
 }
 
@@ -418,6 +474,7 @@ mod tests {
             },
             micros: 100,
             keyword_micros: 40,
+            classified_micros: 0,
             classified: None,
             routable: Vec::new(),
         }
@@ -445,7 +502,8 @@ mod tests {
         assert!(r.expects_abstention());
         let s = summarise(&[r]);
         assert_eq!(s.answerable, 0, "it is not part of the accuracy denominator");
-        assert!(s.abstention_expected && s.abstention_correct, "but it is still graded");
+        assert_eq!(s.abstention_expected, 1, "the row is counted");
+        assert_eq!(s.abstention_correct, 1, "and graded, and every one of them is now");
     }
 
     /// The baseline has to be the strongest fixed choice available, not a convenient

@@ -726,9 +726,16 @@ fn resolve(state: &State, home: &str, stem: &str) -> Option<String> {
 /// edge, so it is what a ribbon has to be built from. It is also the more honest signal:
 /// the author wrote the whole path, meaning they knew they were pointing outside.
 ///
-/// A reference is only counted when the named base actually holds that file, so a path
-/// that merely looks like one (`profile/profile.md` inside Yaron's own base, which is his
-/// local folder) does not manufacture a ribbon.
+/// A reference is only counted when the named base actually holds that file, so a path that
+/// merely looks like one does not manufacture a ribbon.
+///
+/// **This guard was written around a name collision that no longer exists.** The shared
+/// person base was called `profile`, so every `profile/...md` written inside Yaron's own
+/// private `profile/` folder was a candidate false ribbon, and the example this comment used
+/// to cite (`yaron/profile/profile.md`) has since moved to the shared base as `body.md`.
+/// ADR-0029 renamed the base to `person`, and the hazard dissolved with the name. The guard
+/// stays because it is generic: it protects any future base whose name repeats inside an
+/// agent, which nothing in the tool prevents.
 fn cross_base_refs(state: &State, home: &str, text: &str) -> Vec<String> {
     let mut out = Vec::new();
     for (name, base) in &state.bases {
@@ -741,8 +748,8 @@ fn cross_base_refs(state: &State, home: &str, text: &str) -> Vec<String> {
             let start = from + hit;
             from = start + needle.len();
 
-            // A path is a whole word: `profile/x.md` counts, `../profile/x.md` and
-            // `yaron/profile/x.md` do not, because those name something else.
+            // A path is a whole word: `person/x.md` counts, `../person/x.md` and
+            // `yaron/person/x.md` do not, because those name something else.
             let preceded_by_path_char = start > 0
                 && text[..start]
                     .chars()

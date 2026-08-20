@@ -882,11 +882,20 @@ fn cmd_eval(gold_path: &Path, paths: &[&str], all: bool, top: usize, classify: b
         "       demoted {}/{} correct answers to a guess",
         s.hits_demoted, s.gate_denominator
     );
-    if s.abstention_expected {
+    // **Every abstain row, not the first one.** This said "the abstain question", singular,
+    // and graded whichever one `find` returned. The set holds three, the per-question table
+    // grades all three, and two of them could regress to Hit without this line moving.
+    if s.abstention_expected > 0 {
         println!(
-            "       the abstain question was {}",
-            if s.abstention_correct { "correctly not called a hit" } else { "WRONGLY called a hit" }
+            "       abstained on {}/{} question(s) the set says to decline",
+            s.abstention_correct, s.abstention_expected
         );
+        if s.classified_asked > 0 {
+            println!(
+                "       model     {}/{}, and this is the answer it exists to give",
+                s.classified_abstention_correct, s.abstention_expected
+            );
+        }
     }
 
     // The separation question in one line, which is what decides whether the floor is
@@ -918,6 +927,20 @@ fn cmd_eval(gold_path: &Path, paths: &[&str], all: bool, top: usize, classify: b
         s.total_micros / n,
         s.keyword_micros / n
     );
+    // **The classifier's own time, which this block used to leave out entirely.** It timed
+    // `Memory::ask` and printed "No model, no network" beside the number, which was true of
+    // what it measured and false about what the hook runs. The classifier is where the wall
+    // clock lives: milliseconds against seconds, and the ratio is the whole argument for or
+    // against configuring one.
+    if s.classified_asked > 0 {
+        let cls = s.classified_micros / n;
+        println!(
+            "       {} us per question in the classifier, {}x the arithmetic. That is the \
+             cost of the model, and the hook pays it on every message",
+            cls,
+            if s.total_micros > 0 { cls / (s.total_micros / n).max(1) } else { 0 }
+        );
+    }
     println!(
         "       {}",
         if cfg!(debug_assertions) {
