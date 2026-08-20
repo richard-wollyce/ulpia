@@ -124,6 +124,22 @@ const STOPWORDS: &[&str] = &[
     "ai",
     "so", "apenas", "ainda", "agora", "hoje", "tudo", "todo", "toda", "todos",
     "todas", "outro", "outra", "entao", "assim", "aqui", "ali",
+    // **Generic adjectives and ordinals, added 2026-08-20 when the keyword lines widened
+    // from a median of six terms to about seventy.** At six terms nobody wrote `Nova York`
+    // or `My First Million` or `text-embedding-3-small`, so the components never appeared.
+    // At seventy they do, and every component is matched alone: `nova`, `first` and `small`
+    // would have been three of the most informative words in the index by IDF, for the same
+    // reason the comment above gives, because nobody writes them as keywords deliberately.
+    //
+    // The alternative was refusing the terms, and that was tried first and was wrong: it
+    // threw out proper nouns and terms of art to protect the index from a word. A word that
+    // carries nothing belongs on this list; the phrase around it is nobody's problem.
+    "new", "old", "first", "last", "next", "small", "big", "large", "good", "bad",
+    "best", "worst", "high", "low", "long", "short", "full", "real", "true", "false",
+    "novo", "nova", "novos", "novas", "velho", "velha", "primeiro", "primeira",
+    "ultimo", "ultima", "proximo", "proxima", "pequeno", "pequena", "grande",
+    "grandes", "bom", "boa", "ruim", "melhor", "pior", "alto", "alta", "baixo",
+    "baixa", "longo", "curto", "cheio", "vazio", "real", "certo", "errado",
 ];
 
 // ---------------------------------------------------------------------------
@@ -139,26 +155,34 @@ pub fn build(base: &Base) -> Vec<Entry> {
         .map(|n| n.to_string_lossy().to_string())
         .unwrap_or_else(|| base.root.display().to_string());
 
-    let map = match base.map_file() {
-        Some(m) => m,
-        None => return Vec::new(),
-    };
-
+    // **The walk is over files, not over map entries, and that is [[0028]].** It used to
+    // iterate the base's `MAP.md` and look a file up for each entry, so one file's formatting
+    // decided whether another file existed to the router.
+    //
+    // **This landed only after the keyword lines were widened, and the order was not
+    // optional.** Tried first against lines with a median of six terms, it cost seven
+    // questions of twenty six at file level, because the map entry's prose body had been
+    // carrying the matching surface all along and the curated list was never doing the work.
+    // The lines now carry thirty to seventy terms each, in both languages, which is what the
+    // list was always supposed to be.
     let mut out = Vec::new();
-    for entry in map_entries(&map.text) {
-        let file = base.files.iter().find(|f| f.stem == entry.name);
-        let (rel, title) = match file {
-            Some(f) => (f.rel.clone(), first_heading(&f.text)),
-            None => (String::new(), String::new()),
-        };
+    for f in &base.files {
+        let (keywords, purpose) = header_of(&f.text);
+        if keywords.is_empty() {
+            continue;
+        }
         out.push(Entry {
             base: base_name.clone(),
-            rel,
-            stem: entry.name.clone(),
-            title,
-            keywords: keywords_in(&entry.body),
-            summary: summarise(&entry.body, 400),
-            body: summarise(&entry.body, usize::MAX),
+            rel: f.rel.clone(),
+            stem: f.stem.clone(),
+            title: first_heading(&f.text),
+            summary: purpose.clone(),
+            keywords,
+            // **What the keyword scorer matches narrows on purpose.** It used to be the whole
+            // map entry, prose included, which put the same words in front of both scorers.
+            // Agreement between two independent signals is what separates a hit from a guess,
+            // and it means nothing if they read the same source.
+            body: purpose,
         });
     }
     out
@@ -184,6 +208,64 @@ fn first_heading(text: &str) -> String {
         }
     }
     String::new()
+}
+
+/// The keys and the purpose a file declares about itself, per [[0028-a-note-carries-its-own-keys]].
+///
+/// **Scans only what sits before the first section heading**, and that bound is doing real
+/// work rather than being tidy. `MAP.md` carries one `Search for:` line per entry and would
+/// otherwise index itself as a file holding every keyword in the base. Its first section
+/// heading arrives before its first entry, so the bound excludes it by construction rather
+/// than by a filename check that a rename would defeat.
+///
+/// Tolerant on read, one shape on write. Each tolerance below was a real parse failure
+/// before it was a tolerance: the label bolded corrupted the first term, the label lower
+/// case yielded an empty list, and a semicolon collapsed the list into one giant keyword.
+pub fn header_of(text: &str) -> (Vec<String>, String) {
+    let mut keywords = Vec::new();
+    let mut purpose = String::new();
+
+    for line in text.lines() {
+        let t = line.trim();
+        if t.starts_with("##") {
+            break;
+        }
+        if let Some(rest) = labelled(t, &["search for", "buscar por"]) {
+            if keywords.is_empty() {
+                keywords = terms_in(rest);
+            }
+        } else if let Some(rest) = labelled(t, &["exists to", "existe para"]) {
+            if purpose.is_empty() {
+                purpose = rest.trim().trim_end_matches('.').to_string();
+            }
+        }
+    }
+    (keywords, purpose)
+}
+
+/// The text after a known label, whatever decoration the label is wearing.
+fn labelled<'a>(line: &'a str, labels: &[&str]) -> Option<&'a str> {
+    let (head, tail) = line.split_once(':')?;
+    let head = head.trim().trim_matches(|c| c == '*' || c == '_' || c == ' ');
+    let head_lower = head.to_ascii_lowercase();
+    if labels.iter().any(|l| head_lower == *l) {
+        Some(tail.trim_start_matches('*').trim())
+    } else {
+        None
+    }
+}
+
+/// One list of terms, however it was punctuated.
+fn terms_in(rest: &str) -> Vec<String> {
+    rest.split([',', ';'])
+        .map(|t| {
+            t.trim()
+                .trim_start_matches(['-', '*', '+', ' '])
+                .trim_matches(|c: char| c == '`' || c == '"' || c == '*' || c == '.' || c == ' ')
+                .to_string()
+        })
+        .filter(|t| !t.is_empty())
+        .collect()
 }
 
 /// Terms from the `Search for:` or `Buscar por:` line, which may wrap over several lines.

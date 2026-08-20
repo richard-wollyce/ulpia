@@ -16,9 +16,22 @@
 name = Vesta
 role = Keeper of the fleet: knows who is here, routes what arrives, and holds the fleet's memory
 
-# The decision records, attached as a routable base so questions about the
-# system's own design find their answers without a model.
-attach = decisions
+# The decision records are NOT attached, and that is a decision rather than an omission.
+#
+# The router asks one question: does this agent know about this subject. An ADR is not an
+# agent knowing something, it is the system's own record of how it was built. Attaching it
+# put system records in the same index as agent knowledge, and the two answer different
+# questions: `decisions/` won the agent fold on 14 of 29 gold questions, and six of that set
+# are answerable ONLY from it, so a third of the measurement was about a base that can never
+# be the agent who answers.
+#
+# What Vesta should ask instead: does any agent hold a record about this. A question about
+# the system's own design that no agent has written about is a gap, and reporting it as a
+# gap is the answer rather than a failure.
+#
+# The records are still read by people and by an agent that opens them deliberately. They
+# are simply not in the retrieval path.
+# attach = decisions
 
 
 # Who answers is a judgement, not a sum. The deterministic score says which files

@@ -99,9 +99,14 @@ impl Coverage {
 /// The two halves are separate functions so the boundary is a thing the compiler knows
 /// about. Written as one function with a comment in the middle, the boundary survives
 /// exactly until someone adds a line in the wrong place.
-pub fn dossier(memory: &Memory, question: &str, found: &[Retrieved]) -> String {
+pub fn dossier(
+    memory: &Memory,
+    question: &str,
+    found: &[Retrieved],
+    confidence: crate::memory::Confidence,
+) -> String {
     let mut out = stable_prefix(memory);
-    out.push_str(&variable_tail(question, found));
+    out.push_str(&variable_tail(question, found, confidence));
     out
 }
 
@@ -209,7 +214,11 @@ fn one_line(summary: &str) -> String {
 
 /// Everything that changes with the message: what retrieval found, the message itself,
 /// and the four lines to answer in.
-fn variable_tail(question: &str, found: &[Retrieved]) -> String {
+fn variable_tail(
+    question: &str,
+    found: &[Retrieved],
+    confidence: crate::memory::Confidence,
+) -> String {
     let mut out = String::new();
 
     out.push_str(
@@ -242,6 +251,43 @@ fn variable_tail(question: &str, found: &[Retrieved]) -> String {
             }
         }
     }
+
+    // **What retrieval thinks of its own answer, which the classifier was never told.**
+    //
+    // The evidence list is scores and paths, and a score alone cannot be read. The keyword
+    // lines were widened from a median of six terms to about seventy, and the hit and miss
+    // ranges now overlap completely: 20.02 to 187.39 against 21.27 to 132.66. **No threshold
+    // in code separates them.** That is the second time this has been measured here, the
+    // first being the rejected cascade, and it is why this is a sentence for a reader rather
+    // than a gate in the router.
+    //
+    // So the numbers are handed over with their meaning attached and the judgement stays
+    // where ADR-0013 put it. Agreement between the two independent scorers is the strongest
+    // signal available without a model, and it is exactly what a bare score hides.
+    out.push_str(&format!(
+        "\nWHAT RETRIEVAL THINKS OF THAT. Top keyword score {:.1}, against a floor of {:.1} \
+         below which nothing is worth answering from. {} of the two independent scorers \
+         ranked that file, and it leads the runner-up by {:.2}x. Retrieval's own verdict: \
+         {}.\n\n\
+         Weigh that before deciding coverage. A high score on a base whose domain does not \
+         fit is a coincidence of vocabulary, and one scorer alone is the case this system \
+         reports as a guess rather than an answer.\n",
+        confidence.keyword_score,
+        crate::memory::SCORE_FLOOR,
+        match confidence.agreement {
+            2 => "Both",
+            1 => "Only one",
+            _ => "Neither",
+        },
+        confidence.margin,
+        match confidence.verdict {
+            crate::memory::Verdict::Hit => "something here matches",
+            crate::memory::Verdict::Guess =>
+                "this is a guess, too weak or too close to the runner-up to tell from a \
+                 coincidence of vocabulary",
+            crate::memory::Verdict::Nothing => "nothing matched at all",
+        }
+    ));
 
     out.push_str(&format!("\nTHE MESSAGE:\n  {}\n", question.replace('\n', " ")));
 
@@ -509,16 +555,28 @@ mod tests {
     ///
     /// The measured prefix on this fleet is about 550 tokens. A tail that grew past it
     /// would mean most of each message is recomputed anyway and the split stopped earning
-    /// its complexity. 1400 characters is roughly 350 tokens, comfortably under, and the
-    /// number is a tripwire rather than a target.
+    /// its complexity. The number is a tripwire rather than a target.
+    ///
+    /// **It fired once, on 2026-08-20, and the limit moved rather than the code.** The tail
+    /// gained two things that turn a list of paths into evidence a reader can weigh: an
+    /// `about:` line per file saying what it is for, and a paragraph carrying what retrieval
+    /// thinks of its own answer. 1400 characters became 1489. Both earn their room, and 1800
+    /// is still roughly 450 tokens against a 550 token prefix, so the prefix is still the
+    /// larger half and caching it still pays.
     #[test]
     fn the_variable_half_stays_small_enough_for_caching_the_other_half_to_pay() {
         let tail = variable_tail(
             "como faco deploy com zero downtime e monitoramento de infra",
             &evidence(5),
+            crate::memory::Confidence {
+                verdict: crate::memory::Verdict::Hit,
+                agreement: 2,
+                keyword_score: 40.0,
+                margin: 2.0,
+            },
         );
         assert!(
-            tail.len() < 1400,
+            tail.len() < 1800,
             "the variable tail grew to {} chars; caching the prefix stops paying",
             tail.len()
         );

@@ -296,7 +296,7 @@ pub fn run_with(
                     let v = crate::classify::run(
                         &classifier,
                         root,
-                        &crate::classify::dossier(memory, question, &answer.found),
+                        &crate::classify::dossier(memory, question, &answer.found, answer.confidence),
                         &roster,
                     );
                     classified_elapsed = started.elapsed().as_micros();

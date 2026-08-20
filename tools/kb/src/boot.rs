@@ -131,7 +131,7 @@ pub fn brief(memory: &Memory, root: &Path, req: &Request, top: usize) -> Briefin
     let verdict = crate::classify::run(
         &classifier,
         root,
-        &crate::classify::dossier(memory, &req.prompt, &answer.found),
+        &crate::classify::dossier(memory, &req.prompt, &answer.found, answer.confidence),
         &roster_names,
     )
     .or_else(|| {
