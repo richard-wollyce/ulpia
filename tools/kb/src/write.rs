@@ -262,10 +262,25 @@ fn check_field(
 }
 
 fn render_note(spec: &Note) -> String {
+    // **The keys go in the note, per ADR-0028.** They used to go only into the map entry,
+    // which was right while `index::build` iterated map entries and is now the one place the
+    // router does not look. A note written by this command yesterday would be invisible to
+    // retrieval today, and clean to the linter.
+    //
+    // ADR-0016's principle is untouched and is why this is here rather than optional: a note
+    // and the keys that make it reachable arrive together. Only the destination moved.
+    let keys = spec
+        .keys
+        .iter()
+        .map(|k| format!("`{k}`"))
+        .collect::<Vec<_>>()
+        .join(", ");
     format!(
-        "---\nprovenance: {}\nstage: {}\n---\n\n{}\n",
+        "---\nprovenance: {}\nstage: {}\n---\n\n**Search for:** {keys}\n\n**Exists to:** \
+         {}\n\n{}\n",
         spec.provenance,
         spec.stage,
+        spec.summary.trim().trim_end_matches('.'),
         spec.body.trim()
     )
 }

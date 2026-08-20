@@ -61,10 +61,10 @@ refuses to start when git cannot be consulted, because unknown is not public.
 
 checks:
     E01 broken-link     a [[link]] with no file behind it
-    E02 not-indexed     a note in the knowledge folder with no entry in the map
-    E03 no-map          no MAP.md, INDEX.md or MAPA.md at the root
+    E02 not-indexed     a note in the knowledge folder with no `Search for:` line
     W01 ambiguous-link  a [[link]] matching more than one file
     W02 no-search-line  a map entry with no Search for line
+    W06 thin-keywords   a `Search for:` line too short to be found by a real question
     W03 dash            an em dash or en dash, which house style forbids
     W04 front-matter    a note declaring a source with no evidence_tier or valid_for
     W05 no-provenance   a note with no provenance or stage, so who wrote it is unknown

@@ -319,9 +319,18 @@ pub fn brief(memory: &Memory, root: &Path, req: &Request, top: usize) -> Briefin
     Briefing { agent: Some(agent), switched, text }
 }
 
+/// The names that could actually answer, which is not every base that was opened.
+///
+/// **It listed every base, including the ones that can never be chosen.** This is printed
+/// when routing found no owner, precisely so the reader can pick one, and it was offering
+/// `person` and `general`: two bases with no `agent.txt`, read by everyone and answering for
+/// nobody. `Memory::roster`, the list the classifier may choose from, has always filtered;
+/// only the sentence a person reads did not.
+///
+/// A menu that lists dishes the kitchen does not make is worse than a short menu.
 fn roster(memory: &Memory) -> String {
     let mut out = String::from("The fleet:\n");
-    for a in &memory.agents {
+    for a in memory.agents.iter().filter(|a| a.routable) {
         out.push_str(&format!("  {}\n", a.name));
     }
     out

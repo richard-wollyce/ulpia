@@ -223,16 +223,14 @@ pub fn run(base: &Base) -> Vec<Finding> {
             .push(file.rel.as_str());
     }
 
-    if base.map.is_none() {
-        findings.push(Finding {
-            level: Level::Error,
-            code: "E03",
-            file: ".".to_string(),
-            line: 0,
-            message: "no map file found at the root, expected MAP.md, INDEX.md or MAPA.md"
-                .to_string(),
-        });
-    }
+    // **E03 is gone: a map is no longer required.**
+    //
+    // It errored when a base had no `MAP.md`, which was right while `index::build` iterated
+    // map entries and a base without one contributed nothing. ADR-0028 moved the index onto
+    // a walk over files, so a base with no map indexes perfectly well, and ADR-0029 made a
+    // directory in the fleet root a base whether or not it has one. Keeping the rule would
+    // have printed one error per base forever, which is how people learn to ignore
+    // `kb check` output and stop reading the fourteen rules that are still true.
 
     for file in &base.files {
         let exempt = LINK_EXEMPT.iter().any(|dir| file.rel.starts_with(dir));
@@ -302,7 +300,7 @@ pub fn run(base: &Base) -> Vec<Finding> {
 }
 
 /// Checks that only apply to a distilled note inside the knowledge folder.
-fn check_note(base: &Base, file: &MdFile, findings: &mut Vec<Finding>) {
+fn check_note(_base: &Base, file: &MdFile, findings: &mut Vec<Finding>) {
     // **Files that orient a person rather than answer a question**, exempt from the
     // reachability rules because nobody searches for them: they are found by standing in
     // the directory they describe.
@@ -318,47 +316,48 @@ fn check_note(base: &Base, file: &MdFile, findings: &mut Vec<Finding>) {
         || name.ends_with("moved.md");
 
     if !is_readme {
-        if let Some(map) = base.map_file() {
-            let indexed = wikilinks(&map.text).iter().any(|(_, t)| t == &file.stem);
-            if !indexed {
-                findings.push(Finding {
-                    level: Level::Error,
-                    code: "E02",
-                    file: file.rel.clone(),
-                    line: 0,
-                    message: format!(
-                        "not indexed: no [[{}]] entry in {}. A file nobody can find does not exist",
-                        file.stem, map.rel
-                    ),
-                });
-            } else if !map_entries(&map.text).iter().any(|e| e.name == file.stem) {
-                // **E02 and the router read the map with different eyes, and this is where
-                // they used to disagree in silence.** E02 above accepts a `[[link]]`
-                // anywhere in the file; `map_entries` builds the router's index and takes
-                // only lines beginning `- **[[`. A note written as `- [[name]] : summary`
-                // therefore passed the linter and scored nothing, forever.
-                //
-                // Measured on 2026-08-19: seven of Aldo's eight notes were in the second
-                // shape. `kb check` printed `clean`, `kb route "IntersectionObserver scroll
-                // reveal"` answered "nothing matched" for a file containing that word, and
-                // the base contributed one entry to the router instead of eight. Correcting
-                // the seven lines took the fleet from 107 indexed entries to 114 and the
-                // same query to a first-place hit at 141.02.
-                //
-                // The file fix alone would leave the trap armed, so the detector is the fix.
-                findings.push(Finding {
-                    level: Level::Error,
-                    code: "E07",
-                    file: file.rel.clone(),
-                    line: 0,
-                    message: format!(
-                        "listed but unreadable: {} links [[{}]] without the `- **[[{}]]**` \
-                         entry form, so the router builds no entry for it and the file \
-                         scores zero on every question",
-                        map.rel, file.stem, file.stem
-                    ),
-                });
-            }
+        // **E02 asks the same question it always asked, of the file instead of the map.**
+        //
+        // It used to read the base's `MAP.md`: a note the map did not list was unreachable,
+        // and that was true while `index::build` iterated map entries. ADR-0028 moved the
+        // index onto a walk over files, so a note is reachable when it declares its own
+        // keys and a map has no say in it.
+        //
+        // E03 and E07 are gone with the reason they existed. E03 demanded a map file, which
+        // is now optional. E07 caught a map entry written in a shape the router's parser
+        // could not read, which cannot matter when the router does not read the map.
+        //
+        // The sentence is kept word for word, because it was the true part all along.
+        let (keywords, _) = crate::index::header_of(&file.text);
+        if keywords.is_empty() {
+            findings.push(Finding {
+                level: Level::Error,
+                code: "E02",
+                file: file.rel.clone(),
+                line: 0,
+                message: "not indexed: no `Search for:` line in this file, so the router                           builds no entry for it and it scores zero on every question. A                           file nobody can find does not exist"
+                    .into(),
+            });
+        } else if keywords.len() < 12 {
+            // **Reachable is not the same as findable**, and the corpus measured the gap.
+            // The median was six terms before 2026-08-20, and a real question missed a
+            // file that exists to answer it: `eating out, restaurant, poke, salmon` carried
+            // nothing a person would type, and "hoje vou sair com meus amigos, to com azia,
+            // o que vou comer" reached it at zero. Widened to thirty terms it answers at
+            // 130.21.
+            //
+            // A warning rather than an error, because a thin line is a note that works
+            // badly and a missing one is a note that does not work.
+            findings.push(Finding {
+                level: Level::Warning,
+                code: "W06",
+                file: file.rel.clone(),
+                line: 0,
+                message: format!(
+                    "thin keyword line: {} terms. A question uses words the writer did not                      think of, so a short list is a file only reachable by luck. Aim for                      thirty, in both languages, including the words somebody types from                      inside the problem",
+                    keywords.len()
+                ),
+            });
         }
     }
 

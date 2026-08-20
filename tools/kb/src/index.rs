@@ -10,7 +10,6 @@
 //! and incapable of inventing a file that does not exist.
 
 use crate::base::Base;
-use crate::checks::map_entries;
 use std::collections::HashMap;
 
 pub struct Entry {
