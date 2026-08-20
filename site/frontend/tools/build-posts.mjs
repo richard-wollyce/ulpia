@@ -24,12 +24,12 @@ const esc = (s) =>
 // The band, repeated on every page because it is the library's chrome. Kept as
 // one constant so the lamp cannot drift between the hand-written pages and the
 // generated ones.
-const BAND = `    <header class="band">
+const band = (current) => `    <header class="band">
       <div class="band-inner">
         <p class="wordmark"><a href="/">Ulpia</a></p>
         <nav class="nav" aria-label="Sections">
           <ul>
-            <li><a href="/blog/" aria-current="page">Writing</a></li>
+            <li><a href="/blog/" aria-current="CURRENT">Writing</a></li>
           </ul>
         </nav>
         <button type="button" class="lamp-toggle" aria-label="Color scheme: light, press to change">
@@ -52,7 +52,7 @@ const BAND = `    <header class="band">
           </svg>
         </button>
       </div>
-    </header>`;
+    </header>`.replace("CURRENT", current);
 
 const FOOTER = `    <footer>
       <p class="address-line">
@@ -60,7 +60,7 @@ const FOOTER = `    <footer>
       </p>
     </footer>`;
 
-const page = ({ title, description, canonical, body }) => `<!doctype html>
+const page = ({ title, description, canonical, body, ogType = "article", current = "true" }) => `<!doctype html>
 <html lang="en">
   <head>
     <meta charset="utf-8" />
@@ -76,12 +76,12 @@ const page = ({ title, description, canonical, body }) => `<!doctype html>
     <meta property="og:title" content="${esc(title)}" />
     <meta property="og:description" content="${esc(description)}" />
     <meta property="og:url" content="${esc(canonical)}" />
-    <meta property="og:type" content="article" />
+    <meta property="og:type" content="${esc(ogType)}" />
     <script src="/theme.js"></script>
     <link rel="stylesheet" href="/src/styles.css" />
   </head>
   <body>
-${BAND}
+${band(current)}
 ${body}
 ${FOOTER}
   </body>
@@ -149,7 +149,7 @@ for (const p of posts) {
         </p>
 ${p.html.split("\n").map((l) => (l ? "        " + l : l)).join("\n")}
       </article>
-      <p class="doc-back"><a href="/blog/">All writing</a></p>
+      <p class="doc-back"><a href="/blog/">All writing</a> · <a href="/">Back to the library</a></p>
     </main>`,
     }),
   );
@@ -173,11 +173,13 @@ writeFileSync(
   join(OUT, "index.html"),
   page({
     title: "Writing · Ulpia",
-    description: "Notes on building Ulpia: the memory layer, the fleet, and the decisions behind them.",
+    description: "Richard Wollyce, on building Ulpia: what was decided, what it cost, and what is still wrong.",
+    ogType: "website",
+    current: "page",
     canonical: `${SITE}/blog/`,
     body: `    <main class="doc">
       <h1>Writing</h1>
-      <p class="doc-date">Notes on building Ulpia, and the decisions behind it.</p>
+      <p class="doc-date">Richard Wollyce, on building Ulpia: what was decided, what it cost, and what is still wrong.</p>
 ${list}
       <p class="doc-back"><a href="/blog/feed.xml">Feed</a> · <a href="/">Back to the library</a></p>
     </main>`,
