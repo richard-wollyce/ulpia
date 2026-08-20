@@ -5,7 +5,9 @@ stage: derived
 
 # ADR-0014: the system is written in English, the conversation is not
 
-**Search for:** `language`, `English`, `idioma`, `normalise`, `interface copy`, `UI strings`
+**Search for:** `language`, `idioma`, `lingua`, `linguagem`, `English`, `ingles`, `Portuguese`, `portugues`, `bilingue`, `translation`, `traducao`, `traduzir`, `localization`, `localisation`, `localizacao`, `i18n`, `interface strings`, `UI strings`, `textos da interface`, `texto do botao`, `botoes`, `buttons`, `error message`, `mensagem de erro`, `tray`, `bandeja`, `tools/tray`, `main.rs`, `store_hit`, `identifiers`, `identificadores`, `nome de variavel`, `nome de funcao`, `comments`, `comentarios`, `stopwords`, `accent folding`, `acentos`, `audit`, `auditoria de idioma`, `cargo check`, `Steve`, `verbatim`, `quoted creative`, `criativo publicitario`, `private layer`, `camada privada`, `Yaron`, `com.fleet.tray`, `bundle identifier`, `fleet-root.txt`, `mensagem de commit`, `ADR-0014`
+
+**Exists to:** Which language the code, comments, notes and interface strings are written in, and the two places Portuguese is still allowed.
 
 - **Date:** 2026-08-17
 - **Status:** accepted

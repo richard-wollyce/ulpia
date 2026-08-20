@@ -5,7 +5,9 @@ stage: derived
 
 # ADR-0017: BGE-M3 measured and not adopted, because fusing it made the system worse
 
-**Search for:** `embedding`, `embeddings`, `dense`, `BGE-M3`, `bge`, `e5`, `vector search`, `semantic`
+**Search for:** `embedding`, `embeddings`, `modelo de embedding`, `dense`, `dense scorer`, `vector search`, `busca vetorial`, `vetorial`, `vetores`, `vetorizar`, `banco vetorial`, `similarity`, `similaridade`, `semantic`, `semantico`, `busca semantica`, `busca por significado`, `cross lingual`, `multilingual`, `multilingue`, `BGE-M3`, `bge`, `BAAI`, `e5-small`, `e5`, `fastembed`, `ONNX`, `ort`, `tokenizers`, `ndarray`, `sentence-transformers`, `torch`, `python`, `Bgem3Embedding`, `ColBERT`, `RRF`, `fusion`, `fusao`, `chunk`, `chunks`, `chunking`, `trecho`, `trechos`, `overlap`, `sobreposicao`, `store.rs`, `indexing`, `indexacao`, `custo de indexacao`, `abstention`, `abstencao`, `score`, `pontuacao`, `hallucination`, `alucinacao`, `CPU`, `Latitude 3420`, `dependencia`, `ADR-0017`
+
+**Exists to:** Whether embeddings belong inside kb: BGE-M3 was measured against the keyword scorer, fused, and rejected because it turned an honest abstention into a confident wrong answer.
 
 - **Date:** 2026-08-17
 - **Status:** accepted

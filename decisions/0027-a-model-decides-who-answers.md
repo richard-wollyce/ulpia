@@ -5,7 +5,9 @@ stage: derived
 
 # ADR-0027: a model decides who answers, because choosing an agent is classification
 
-**Search for:** `classifier`, `classificador`, `roteamento`, `routing`, `who answers`, `quem`
+**Search for:** `classifier`, `classificador`, `classificacao`, `roteamento`, `routing`, `router`, `kb route`, `quem responde`, `who answers`, `escolher agente`, `selecao de agente`, `falha de roteamento`, `routing failure`, `agente incorreto`, `dossier`, `dossie`, `roster`, `lista de agentes`, `cobertura`, `coverage`, `covered`, `adjacent`, `uncovered`, `ninguem cobre`, `nobody covers`, `criar agente`, `ends`, `role`, `agent.txt`, `IDF`, `keyword score`, `stopwords`, `alias`, `margem do incumbente`, `cascade`, `cascata`, `latencia`, `latency`, `lentidao`, `slow`, `hook`, `UserPromptSubmit`, `subprocesso`, `working directory`, `diretorio de trabalho`, `CLAUDE.md`, `contaminacao`, `stdin`, `stdout`, `fallback`, `Ollama`, `modelo local`, `classify.rs`, `kb eval`, `gold set`, `DevOps`, `deploy`, `downtime`, `monitoramento`, `infra`, `semantico`, `semantic`, `lexico`, `lexical`, `retrieval`, `Steve`, `Zed`, `ADR-0013`, `ADR-0018`
+
+**Exists to:** Why a model, not a sum of keyword scores, picks which agent answers; what it costs in latency and where that cost actually came from; and how a subject nobody covers finally gets named.
 
 - **Date:** 2026-08-19
 - **Status:** accepted

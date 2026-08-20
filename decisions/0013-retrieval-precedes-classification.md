@@ -5,7 +5,9 @@ stage: derived
 
 # ADR-0013: the base is read before the model is allowed to decide it was not needed
 
-**Search for:** `routing`, `router`, `classification`, `cascade`, `recall`, `recall loss`, `silent`
+**Search for:** `routing`, `router`, `roteamento`, `kb route`, `kb_route`, `kb_retrieve`, `classification`, `classificacao`, `classificar`, `cascade`, `cascata`, `retrieval`, `recuperacao`, `lookup`, `consulta`, `busca`, `buscar`, `procurar`, `encontrar`, `achar`, `recall`, `cobertura`, `miss`, `miss log`, `silent miss`, `falha silenciosa`, `uncovered`, `keyword scorer`, `keyword router`, `keyword lookup`, `fused scorer`, `agreement`, `no_agreement`, `concordancia`, `aliases`, `kb-aliases`, `vocabulary`, `vocabulario`, `resident map`, `mapa residente`, `resident set`, `blocks.txt`, `index.md`, `typo`, `edit distance`, `accent folding`, `native memory`, `memoria nativa`, `Z13`, `medicao de roteamento`, `auditoria de roteamento`, `falha de roteamento`, `consultar a base`, `ler a base`, `ADR-0013`
+
+**Exists to:** Why the base is always read before a model is allowed to decide it did not need it, and what the twenty-question routing measurement found.
 
 - **Date:** 2026-08-17
 - **Status:** accepted

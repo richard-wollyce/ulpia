@@ -5,7 +5,9 @@ stage: derived
 
 # ADR-0015: expansion is split by kind of distance, and the code half ships first
 
-**Search for:** `expansion`, `step 2`, `suggestion`, `suggest`, `trigram`, `fuzzy`, `typo`, `cognate`
+**Search for:** `expansion`, `expansao`, `expandir`, `query expansion`, `suggestion`, `suggest`, `sugestao`, `sugestoes`, `sugerir`, `trigram`, `trigrama`, `trigramas`, `character trigram`, `fuzzy`, `fuzzy match`, `typo`, `typos`, `digitacao`, `erro de digitacao`, `ortografia`, `orthographic`, `escrita`, `cognate`, `cognato`, `cognatos`, `distancia ortografica`, `distancia semantica`, `palavra parecida`, `termos parecidos`, `termo desconhecido`, `SUGGEST_FLOOR`, `threshold`, `limiar`, `false positive`, `falso positivo`, `K-quant`, `shared prefix`, `prefixo`, `boundary padding`, `candidate terms`, `termos candidatos`, `keyword vocabulary`, `vocabulary`, `vocabulario`, `miss path`, `miss reply`, `kb route`, `kb_retrieve`, `aliases`, `modelo local`, `gguf`, `ollama`, `quantized`, `latency`, `latencia`, `dependencia`, `ADR-0015`
+
+**Exists to:** Why a miss returns trigram suggestions drawn from the base's own vocabulary instead of calling a local model, and the class of miss that half can never reach.
 
 - **Date:** 2026-08-17
 - **Status:** accepted

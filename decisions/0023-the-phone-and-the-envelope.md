@@ -5,7 +5,9 @@ stage: derived
 
 # ADR-0023: the desk streams over SSE with sequence numbers, and the phone is a decision, not a feature flag
 
-**Search for:** `phone`, `celular`, `PWA`, `websocket`, `SSE`, `envelope`, `event stream`
+**Search for:** `phone`, `celular`, `telefone`, `mobile`, `aplicativo`, `pwa`, `installable`, `instalar app`, `acessar do celular`, `service worker`, `https`, `secure context`, `contexto seguro`, `certificado`, `certificate`, `self-signed`, `certificado autoassinado`, `dns`, `hostname`, `lan`, `rede local`, `wifi`, `bind`, `127.0.0.1`, `loopback`, `localhost`, `192.168`, `exposicao`, `exposure`, `token`, `capability token`, `autenticacao`, `segredo compartilhado`, `sse`, `server-sent events`, `text/event-stream`, `eventsource`, `streaming`, `websocket`, `handshake`, `framing`, `envelope`, `letta`, `message_type`, `event_seq`, `seq`, `sequencia`, `ordenacao`, `ordering`, `idempotency`, `idempotency_key`, `deduplicacao`, `sync`, `replay`, `recuperacao`, `recovery`, `reconexao`, `reconnect`, `fan-out`, `journal`, `polling`, `chat`, `desk`, `mesa`, `reading room`, `sala de leitura`, `kb ui`, `4114`, `typed events`, `eventos tipados`
+
+**Exists to:** Why the desk streams over SSE with typed events and seq, and the four decisions (bind, secure context, permissions, reliability) the phone/PWA is waiting on.
 
 - **Date:** 2026-08-19
 - **Status:** proposed

@@ -1,6 +1,8 @@
 # ADR-0012: The system is Vesta, and everything lives under a personal name
 
-**Search for:** `Vesta`, `name`, `naming`, `brand`, `branding`, `Wollyce`, `richardwollyce.com`
+**Search for:** `Vesta`, `nome`, `naming`, `nomear`, `batizar`, `escolher nome`, `renomear`, `marca`, `brand`, `branding`, `rebranding`, `Wollyce`, `Richard Wollyce`, `richardwollyce.com`, `vesta.richardwollyce.com`, `dominio`, `subdominio`, `subdomain`, `registrar dominio`, `trademark`, `registro de marca`, `marca registrada`, `INPI`, `USPTO`, `advogado`, `Wollner`, `semiotica`, `logo`, `logotipo`, `simbolo`, `abstrato`, `nome descritivo`, `colisao`, `concorrente`, `Nestor`, `Otto`, `Janus`, `Maia`, `Jano`, `jan.ai`, `Alva`, `Nara`, `Tino`, `besta`, `fonetica`, `homofono`, `pronuncia`, `mitologia`, `deusa`, `romana`, `fogo`, `Vestais`, `estatua`, `orquestrador`, `orquestradora`, `fleet.txt`, `identidade`, `nome pessoal`, `empresa`, `socios`
+
+**Exists to:** Why the orchestrator is called Vesta, why everything sits on subdomains of richardwollyce.com, which candidate names lost and to whom, and what a personal umbrella name costs.
 
 **Status:** accepted
 **Date:** 2026-08-17

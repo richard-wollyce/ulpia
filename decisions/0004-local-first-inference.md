@@ -1,6 +1,8 @@
 # ADR-0004: local first inference, and the role split it forces
 
-**Search for:** `local model`, `llama.cpp`, `prefill`, `memory bandwidth`, `tokens per second`
+**Search for:** `local first`, `local LLM`, `modelo local`, `rodar sem internet`, `sem internet`, `offline`, `llama.cpp`, `Ollama`, `Qwen`, `Qwen3.5-4B`, `whisper.cpp`, `Piper`, `speech to text`, `text to speech`, `TTS`, `STT`, `prefill`, `prefill lento`, `tokens per second`, `tokens por segundo`, `memory bandwidth`, `largura de banda`, `quantization`, `quantizacao`, `Q4`, `hybrid attention`, `linear attention`, `dual channel`, `single channel`, `pente de memoria`, `upgrade de RAM`, `memoria RAM`, `quanta RAM`, `Dell Latitude 3420`, `i5-1135G7`, `Tiger Lake`, `Iris Xe`, `iGPU`, `GPU integrada`, `sem placa de video`, `sem CUDA`, `espaco em disco`, `disk space`, `4B`, `7B`, `8B`, `14B`, `escolher modelo`, `modelo pequeno`, `frontier model`, `modelo de fronteira`, `role split`, `roteamento local`, `extraction`, `drafting`, `chunk size`, `prompt cache`, `cache de prompt`, `benchmark`, `medicao de desempenho`, `lentidao`, `muito lento`, `demora para responder`, `notebook fraco`, `roda no meu notebook`, `generation speed`, `velocidade de geracao`
+
+**Exists to:** What a local model actually costs on this laptop, and which jobs go local versus frontier.
 
 - **Date:** 2026-08-13
 - **Status:** proposed. The numbers in it are calculated, not measured, and the first action is to

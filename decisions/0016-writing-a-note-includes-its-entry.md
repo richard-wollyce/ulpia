@@ -5,7 +5,9 @@ stage: derived
 
 # ADR-0016: a note and the entry that makes it reachable are one write
 
-**Search for:** `write`, `kb write`, `escrever`, `gravar`, `new note`, `create a note`, `bootstrap`
+**Search for:** `write`, `kb write`, `escrever`, `escrever nota`, `gravar`, `gravar memoria`, `salvar`, `anotar`, `registrar`, `guardar`, `lembrar`, `memorizar`, `criar nota`, `criar arquivo`, `nova nota`, `new note`, `create a note`, `note`, `nota`, `notas`, `map entry`, `entrada do mapa`, `map section`, `keys`, `chaves`, `bootstrap`, `empty base`, `base vazia`, `kb init`, `remember.rs`, `kb_remember`, `proposta`, `aprovar`, `human gate`, `staging`, `staged`, `git ls-files`, `untracked`, `tracked`, `gitignore`, `E02`, `W02`, `kb check`, `linter`, `lint`, `kb index`, `reindexar`, `unreachable note`, `nota inalcancavel`, `overwrite`, `sobrescrever`, `MCP tool`, `security surface`, `permissao`, `ADR-0016`
+
+**Exists to:** How a note gets created, why its map entry and keys are required by the same command, and why the write stages the files.
 
 - **Date:** 2026-08-17
 - **Status:** accepted

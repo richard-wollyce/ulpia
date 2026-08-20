@@ -1,6 +1,8 @@
 # ADR-0010: the memory system ships as an MCP server, so our GUI stops being the only door
 
-**Search for:** `MCP`, `MCP server`, `tool surface`, `third party client`, `distribution`, `wedge`
+**Search for:** `MCP`, `MCP server`, `servidor`, `protocolo`, `ferramentas`, `tool surface`, `kb_route`, `kb_retrieve`, `kb_remember`, `kb_write`, `kb serve`, `reason`, `path confinement`, `confinamento`, `seguranca`, `vazamento`, `vazou`, `leak`, `camada privada`, `private layer`, `privacidade`, `notas privadas`, `profile`, `records`, `opt-in`, `--all`, `tracked`, `Scope`, `Store::search`, `Base::discover`, `regressao`, `stdout`, `stderr`, `JSON`, `parser`, `handshake`, `initialize`, `dual-era`, `legacy`, `stateless`, `Claude Desktop`, `Claude Code`, `claude_desktop_config.json`, `mcp.json`, `conector`, `connector`, `claude.ai`, `navegador`, `browser`, `ChatGPT`, `terceiros`, `third party`, `distribuicao`, `wedge`, `tunnels`, `retencao`, `treinamento`, `Anthropic`, `nuvem`, `chunks`, `trechos`, `passagens`, `integracao`, `configurar`, `acentos`, `remove_diacritics`
+
+**Exists to:** Shipping the memory as an MCP server other clients can call: the tool names, the private-layer leak that was reproduced and fixed, which clients can reach it, and what still travels to Anthropic.
 
 - **Date:** 2026-08-16
 - **Status:** proposed

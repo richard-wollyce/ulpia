@@ -5,7 +5,9 @@ stage: derived
 
 # ADR-0021: a commit names the paths it commits, and proves afterwards that it took nothing else
 
-**Search for:** `commit`, `git commit`, `concurrency`, `concurrent sessions`, `multiple agents`
+**Search for:** `commit`, `commitar`, `git commit`, `kb commit`, `git add`, `git add -A`, `pathspec`, `caminhos`, `paths`, `staging`, `git index`, `indice do git`, `index.lock`, `lock`, `contention`, `retry`, `concorrencia`, `concurrency`, `sessoes paralelas`, `parallel sessions`, `paralelismo`, `multiplos agentes`, `multiple agents`, `race`, `clobber`, `sobrescrever`, `conflito`, `conflict`, `cdc0e52`, `commit message`, `mensagem de commit`, `git log`, `historico`, `auditoria`, `audit trail`, `rastreabilidade`, `pre-commit`, `pre-commit hook`, `hook de commit`, `githooks`, `core.hooksPath`, `git config`, `KB_ALLOW_RAW_COMMIT`, `raw commit`, `escape hatch`, `guard`, `guarda`, `policy`, `worktree`, `isolamento`, `merge`, `lease`, `claim`, `untracked`, `exit 128`, `nested repository`, `repositorio aninhado`, `kb check`, `versionamento`, `git`, `git show`, `git status`, `dirty`, `erro ao commitar`, `arquivos staged`, `unstaged`, `adr-0021`
+
+**Exists to:** How to commit safely when several agent sessions write the same repositories at once, and why kb commit and the pre-commit hook exist.
 
 - **Date:** 2026-08-18
 - **Status:** accepted

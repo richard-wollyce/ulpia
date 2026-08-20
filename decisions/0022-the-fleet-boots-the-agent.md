@@ -5,7 +5,9 @@ stage: derived
 
 # ADR-0022: the fleet boots the agent, the agent does not boot itself
 
-**Search for:** `boot`, `hook`, `UserPromptSubmit`, `who am i`, `identity`, `which agent answers`
+**Search for:** `boot`, `kb boot`, `bootar`, `inicializacao`, `startup`, `hook`, `gancho`, `UserPromptSubmit`, `SessionStart`, `UserPromptExpansion`, `settings.json`, `claude/settings.json`, `stdin`, `stdout`, `exit 0`, `exit 2`, `fail open`, `context injection`, `injecao de contexto`, `constituicao`, `constitution`, `agent identity`, `identidade do agente`, `identidade da sessao`, `agente ativo`, `roster`, `dono`, `owner`, `latencia`, `latency`, `lentidao`, `355 ms`, `280 ms`, `60 ms`, `sqlite`, `Base::discover`, `resident server`, `servidor residente`, `kb serve`, `mcp`, `kb_boot`, `mcp tool`, `model discretion`, `claude.md`, `55 kb`, `session id`, `kb/sessions`, `re-route`, `topic switch`, `troca de assunto`, `tracked`, `camada privada`, `private layer`, `runtime`, `vendor hook`, `fallback`, `instalar hook`, `hook falhou`, `sem constituicao`, `adr-0022`
+
+**Exists to:** How a session is told which agent it is: the UserPromptSubmit hook running kb boot, the 355 ms it costs, and why the model is not asked to decide.
 
 - **Date:** 2026-08-18
 - **Status:** accepted

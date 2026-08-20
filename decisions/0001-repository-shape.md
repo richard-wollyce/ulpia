@@ -1,6 +1,8 @@
 # ADR-0001: Zed is built on Yaron's three file split, extended for engineering
 
-**Search for:** `repository shape`, `three file split`, `boot path`, `ADR`, `embeddings`
+**Search for:** `repository shape`, `three file split`, `boot path`, `CLAUDE.md`, `index.md`, `MAP.md`, `mandatory reading order`, `routing map`, `ADR`, `architecture decision record`, `decisions folder`, `session records`, `session continuity`, `fleet folder`, `folder layout`, `file placement`, `adding a rule`, `plain text`, `grep`, `retrieval service`, `indexed base`, `boot cost`, `cost per query`, `bloated boot file`, `reversible decision`, `MAP entries`, `self improvement`, `third agent`, `engineering agent`, `agent architecture`, `publish the repository`, `fleet backlog`, `repository rules`, `Zed`, `Steve`, `Yaron`, `estrutura do repositorio`, `organizacao de pastas`, `tres arquivos`, `arquivo de boot`, `ordem de leitura`, `leitura obrigatoria`, `mapa de roteamento`, `registro de decisao`, `registrar uma decisao`, `pasta de decisoes`, `historico de sessoes`, `continuidade entre sessoes`, `pasta fleet`, `texto puro`, `custo de boot`, `arquivo inchado`, `criar um agente`, `terceiro agente`, `agente de engenharia`, `arquitetura de agentes`, `onde colocar um arquivo`, `criar uma pasta`, `adicionar uma regra`, `regras do repositorio`, `publicar o repositorio`, `dividir o CLAUDE.md`, `onde documentar uma decisao`, `repositorio desorganizado`
+
+**Exists to:** Why this repository is split into boot, index and map, and where a new folder or rule belongs.
 
 - **Date:** 2026-08-13
 - **Status:** accepted

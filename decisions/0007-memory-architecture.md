@@ -1,6 +1,8 @@
 # ADR-0007: the memory pipeline, and provenance as a first class field
 
-**Search for:** `ADD UPDATE DELETE NOOP`, `NOOP`, `provenance`, `stage`, `write gate`, `delete`
+**Search for:** `NOOP`, `ADD`, `UPDATE`, `DELETE`, `memory`, `memoria`, `camada de memoria`, `pipeline`, `provenance`, `procedencia`, `proveniencia`, `origem`, `external`, `stage`, `estagio`, `raw`, `distilled`, `derived`, `destilado`, `derivado`, `yaml`, `metadados`, `write gate`, `escrever`, `mem0`, `Letta`, `Zep`, `apagar`, `deletar`, `remover`, `esquecer`, `duplicado`, `repetido`, `lixo`, `ruido`, `atualizar`, `adicionar`, `sobrescrever`, `salvar`, `guardar`, `lembrar`, `anotar`, `limpar a base`, `git revert`, `commit`, `historico`, `reindex`, `reindexar`, `indice`, `sqlite`, `FTS5`, `BM25`, `sqlite-vec`, `rusqlite`, `embeddings`, `vetores`, `dependencia`, `prefix caching`, `KV cache`, `constituicao`, `blocks.txt`, `blocos`, `evidencia`, `confianca`, `auditoria`, `hoarding`, `ingestao`, `kb remember`, `kb ingest`, `backfill`
+
+**Exists to:** How a claim enters, changes, or leaves the base: the four write outcomes, provenance and stage fields, the agent's right to delete, and why the index became SQLite.
 
 - **Date:** 2026-08-13
 - **Status:** accepted

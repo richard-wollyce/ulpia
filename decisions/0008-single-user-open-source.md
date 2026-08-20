@@ -1,6 +1,8 @@
 # ADR-0008: build for one self hosted user, keep the hosted service possible
 
-**Search for:** `open source`, `self hosted`, `single user`, `multi tenant`, `hosted service`
+**Search for:** `open source`, `codigo aberto`, `self hosted`, `hospedar`, `hospedagem`, `usuario`, `dados do usuario`, `multiusuario`, `tenancy`, `tenant`, `hosted service`, `SaaS`, `servico pago`, `monetizar`, `monetizacao`, `cobrar`, `cobranca`, `receita`, `mensalidade`, `dinheiro`, `lucro`, `negocio`, `vender`, `gratis`, `gratuito`, `clonar`, `repositorio`, `README`, `instalar`, `instalacao`, `kb init`, `conta`, `login`, `autenticacao`, `telemetria`, `offline`, `exportar`, `portabilidade`, `migrar`, `lock-in`, `aprisionamento`, `durabilidade`, `fonte da verdade`, `source of truth`, `arquivos`, `pasta`, `database`, `git`, `caminho`, `maquina local`, `rodar localmente`, `cliente pagante`, `escalar`, `infraestrutura`, `especulacao`, `produto`, `produtizacao`, `publicar`, `lancamento`, `release`
+
+**Exists to:** Why the product is one self-hosted user with no accounts, why a directory now and a database later cannot be reversed, and what keeps a paid hosted service possible without building it.
 
 - **Date:** 2026-08-13
 - **Status:** accepted

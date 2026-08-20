@@ -5,7 +5,9 @@ stage: derived
 
 # ADR-0025: a fleet must declare its human, and the shape of that declaration is the part that can be published
 
-**Search for:** `open source`, `publico`, `public`, `publish`, `licenca`, `license`, `skeleton`
+**Search for:** `open source`, `publicar`, `publish`, `publicacao`, `publication`, `publicavel`, `publishable`, `publico`, `public`, `privado`, `private`, `privacidade`, `privacy`, `licenca`, `license`, `licenciamento`, `skeleton`, `esqueleto`, `person-skeleton`, `agent-skeleton`, `template`, `scaffold`, `gerador`, `generator`, `kb init`, `init --person`, `drift test`, `teste de drift`, `humano`, `human`, `usuario`, `user`, `user block`, `bloco user`, `declarar usuario`, `declarar humano`, `base da pessoa`, `core.md`, `work.md`, `presence.md`, `gitignore`, `repositorio publico`, `public repo`, `github`, `clonar`, `clone`, `dados pessoais`, `personal data`, `dados sensiveis`, `sensitive data`, `confidencial`, `segredo`, `vazamento`, `leak`, `expor dados`, `esconder dados`, `compartilhar projeto`, `divulgar projeto`, `curriculo`, `cv`, `agent.txt`, `shape`, `perguntas no template`, `ADR-0024`, `ADR-0011`, `Richard`
+
+**Exists to:** What of this fleet can be published and what stays private, why the person's declaration ships as an empty skeleton instead of a prose rule, and why every new agent is born pointing at the human's base.
 
 - **Date:** 2026-08-19
 - **Status:** accepted

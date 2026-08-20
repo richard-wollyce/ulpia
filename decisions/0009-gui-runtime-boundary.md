@@ -1,6 +1,8 @@
 # ADR-0009: the GUI is a client of a contract, and the runtime is a choice inside it
 
-**Search for:** `GUI`, `Tauri`, `API contract`, `subscription`, `API key`, `runtime`, `prompt caching`
+**Search for:** `GUI`, `interface grafica`, `aplicativo`, `app`, `desktop`, `Tauri`, `Electron`, `WebView`, `instalador`, `frontend`, `backend`, `Rust`, `TypeScript`, `API contract`, `contrato`, `Memory::open`, `runtime`, `modelo local`, `llama.cpp`, `Qwen3.5`, `frontier`, `Anthropic`, `Opus`, `Sonnet`, `Haiku`, `API key`, `chave de API`, `keychain`, `chaveiro`, `credencial`, `ANTHROPIC_API_KEY`, `OAuth`, `assinatura`, `subscription`, `Claude Pro`, `Claude Max`, `Claude Code`, `custo`, `custa`, `preco`, `gasto`, `tokens`, `prompt caching`, `cache`, `blocks.txt`, `latencia`, `lento`, `offline`, `internet`, `conexao`, `fallback`, `notificacao`, `aviso`, `dropdown`, `trocar de modelo`, `voz`, `audio`, `fala`, `STT`, `TTS`, `microfone`, `MCP client`, `subprocesso`, `Windows`, `retrieve::fuse`
+
+**Exists to:** What the desktop app is (Tauri over a Rust API contract), which runtime answers a question, what it costs per question, and why a Claude subscription cannot pay for it.
 
 - **Date:** 2026-08-16
 - **Status:** accepted for the stack, proposed for the contract

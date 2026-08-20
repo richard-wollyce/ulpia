@@ -5,8 +5,7 @@ stage: derived
 
 # ADR-0029: the person's base is `person/`, because `profile` named three things
 
-**Search for:** `profile`, `person`, `perfil`, `pessoa`, `nome da base`, `renomear base`,
-`colisao de nome`, `fleet/person`, `fleet/profile`, `onde mora o usuario`, `base do humano`
+**Search for:** `profile`, `perfil`, `person`, `pessoa`, `fleet/person`, `fleet/profile`, `rename`, `renomear`, `renomear base`, `renomear pasta`, `renomear diretorio`, `nome da base`, `base name`, `colisao de nome`, `name collision`, `nome duplicado`, `ambiguidade`, `ambiguous`, `redundancia`, `redundante`, `termos redundantes`, `naming`, `nomenclatura`, `auditoria de nomes`, `auditoria`, `base do usuario`, `pasta da pessoa`, `diretorio da pessoa`, `diretorio`, `directory`, `usuario`, `yaron`, `zed`, `tombstone`, `lapide`, `superseded`, `special case`, `caso especial`, `PERSON_DIR`, `blocks.txt`, `kb blocks`, `bloco residente`, `missing file`, `arquivo faltando`, `kb serve`, `SQLite`, `lock`, `Memory::open`, `erro ao abrir fleet`, `setima base`, `kb`, `reiniciar`, `reiniciar MCP`, `referencia quebrada`, `ADR-0024`, `ADR-0028`
 
 **Exists to:** record why the shared person base changed name, and what the rename cost,
 because [[0024-the-person-is-one-base]] names the old path and is not edited.

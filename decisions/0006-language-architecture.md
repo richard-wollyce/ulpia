@@ -1,6 +1,8 @@
 # ADR-0006: one canonical language in the core, every language at the edge
 
-**Search for:** `language`, `multilingual`, `canonical`, `alias table`, `query expansion`, `embeddings`
+**Search for:** `language architecture`, `arquitetura de idioma`, `canonical language`, `idioma canonico`, `base em ingles`, `ingles`, `portugues`, `bilingue`, `multilingual`, `multilingue`, `mixed language`, `misturar idiomas`, `perguntar em portugues`, `responder em portugues`, `em que idioma escrever`, `escrever as notas em ingles`, `traducao`, `traduzir`, `traduzir a base`, `translation tax`, `idioma do usuario`, `idioma da conversa`, `alias table`, `tabela de alias`, `alias`, `sinonimo`, `query expansion`, `expansao de consulta`, `expansion log`, `multilingual embeddings`, `embeddings`, `semantic search`, `busca semantica`, `cascade`, `cascata`, `kb route`, `roteador errou`, `cross language miss`, `nao achou o arquivo`, `keyword line`, `palavras chave em portugues`, `jargon`, `jargao tecnico`, `termo tecnico`, `nao tem traducao`, `fontes em ingles`, `English sources`, `declarar idioma da base`, `lint rule`, `UTC`, `minor units`, `UTF-8`, `normalizar na borda`, `normalise at the boundary`, `acentos`, `sem acento`, `Yaron`, `Steve`, `regra unica para a frota`, `excecao para uma base`
+
+**Exists to:** Which language the notes, the keywords and the conversation are written in, and how a Portuguese question reaches an English base.
 
 - **Date:** 2026-08-13
 - **Status:** proposed

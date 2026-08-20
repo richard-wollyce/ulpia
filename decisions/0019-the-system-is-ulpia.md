@@ -5,7 +5,9 @@ stage: derived
 
 # ADR-0019: the system is Ulpia, and the fleet is the folder the agents live in
 
-**Search for:** `Ulpia`, `ulpia.io`, `name`, `product name`, `system name`, `rename`, `fleet folder`
+**Search for:** `ulpia`, `ulpia.io`, `nome`, `nomear`, `batizar`, `naming`, `product name`, `rename`, `renomear`, `significado`, `origem`, `pronuncia`, `fonetica`, `phonetic`, `grafia`, `spelling`, `marca`, `brand`, `trademark`, `registro de marca`, `dominio`, `domain`, `registrar dominio`, `vesta`, `librarian`, `bibliotecario`, `biblioteca`, `library`, `library metaphor`, `metafora`, `steve`, `candidatos`, `candidates`, `shortlist`, `name collision`, `colisao`, `tabularium`, `scrinium`, `pinakes`, `pergamo`, `pergamum`, `ninive`, `serapeum`, `florilegium`, `wollner`, `abstract mark`, `marca abstrata`, `convergencia`, `bibliotheca ulpia`, `trajano`, `trajan`, `roma`, `record office`, `adr-0012`, `adr-0019`, `supersedes`, `substitui`, `fleet`, `frota`, `fleet folder`, `pasta fleet`, `agents directory`, `diretorio agents`, `repository root`, `raiz`, `com.fleet.tray`, `tray`, `hello@ulpia.io`, `security@ulpia.io`, `disclosure`
+
+**Exists to:** Why the system is called Ulpia, how the name was chosen and which candidates were killed, and why the agents folder became fleet/.
 
 - **Date:** 2026-08-18
 - **Status:** accepted

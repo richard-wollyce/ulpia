@@ -1,6 +1,8 @@
 # ADR-0002: the evidence ruler for claims about software
 
-**Search for:** `evidence ruler`, `tier D`, `model output`, `recheck trigger`, `discard log`
+**Search for:** `evidence ruler`, `regua de evidencia`, `evidence tiers`, `niveis de evidencia`, `tier A`, `tier B`, `tier C`, `tier D`, `model output is tier D`, `saida do modelo`, `hallucination`, `alucinacao`, `o modelo inventou`, `chute`, `achismo`, `guessing`, `unverified`, `nao verificado`, `verified`, `verificado`, `unsourced`, `sem fonte`, `sem evidencia`, `citar a fonte`, `de onde veio essa informacao`, `primary source`, `fonte primaria`, `documentacao oficial`, `reproducible benchmark`, `ran it and measured`, `rodei e medi`, `testei`, `nao testei`, `practitioner report`, `blog post`, `tweet`, `staleness`, `desatualizado`, `ainda vale`, `version bump`, `mudanca de versao`, `valid_for`, `front matter`, `recheck trigger`, `revalidar`, `rechecar`, `quando revisar`, `review queue`, `fila de revisao`, `discard log`, `log de descarte`, `descartado`, `scale mismatch`, `escala diferente`, `Google scale`, `per claim tag`, `marcar a afirmacao`, `classificar a fonte`, `grade the source`, `nota da fonte`, `confiavel`, `posso confiar`, `evidence-tiers.md`
+
+**Exists to:** How a claim about software is graded, when it must be rechecked, and why model output starts at the bottom.
 
 - **Date:** 2026-08-13
 - **Status:** **accepted**, ratified by Richard 2026-08-13.

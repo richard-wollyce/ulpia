@@ -1,6 +1,8 @@
 # ADR-0011: the fleet has one shape, and the library still accepts any path
 
-**Search for:** `fleet`, `fleet root`, `agent shape`, `layout`, `agents/`, `fleet.txt`, `attach`
+**Search for:** `fleet`, `frota`, `fleet root`, `raiz`, `fleet.txt`, `agents`, `agentes`, `layout`, `estrutura`, `estrutura de pastas`, `diretorio`, `arvore`, `organizar`, `organizacao`, `mover`, `bagunca`, `backup`, `sincronizar`, `sync`, `OneDrive`, `rsync`, `zip`, `copiar`, `caminho relativo`, `relative paths`, `caminho absoluto`, `absolute path`, `pointer file`, `ponteiro`, `tray`, `inbox`, `outbox`, `MAP.md`, `index.md`, `CLAUDE.md`, `agent.txt`, `kb-aliases.txt`, `knowledge`, `decisions`, `protocols`, `templates`, `index.db`, `kb init`, `criar agente`, `orquestrador`, `Zed`, `Steve`, `Yaron`, `repositorio`, `nested repository`, `repositorio aninhado`, `gitignore`, `git ls-files`, `subtree`, `tools`, `publico`, `privado`, `attach`, `disable`, `manifesto`, `convencao`, `migracao`, `mudar de computador`, `formatar`, `recuperar`
+
+**Exists to:** Where agents live on disk: the fleet root shape, relative paths only, the public system and private agents repository split, the per-agent index, and what an agent folder must contain.
 
 - **Date:** 2026-08-16
 - **Status:** proposed

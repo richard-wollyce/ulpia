@@ -1,6 +1,8 @@
 # ADR-0005: the agent wakes with its constitution, not with its library
 
-**Search for:** `lines with no model at all`
+**Search for:** `constitution`, `constituicao do agente`, `acordar o agente`, `wake the agent`, `startup`, `no startup`, `prefix caching`, `cache de prefixo`, `KV cache`, `cache KV`, `resident context`, `contexto residente`, `ler a base inteira`, `carregar a base inteira`, `read the base at startup`, `nao cabe na memoria`, `estoura a memoria`, `KV budget`, `orcamento de contexto`, `q8`, `cache quantizado`, `4000 tokens`, `token budget`, `attention tax`, `long context recall`, `lost in the middle`, `recall degradation`, `falha silenciosa`, `silent failure`, `o agente nao lembra`, `kb index`, `agent selection`, `routing`, `roteamento`, `keyword lookup`, `busca por palavra chave`, `palavra chave`, `deterministic scoring`, `pontuacao deterministica`, `lookup table`, `tabela de consulta`, `sem modelo nenhum`, `no model at all`, `Search for line`, `linha search for`, `W02`, `missing keyword line`, `MAP.md`, `S1b`, `cache invalidation`, `editar durante a sessao`, `prefill reuse`, `129 segundos`, `orchestrator`, `orquestrador`, `tres agentes acordados`, `per query retrieval`, `retrieval`, `boot path`, `agent identity`, `identidade do agente`
+
+**Exists to:** Why an agent keeps only its constitution resident and reaches the rest by keyword lookup and retrieval.
 
 - **Date:** 2026-08-13
 - **Status:** proposed

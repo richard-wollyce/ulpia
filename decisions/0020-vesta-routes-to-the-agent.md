@@ -5,7 +5,9 @@ stage: derived
 
 # ADR-0020: Vesta chooses which agent answers, and each scorer does the job it was measured to be better at
 
-**Search for:** `routing`, `agent selection`, `which agent`, `coordinator`, `orchestrator`
+**Search for:** `routing`, `roteamento`, `router`, `roteador`, `orquestrador`, `orchestrator`, `coordenador`, `vesta`, `agent selection`, `agente dono`, `agente responsavel`, `escolha do agente`, `especialista`, `owner`, `kb route`, `kb eval`, `memory ask`, `gold set`, `gold.tsv`, `eval`, `avaliacao`, `benchmark`, `medicao`, `measurement`, `precisao`, `precision`, `top-1`, `recall`, `keyword scorer`, `palavras chave`, `keywords`, `rrf`, `reciprocal rank fusion`, `fusao`, `fusion`, `scorers`, `sparse`, `dense`, `embedding`, `semantic`, `gate`, `floor`, `piso`, `threshold`, `limiar`, `margem`, `margin`, `abstain`, `abstencao`, `confidence`, `confianca`, `guess`, `idf`, `document frequency`, `ranking`, `milissegundos`, `milliseconds`, `velocidade`, `speed`, `8.6 ms`, `o(entries)`, `hardcoded`, `conditional`, `zed`, `arquiteto`, `16/19`, `18/19`, `passages`, `retrieval`, `adr-0020`
+
+**Exists to:** Whether routing to an agent beats a hardcoded pointer, measured; and which scorer decides the owner versus which assembles passages.
 
 - **Date:** 2026-08-18
 - **Status:** proposed

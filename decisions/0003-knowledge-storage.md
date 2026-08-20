@@ -1,6 +1,8 @@
 # ADR-0003: files stay the source of truth, the index is derived
 
-**Search for:** `source of truth`, `derived index`, `Neo4j`, `graph`, `database`, `reversibility`
+**Search for:** `source of truth`, `fonte da verdade`, `derived index`, `indice derivado`, `Neo4j`, `graph database`, `banco de grafos`, `database`, `banco de dados`, `SQLite`, `Postgres`, `guardar em banco`, `migrar para banco`, `usar um banco de dados`, `markdown files`, `arquivos markdown`, `arquivos soltos`, `monte de arquivos`, `git history`, `historico do git`, `git revert`, `reverter mudanca`, `audit trail`, `auditoria`, `text editor`, `editar no editor de texto`, `corrigir a mao`, `publication format`, `publicar a base`, `zero infrastructure`, `sem infraestrutura`, `backup`, `migracao`, `exportar`, `export`, `validator`, `validador`, `broken links`, `links quebrados`, `link rot`, `staleness report`, `tools/kb`, `kb`, `Rust`, `projeto em Rust`, `CLI`, `file scan`, `varredura de arquivos`, `graph traversal`, `variable depth traversal`, `document store`, `disposable projection`, `projecao descartavel`, `reversibilidade`, `assimetria`, `orchestrator GUI`, `conversation transcripts`, `job queue`, `concurrent writes`, `multiplos escritores`, `escalar a base`, `mais robusto`, `integrado`, `greppable`
+
+**Exists to:** Why the markdown files stay authoritative and any database or graph index is a disposable projection.
 
 - **Date:** 2026-08-13
 - **Status:** **accepted**, ratified by Richard 2026-08-13. Answers his question the same day.

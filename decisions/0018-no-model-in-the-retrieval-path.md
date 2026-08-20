@@ -5,7 +5,9 @@ stage: derived
 
 # ADR-0018: no model enters the retrieval path, and the score floor becomes the mechanism
 
-**Search for:** `reranker`, `rerank`, `cross encoder`, `abstention`, `score floor`, `confidence gate`
+**Search for:** `reranker`, `rerank`, `reranking`, `reordenar`, `reordenacao`, `ordenacao`, `cross encoder`, `bge-reranker-v2-m3`, `jina-reranker-v2`, `jina`, `BGE-M3`, `dense`, `sparse`, `esparso`, `ColBERT`, `INT8`, `kb-bench`, `tools/bench`, `benchmark`, `gold set`, `gold.tsv`, `eval`, `avaliacao`, `measurement`, `medicao`, `medir modelos`, `score floor`, `piso de score`, `margin`, `margem`, `abstention`, `abstencao`, `abster`, `confidence`, `confianca`, `confidence gate`, `Memory::route`, `retrieval path`, `keyword scorer`, `RRF`, `fusion`, `fusao`, `CC-BY-NC`, `Apache`, `MIT`, `licenca do modelo`, `adversarial review`, `skeptic`, `cetico`, `prediction`, `previsao`, `mem0`, `Zep`, `competitors`, `concorrentes`, `hf-hub`, `symlink`, `top-1`, `miss log`, `latency`, `latencia`, `modelo na busca`, `custo do modelo`, `ADR-0018`
+
+**Exists to:** Rerankers and dense heads measured in Rust and all kept out of retrieval, leaving the keyword score floor and runner-up margin as the confidence mechanism.
 
 - **Date:** 2026-08-18
 - **Status:** accepted

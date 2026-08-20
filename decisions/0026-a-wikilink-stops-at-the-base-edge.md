@@ -5,7 +5,9 @@ stage: derived
 
 # ADR-0026: a wikilink resolves inside its own base and nowhere else
 
-**Search for:** `wikilink`, `link`, `broken link`, `E01`, `base scope`, `escopo`, `cross-base`
+**Search for:** `wikilink`, `colchetes duplos`, `double brackets`, `obsidian`, `link`, `link quebrado`, `broken link`, `erro de link`, `link error`, `E01`, `escopo da base`, `base scope`, `borda da base`, `base edge`, `limite da base`, `cross-base`, `linkar nota`, `citar nota`, `referenciar nota`, `resolver link`, `resolucao`, `ui::resolve`, `ui.rs`, `kb check`, `linter`, `lint`, `validador`, `mensagem de erro`, `error message`, `mover nota`, `mover arquivo`, `caminho`, `path`, `escrever caminho`, `referencia cruzada`, `cross reference`, `reading room`, `sala de leitura`, `stacks`, `ribbons`, `grafo`, `graph`, `backlink`, `sintaxe de link`, `link syntax`, `auditoria de publicacao`, `publication audit`, `limite de privacidade`, `privacy boundary`, `yaron`, `labels-analysed`, `ADR-0008`
+
+**Exists to:** Why a wikilink resolves only inside its own base, why crossing a base is written as a path, and what the linter now teaches when a link's target lives somewhere else.
 
 - **Date:** 2026-08-19
 - **Status:** accepted

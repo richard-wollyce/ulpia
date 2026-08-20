@@ -5,7 +5,9 @@ stage: derived
 
 # ADR-0024: the person is one base every agent reads, and never an agent that answers
 
-**Search for:** `who am i`, `quem sou eu`, `user`, `usuario`, `perfil`, `profile`, `persona`
+**Search for:** `quem sou eu`, `who am i`, `richard`, `usuario`, `user`, `perfil`, `profile`, `persona`, `identidade`, `identity`, `dados pessoais`, `perfil global`, `global file`, `fleet/profile`, `profile base`, `core.md`, `work.md`, `presence.md`, `richard.md`, `bloco user`, `[user] block`, `blocks assemble`, `resident block`, `bloco residente`, `residency`, `tokens residentes`, `12.1k`, `9689`, `2708`, `agent.txt`, `z32`, `abstain`, `abstencao`, `steve`, `yaron`, `aldo`, `zed`, `duplicacao`, `duplication`, `copias`, `drift`, `divergencia`, `fragmentacao`, `consolidacao`, `ingestion`, `ingestao`, `contradicao`, `contradiction`, `richardwollyce.com`, `cv`, `curriculo`, `site pessoal`, `docker`, `rust`, `lidera engenharia`, `engineering leader`, `job title`, `profissao`, `carreira`, `metas`, `goals`, `gitignore`, `tracked`, `privacidade`, `privacy`, `second human`, `pessoa`, `operador`, `miss log`, `biografia`
+
+**Exists to:** Where the record of who Richard is lives: one profile base every agent reads, resident core plus retrieved files, never an agent that answers.
 
 - **Date:** 2026-08-19
 - **Status:** accepted
