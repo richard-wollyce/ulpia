@@ -303,7 +303,19 @@ pub fn run(base: &Base) -> Vec<Finding> {
 
 /// Checks that only apply to a distilled note inside the knowledge folder.
 fn check_note(base: &Base, file: &MdFile, findings: &mut Vec<Finding>) {
-    let is_readme = file.rel.to_lowercase().ends_with("readme.md");
+    // **Files that orient a person rather than answer a question**, exempt from the
+    // reachability rules because nobody searches for them: they are found by standing in
+    // the directory they describe.
+    //
+    // Three names, because one name was doing three jobs across thirteen files and a reader
+    // could not tell which they had opened. README.md is a base's front door.
+    // `what-goes-here.md` is a folder legend, read by whoever is about to drop a file in.
+    // `MOVED.md` is a signpost where content used to be, and it shouts because it has to
+    // catch somebody who arrived expecting the content.
+    let name = file.rel.to_lowercase();
+    let is_readme = name.ends_with("readme.md")
+        || name.ends_with("what-goes-here.md")
+        || name.ends_with("moved.md");
 
     if !is_readme {
         if let Some(map) = base.map_file() {
