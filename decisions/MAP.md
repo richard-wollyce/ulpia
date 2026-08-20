@@ -396,3 +396,16 @@
   responde`, `agent selection`, `escolha de agente`, `coverage`, `cobertura`, `devops`, `gap`,
   `novo agente`, `new agent`, `dossier`, `ends`, `edges`, `bordas`, `cascade`, `cascata`,
   `latency`, `latencia`, `model in the loop`, `modelo`.
+
+- **[[0028-a-note-carries-its-own-keys]]** 🟢 accepted 2026-08-20. **The keys that make a
+  note findable move out of the base's map and into the note.** Written the day one file's
+  formatting made seven of another agent's notes invisible to the router while `kb check`
+  printed clean. Keeps ADR-0016's principle, that a note and its keys arrive together, and
+  makes it structural instead of a command's discipline. Two labelled lines under the title,
+  not front matter (a delimited block has a way to not exist, measured: a file with none
+  yields zero findings) and not a heading section (a section runs to the next heading and
+  silently deletes the note's opening prose from the full text index, measured). MAP.md is
+  demoted rather than deleted: it is still what makes a directory a base and still a resident
+  constitution block worth up to 6,813 tokens.
+  Search for: `keywords`, `palavras chave`, `search for`, `onde ficam as keywords`, `MAP.md`, `mapa`, `indice`, `index`, `como um arquivo e encontrado`, `nota invisivel`, `formato da nota`, `cabecalho da nota`, `why this file exists`, `proposito do arquivo`.
+
