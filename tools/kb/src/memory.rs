@@ -777,14 +777,14 @@ pub fn expand_roots(paths: &[&Path]) -> Vec<PathBuf> {
     let mut out = Vec::new();
 
     for path in paths {
-        if crate::base::has_map(path) {
+        if looks_like_a_base(path) {
             out.push(path.to_path_buf());
             continue;
         }
 
         let agents_dir = path.join(AGENTS_DIR);
         let mut found = if agents_dir.is_dir() {
-            bases_in(&agents_dir)
+            agents_in(&agents_dir)
         } else {
             bases_in(path)
         };
@@ -813,8 +813,6 @@ pub fn expand_roots(paths: &[&Path]) -> Vec<PathBuf> {
     out
 }
 
-/// Immediate subdirectories that are bases, sorted so the order a fleet opens in
-/// does not depend on the order the filesystem happens to hand back.
 /// The directory name, which is the agent's name by ADR-0011's convention.
 fn name_of(root: &Path) -> String {
     root.file_name()
@@ -822,12 +820,63 @@ fn name_of(root: &Path) -> String {
         .unwrap_or_else(|| root.display().to_string())
 }
 
+/// Evidence that a directory is a base rather than a folder inside one.
+///
+/// **Used only where evidence is actually needed**, which is when somebody points at a
+/// directory and the program has to guess what they meant. Inside the fleet root no
+/// evidence is required, because being there is the evidence: see [`agents_in`].
+///
+/// A map still counts, because [[0028-a-note-carries-its-own-keys]] demoted the map without
+/// deleting it and every base has one today. `agent.txt` counts too, so a new agent written
+/// by hand and never given a map is still recognised when pointed at directly.
+fn looks_like_a_base(dir: &Path) -> bool {
+    crate::base::has_map(dir) || dir.join("agent.txt").is_file()
+}
+
+/// Every immediate subdirectory of the fleet root, which is what `fleet/` means.
+///
+/// **No content test, and that is the change ADR-0028 needed.** This used to require a map
+/// file, so `has_map` was what made a directory an agent, and removing maps would have
+/// undiscovered the whole fleet. Worse, a marker file cannot replace it: checked against the
+/// six live bases, `fleet/profile` has no `agent.txt`, no `knowledge/` directory and no
+/// `attach` line, so every marker proposed for it was wrong. It is a base because it sits in
+/// `fleet/`, and nothing else needs to be true.
+///
+/// Dotted directories are skipped because `fleet/` holds `.git` and `.githooks`, and a
+/// directory that should not be a base for any other reason is named in the manifest's
+/// `disable` list, which is an opt-out that already exists and is already read.
+fn agents_in(dir: &Path) -> Vec<PathBuf> {
+    let mut found: Vec<PathBuf> = match std::fs::read_dir(dir) {
+        Ok(entries) => entries
+            .filter_map(|e| e.ok())
+            .map(|e| e.path())
+            .filter(|p| {
+                p.is_dir()
+                    && !p
+                        .file_name()
+                        .map(|n| n.to_string_lossy().starts_with('.'))
+                        .unwrap_or(true)
+            })
+            .collect(),
+        Err(_) => Vec::new(),
+    };
+    found.sort();
+    found
+}
+
+/// Immediate subdirectories that are bases, sorted so the order a fleet opens in
+/// does not depend on the order the filesystem happens to hand back.
+///
+/// This is the loose-directory case, where evidence is required: the children of an
+/// arbitrary directory are not bases by virtue of being there, and without the test
+/// `kb check` inside one agent would report its own `knowledge/` and `records/` folders as
+/// separate bases.
 fn bases_in(dir: &Path) -> Vec<PathBuf> {
     let mut found: Vec<PathBuf> = match std::fs::read_dir(dir) {
         Ok(entries) => entries
             .filter_map(|e| e.ok())
             .map(|e| e.path())
-            .filter(|p| p.is_dir() && crate::base::has_map(p))
+            .filter(|p| p.is_dir() && looks_like_a_base(p))
             .collect(),
         Err(_) => Vec::new(),
     };
@@ -886,6 +935,65 @@ mod tests {
         dir
     }
 
+    /// **The rule this pins was published wrong once, so it is pinned by running it.**
+    ///
+    /// ADR-0028 first proposed that a directory is a base when it holds `agent.txt`, or is
+    /// named in an `attach` line, or contains `knowledge/`. Checked against the six live
+    /// bases afterwards, `fleet/profile` has none of the three: it is not an agent, it holds
+    /// four files at its root, and it is not attached. The published predicate would have
+    /// dropped the user's own profile out of the fleet, silently, because `profile/core.md`
+    /// is resident in every agent and its disappearance reads as the person going quiet
+    /// rather than as an error.
+    ///
+    /// So the rule is structural: inside the fleet root, being there is the whole evidence.
+    #[test]
+    fn a_directory_in_the_fleet_root_is_a_base_with_no_marker_of_any_kind() {
+        let root = scratch("predicate");
+        let fleet = root.join("fleet");
+
+        // one with a map, the shape every base has today
+        std::fs::create_dir_all(fleet.join("mapped")).expect("mkdir");
+        std::fs::write(fleet.join("mapped").join("MAP.md"), "# MAP
+").expect("map");
+
+        // one with nothing at all: no map, no agent.txt, no knowledge/. This is the case
+        // the change exists for and the one the first predicate got wrong.
+        std::fs::create_dir_all(fleet.join("bare")).expect("mkdir");
+        std::fs::write(fleet.join("bare").join("core.md"), "# core
+").expect("note");
+
+        // and one the filesystem contributes, which must not become a base
+        std::fs::create_dir_all(fleet.join(".git")).expect("mkdir");
+
+        let found = expand_roots(&[root.as_path()]);
+        let names: Vec<String> = found.iter().map(|p| name_of(p)).collect();
+
+        assert!(names.contains(&"mapped".to_string()), "a mapped base is still a base");
+        assert!(
+            names.contains(&"bare".to_string()),
+            "a base with no marker of any kind must still be found: {names:?}"
+        );
+        assert!(
+            !names.iter().any(|n| n.starts_with('.')),
+            "a dotted directory is not a base: {names:?}"
+        );
+    }
+
+    /// The other half: outside the fleet root, evidence is still required, or `kb check`
+    /// run inside one agent reports that agent's own folders as separate bases.
+    #[test]
+    fn a_folder_inside_a_base_is_not_a_base() {
+        let root = scratch("not-a-base");
+        std::fs::create_dir_all(root.join("knowledge")).expect("mkdir");
+        std::fs::create_dir_all(root.join("records")).expect("mkdir");
+        std::fs::write(root.join("MAP.md"), "# MAP
+").expect("map");
+
+        let found = expand_roots(&[root.as_path()]);
+        assert_eq!(found.len(), 1, "the base itself, not its folders: {found:?}");
+        assert_eq!(found[0], root, "and it is returned untouched");
+    }
+
     fn make_base(root: &Path, name: &str) -> PathBuf {
         let dir = root.join(name);
         std::fs::create_dir_all(dir.join("knowledge")).expect("mkdir");
@@ -902,6 +1010,7 @@ mod tests {
             base: base.into(),
             path: format!("{base}/p.md"),
             title: String::new(),
+            purpose: String::new(),
             score: fused,
             keyword_score: keyword,
             why: why.iter().map(|s| s.to_string()).collect(),
@@ -921,13 +1030,15 @@ mod tests {
     #[test]
     fn agreement_between_the_scorers_is_what_separates_a_hit_from_a_guess() {
         let both = Retrieved {
-            base: "yaron".into(), path: "p".into(), title: String::new(), score: 0.032,
+            base: "yaron".into(), path: "p".into(), title: String::new(),
+            purpose: String::new(), score: 0.032,
             keyword_score: 12.0,
             why: vec!["keywords #2".into(), "text #5".into()],
             matched: vec![], passages: vec![],
         };
         let one = Retrieved {
-            base: "steve".into(), path: "q".into(), title: String::new(), score: 0.016,
+            base: "steve".into(), path: "q".into(), title: String::new(),
+            purpose: String::new(), score: 0.016,
             keyword_score: 0.0,
             why: vec!["text #1".into()],
             matched: vec![], passages: vec![],

@@ -47,6 +47,13 @@ pub struct Retrieved {
     /// From the map entry, when the keyword scorer ranked this file. Empty when only
     /// the text scorer found it.
     pub title: String,
+    /// What the map says this file is for. Empty when only the text scorer found it.
+    ///
+    /// **A path is not evidence about a subject.** The classifier was being shown
+    /// `steve/knowledge/research/2026-01-14-redacted-stories-algorithm-prompt.md
+    /// score 15.3 matched: zero` and asked whether the fleet covers production
+    /// deployment. It has to guess what that file is from its own filename.
+    pub purpose: String,
     pub score: f64,
     /// The raw keyword score, carried through instead of discarded.
     ///
@@ -95,6 +102,7 @@ pub fn fuse(keyword: &[index::Hit], text: &[store::Hit], top: usize) -> Vec<Retr
         entry.keyword_score = hit.score;
         entry.why.push(format!("keywords #{}", rank + 1));
         entry.title = hit.entry.title.clone();
+        entry.purpose = hit.entry.summary.clone();
         for word in &hit.matched {
             if !entry.matched.contains(word) {
                 entry.matched.push(word.clone());
@@ -151,6 +159,7 @@ fn blank(key: &(String, String)) -> Retrieved {
         base: key.0.clone(),
         path: key.1.clone(),
         title: String::new(),
+        purpose: String::new(),
         score: 0.0,
         keyword_score: 0.0,
         why: Vec::new(),

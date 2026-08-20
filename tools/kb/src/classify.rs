@@ -168,6 +168,45 @@ fn stable_prefix(memory: &Memory) -> String {
     out
 }
 
+/// Reduces a catalogue blurb to the one line the classifier can use.
+///
+/// Strips the list marker, the wikilink that repeats the filename, and any leading
+/// decoration, then cuts at a sentence end near the cap. The cap exists because the
+/// evidence block is the variable half of the dossier and every character in it is
+/// recomputed on every message.
+fn one_line(summary: &str) -> String {
+    const CAP: usize = 160;
+
+    let mut t = summary.trim();
+    t = t.trim_start_matches(['-', '*', ' ']);
+    // `**[[name]]**` repeats the path printed on the line above it.
+    if let Some(rest) = t.strip_prefix("[[") {
+        if let Some((_, after)) = rest.split_once("]]") {
+            t = after;
+        }
+    }
+    let t: String = t
+        .trim_start_matches(['*', ' '])
+        .chars()
+        .filter(|c| c.is_ascii() || c.is_alphabetic())
+        .collect();
+    let t = t.replace('*', "").replace('`', "");
+    let t = t.split_whitespace().collect::<Vec<_>>().join(" ");
+
+    if t.chars().count() <= CAP {
+        return t;
+    }
+    // Prefer a sentence boundary inside the budget over a hard cut mid-word.
+    let head: String = t.chars().take(CAP).collect();
+    match head.rfind(". ") {
+        Some(i) if i > CAP / 3 => head[..=i].trim().to_string(),
+        _ => match head.rfind(' ') {
+            Some(i) => format!("{}...", head[..i].trim_end_matches(',')),
+            None => head,
+        },
+    }
+}
+
 /// Everything that changes with the message: what retrieval found, the message itself,
 /// and the four lines to answer in.
 fn variable_tail(question: &str, found: &[Retrieved]) -> String {
@@ -189,6 +228,18 @@ fn variable_tail(question: &str, found: &[Retrieved]) -> String {
                 f.keyword_score,
                 if f.matched.is_empty() { "text only".into() } else { f.matched.join(", ") }
             ));
+            // **A path is not evidence about a subject.** Without this line the
+            // classifier is shown a filename and a score and asked whether the fleet
+            // covers a domain, so it has to infer what the file is from how it is named.
+            //
+            // The text comes from the map entry, which was written to be read in a
+            // catalogue rather than to answer this question, so it arrives carrying its
+            // own list marker, its wikilink and sometimes an emoji. Those are stripped
+            // and it is cut to one line: five untrimmed entries added about four hundred
+            // tokens to a three hundred token dossier.
+            if !f.purpose.is_empty() {
+                out.push_str(&format!("      about: {}\n", one_line(&f.purpose)));
+            }
         }
     }
 
@@ -441,6 +492,7 @@ mod tests {
                 base: "zed".into(),
                 path: format!("knowledge/systems/a-file-with-a-realistic-name-{i}.md"),
                 title: String::new(),
+                purpose: String::new(),
                 score: 0.0,
                 keyword_score: 15.0,
                 why: vec![],
