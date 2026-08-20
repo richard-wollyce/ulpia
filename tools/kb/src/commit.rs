@@ -236,7 +236,16 @@ pub fn commit(paths: &[String], message: &str) -> Result<Committed, Error> {
     // "pathspec did not match any files", which meant a deletion could be staged by hand
     // and then never committed by this tool. The pathspec is still the guard; `--all`
     // only widens which kinds of change are picked up within it.
-    run(&repo, &["add", "--all"], &rel)?;
+    // Best effort, because the staged check immediately below is the authority on whether
+    // there is anything to commit, and `add` has one failure that is not a failure: a path
+    // already removed from the index has nothing on disk and nothing in the index to match,
+    // so git answers "pathspec did not match any files" for a deletion that is fully staged
+    // and ready. Treating that as fatal made the tool refuse work it had nothing left to do.
+    //
+    // A real error still surfaces: it leaves the path unstaged, so `diff --cached` finds
+    // nothing and the caller gets NothingToCommit rather than a commit that quietly omits
+    // what was asked for.
+    let _ = run(&repo, &["add", "--all"], &rel);
 
     // Whether any of the named paths actually differs from HEAD. Without this, git
     // reports "nothing to commit" as a failure and the caller cannot tell that from a
