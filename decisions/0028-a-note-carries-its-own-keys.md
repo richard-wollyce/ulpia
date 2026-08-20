@@ -5,7 +5,7 @@ stage: derived
 
 # ADR-0028: a note carries its own keys, and the map stops deciding what exists
 
-**Search for:** `keywords`, `palavras chave`, `search for`, `buscar por`, `exists to`, `purpose line`, `linha de proposito`, `proposito`, `MAP.md`, `mapa`, `indice`, `index`, `indexacao`, `indexar nota`, `escrever keywords`, `curar keywords`, `nota sem keywords`, `curadoria`, `curation`, `nota invisivel`, `not indexed`, `nada encontrado`, `nothing matched`, `sem resultado`, `encontrar arquivo`, `E02`, `E03`, `E07`, `front matter`, `YAML`, `cabecalho da nota`, `header`, `heading`, `formato da nota`, `note format`, `store.rs`, `chunk`, `fulltext`, `texto completo`, `scorer`, `SCORE_FLOOR`, `abstencao`, `abstain`, `kb check`, `kb write`, `kb eval`, `has_map`, `expand_roots`, `bases_in`, `predicado de base`, `manifest`, `manifesto`, `disable`, `migracao`, `migration`, `migrar notas`, `Aldo`, `trigram`, `trigrama`, `resumo`, `summary`, `map block`, `bloco map`, `tokens residentes`, `parser`, `ADR-0016`, `ADR-0018`
+**Search for:** `keywords`, `palavras chave`, `search for`, `buscar por`, `exists to`, `purpose line`, `linha de proposito`, `proposito`, `MAP.md`, `mapa`, `indice`, `index`, `indexacao`, `indexar nota`, `escrever keywords`, `curar keywords`, `nota sem keywords`, `curadoria`, `curation`, `nota invisivel`, `not indexed`, `nada encontrado`, `nothing matched`, `sem resultado`, `encontrar arquivo`, `E02`, `E03`, `E07`, `front matter`, `YAML`, `cabecalho da nota`, `header`, `heading`, `formato da nota`, `note format`, `store.rs`, `chunk`, `fulltext`, `texto completo`, `scorer`, `SCORE_FLOOR`, `abstencao`, `abstain`, `kb check`, `kb write`, `kb eval`, `has_map`, `expand_roots`, `bases_in`, `predicado de base`, `manifest`, `manifesto`, `disable`, `migracao`, `migration`, `migrar notas`, `Aldus`, `trigram`, `trigrama`, `resumo`, `summary`, `map block`, `bloco map`, `tokens residentes`, `parser`, `ADR-0016`, `ADR-0018`
 
 **Exists to:** record why the keys that make a note findable moved out of the base's map and
 into the note itself, and what that costs. This file is written in the format it decides.
@@ -29,7 +29,7 @@ costs an hour. The keyword line is where human judgement earns the most per seco
 today it is buried in a different file.
 
 **The mechanical argument arrived the same day, as a bug.** `index::build` iterates the
-entries in each base's `MAP.md` and looks up a file for each one. Seven of Aldo's eight
+entries in each base's `MAP.md` and looks up a file for each one. Seven of Aldus's eight
 knowledge notes were listed as `- [[name]] : summary` instead of `- **[[name]]**`, which
 `map_entries` does not parse, so the base contributed **one** entry to the router instead of
 eight. `kb check` printed `clean`, because its not-indexed rule accepts a wikilink anywhere in

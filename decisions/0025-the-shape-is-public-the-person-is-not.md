@@ -86,7 +86,7 @@ One skeleton, with a `profile/` folder in it.
    by a drift test, the same one the agent skeleton has had, for the same reason.
 3. **`kb init` now writes a `[user]` block into every agent it creates**, pointing at
    `../profile/core.md`. This is the part that makes the rule structural rather than
-   advisory: **a new agent cannot be born not knowing who it works for.** Steve and Aldo
+   advisory: **a new agent cannot be born not knowing who it works for.** Steve and Aldus
    were born that way, and one of them answered a question about Richard's own CV without
    knowing his name.
 4. **The content is never published, by the mechanism already in place**: `fleet/` is a

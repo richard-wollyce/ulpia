@@ -19,7 +19,7 @@ stage: derived
 
 More than one agent session now writes these repositories at the same time, every day.
 That stopped being hypothetical during the session that produced ADR-0020: a parallel
-session created `fleet/aldo`, edited the roster and the README, and committed `cdc0e52`,
+session created `fleet/aldus`, edited the roster and the README, and committed `cdc0e52`,
 which **also contains an unrelated backlog edit from this session** because it staged with
 `git add -A` while the other was mid write.
 
