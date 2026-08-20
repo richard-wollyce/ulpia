@@ -7,3 +7,6 @@ dist/
 # deleting it costs a rebuild, never a post.
 blog/
 public/blog/
+
+# Wrangler local build state. Machine specific and rebuilt on every command.
+.wrangler/
