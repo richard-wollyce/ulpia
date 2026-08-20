@@ -1,5 +1,7 @@
 # ADR-0004: local first inference, and the role split it forces
 
+**Search for:** `local model`, `llama.cpp`, `prefill`, `memory bandwidth`, `tokens per second`
+
 - **Date:** 2026-08-13
 - **Status:** proposed. The numbers in it are calculated, not measured, and the first action is to
   replace them with measurements.

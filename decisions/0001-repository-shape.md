@@ -1,5 +1,7 @@
 # ADR-0001: Zed is built on Yaron's three file split, extended for engineering
 
+**Search for:** `repository shape`, `three file split`, `boot path`, `ADR`, `embeddings`
+
 - **Date:** 2026-08-13
 - **Status:** accepted
 - **Scope:** repository

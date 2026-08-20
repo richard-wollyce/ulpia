@@ -5,6 +5,8 @@ stage: derived
 
 # ADR-0019: the system is Ulpia, and the fleet is the folder the agents live in
 
+**Search for:** `Ulpia`, `ulpia.io`, `name`, `product name`, `system name`, `rename`, `fleet folder`
+
 - **Date:** 2026-08-18
 - **Status:** accepted
 - **Scope:** fleet

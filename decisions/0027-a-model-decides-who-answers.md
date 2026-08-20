@@ -5,6 +5,8 @@ stage: derived
 
 # ADR-0027: a model decides who answers, because choosing an agent is classification
 
+**Search for:** `classifier`, `classificador`, `roteamento`, `routing`, `who answers`, `quem`
+
 - **Date:** 2026-08-19
 - **Status:** accepted
 - **Scope:** fleet

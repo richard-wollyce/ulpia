@@ -5,6 +5,8 @@ stage: derived
 
 # ADR-0018: no model enters the retrieval path, and the score floor becomes the mechanism
 
+**Search for:** `reranker`, `rerank`, `cross encoder`, `abstention`, `score floor`, `confidence gate`
+
 - **Date:** 2026-08-18
 - **Status:** accepted
 - **Scope:** fleet

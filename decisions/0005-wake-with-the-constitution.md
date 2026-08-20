@@ -1,5 +1,7 @@
 # ADR-0005: the agent wakes with its constitution, not with its library
 
+**Search for:** `lines with no model at all`
+
 - **Date:** 2026-08-13
 - **Status:** proposed
 - **Scope:** fleet

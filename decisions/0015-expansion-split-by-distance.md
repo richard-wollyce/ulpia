@@ -5,6 +5,8 @@ stage: derived
 
 # ADR-0015: expansion is split by kind of distance, and the code half ships first
 
+**Search for:** `expansion`, `step 2`, `suggestion`, `suggest`, `trigram`, `fuzzy`, `typo`, `cognate`
+
 - **Date:** 2026-08-17
 - **Status:** accepted
 - **Scope:** fleet

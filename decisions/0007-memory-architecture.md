@@ -1,5 +1,7 @@
 # ADR-0007: the memory pipeline, and provenance as a first class field
 
+**Search for:** `ADD UPDATE DELETE NOOP`, `NOOP`, `provenance`, `stage`, `write gate`, `delete`
+
 - **Date:** 2026-08-13
 - **Status:** accepted
 - **Scope:** fleet

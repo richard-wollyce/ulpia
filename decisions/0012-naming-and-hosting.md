@@ -1,5 +1,7 @@
 # ADR-0012: The system is Vesta, and everything lives under a personal name
 
+**Search for:** `Vesta`, `name`, `naming`, `brand`, `branding`, `Wollyce`, `richardwollyce.com`
+
 **Status:** accepted
 **Date:** 2026-08-17
 **Supersedes:** nothing

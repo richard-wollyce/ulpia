@@ -5,6 +5,8 @@ stage: derived
 
 # ADR-0013: the base is read before the model is allowed to decide it was not needed
 
+**Search for:** `routing`, `router`, `classification`, `cascade`, `recall`, `recall loss`, `silent`
+
 - **Date:** 2026-08-17
 - **Status:** accepted
 - **Scope:** fleet

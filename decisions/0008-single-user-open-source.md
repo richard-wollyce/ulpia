@@ -1,5 +1,7 @@
 # ADR-0008: build for one self hosted user, keep the hosted service possible
 
+**Search for:** `open source`, `self hosted`, `single user`, `multi tenant`, `hosted service`
+
 - **Date:** 2026-08-13
 - **Status:** accepted
 - **Scope:** fleet

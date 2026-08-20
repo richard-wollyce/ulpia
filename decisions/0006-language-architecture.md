@@ -1,5 +1,7 @@
 # ADR-0006: one canonical language in the core, every language at the edge
 
+**Search for:** `language`, `multilingual`, `canonical`, `alias table`, `query expansion`, `embeddings`
+
 - **Date:** 2026-08-13
 - **Status:** proposed
 - **Scope:** fleet

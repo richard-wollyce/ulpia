@@ -1,5 +1,7 @@
 # ADR-0009: the GUI is a client of a contract, and the runtime is a choice inside it
 
+**Search for:** `GUI`, `Tauri`, `API contract`, `subscription`, `API key`, `runtime`, `prompt caching`
+
 - **Date:** 2026-08-16
 - **Status:** accepted for the stack, proposed for the contract
 - **Scope:** fleet

@@ -5,6 +5,8 @@ stage: derived
 
 # ADR-0021: a commit names the paths it commits, and proves afterwards that it took nothing else
 
+**Search for:** `commit`, `git commit`, `concurrency`, `concurrent sessions`, `multiple agents`
+
 - **Date:** 2026-08-18
 - **Status:** accepted
 - **Scope:** fleet

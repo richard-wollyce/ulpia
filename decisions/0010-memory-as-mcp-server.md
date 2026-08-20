@@ -1,5 +1,7 @@
 # ADR-0010: the memory system ships as an MCP server, so our GUI stops being the only door
 
+**Search for:** `MCP`, `MCP server`, `tool surface`, `third party client`, `distribution`, `wedge`
+
 - **Date:** 2026-08-16
 - **Status:** proposed
 - **Scope:** fleet

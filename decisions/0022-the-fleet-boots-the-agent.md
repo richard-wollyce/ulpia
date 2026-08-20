@@ -5,6 +5,8 @@ stage: derived
 
 # ADR-0022: the fleet boots the agent, the agent does not boot itself
 
+**Search for:** `boot`, `hook`, `UserPromptSubmit`, `who am i`, `identity`, `which agent answers`
+
 - **Date:** 2026-08-18
 - **Status:** accepted
 - **Scope:** fleet

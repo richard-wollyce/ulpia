@@ -5,6 +5,8 @@ stage: derived
 
 # ADR-0026: a wikilink resolves inside its own base and nowhere else
 
+**Search for:** `wikilink`, `link`, `broken link`, `E01`, `base scope`, `escopo`, `cross-base`
+
 - **Date:** 2026-08-19
 - **Status:** accepted
 - **Scope:** fleet

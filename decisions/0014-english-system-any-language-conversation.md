@@ -5,6 +5,8 @@ stage: derived
 
 # ADR-0014: the system is written in English, the conversation is not
 
+**Search for:** `language`, `English`, `idioma`, `normalise`, `interface copy`, `UI strings`
+
 - **Date:** 2026-08-17
 - **Status:** accepted
 - **Scope:** fleet

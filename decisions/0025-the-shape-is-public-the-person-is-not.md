@@ -5,6 +5,8 @@ stage: derived
 
 # ADR-0025: a fleet must declare its human, and the shape of that declaration is the part that can be published
 
+**Search for:** `open source`, `publico`, `public`, `publish`, `licenca`, `license`, `skeleton`
+
 - **Date:** 2026-08-19
 - **Status:** accepted
 - **Scope:** fleet

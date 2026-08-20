@@ -5,6 +5,8 @@ stage: derived
 
 # ADR-0016: a note and the entry that makes it reachable are one write
 
+**Search for:** `write`, `kb write`, `escrever`, `gravar`, `new note`, `create a note`, `bootstrap`
+
 - **Date:** 2026-08-17
 - **Status:** accepted
 - **Scope:** fleet

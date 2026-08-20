@@ -1,5 +1,7 @@
 # ADR-0003: files stay the source of truth, the index is derived
 
+**Search for:** `source of truth`, `derived index`, `Neo4j`, `graph`, `database`, `reversibility`
+
 - **Date:** 2026-08-13
 - **Status:** **accepted**, ratified by Richard 2026-08-13. Answers his question the same day.
 - **Scope:** fleet

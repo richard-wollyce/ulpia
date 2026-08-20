@@ -5,6 +5,8 @@ stage: derived
 
 # ADR-0017: BGE-M3 measured and not adopted, because fusing it made the system worse
 
+**Search for:** `embedding`, `embeddings`, `dense`, `BGE-M3`, `bge`, `e5`, `vector search`, `semantic`
+
 - **Date:** 2026-08-17
 - **Status:** accepted
 - **Scope:** fleet

@@ -5,6 +5,8 @@ stage: derived
 
 # ADR-0024: the person is one base every agent reads, and never an agent that answers
 
+**Search for:** `who am i`, `quem sou eu`, `user`, `usuario`, `perfil`, `profile`, `persona`
+
 - **Date:** 2026-08-19
 - **Status:** accepted
 - **Scope:** fleet

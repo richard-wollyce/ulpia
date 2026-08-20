@@ -1,5 +1,7 @@
 # ADR-0002: the evidence ruler for claims about software
 
+**Search for:** `evidence ruler`, `tier D`, `model output`, `recheck trigger`, `discard log`
+
 - **Date:** 2026-08-13
 - **Status:** **accepted**, ratified by Richard 2026-08-13.
 - **Scope:** repository

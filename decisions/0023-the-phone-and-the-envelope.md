@@ -5,6 +5,8 @@ stage: derived
 
 # ADR-0023: the desk streams over SSE with sequence numbers, and the phone is a decision, not a feature flag
 
+**Search for:** `phone`, `celular`, `PWA`, `websocket`, `SSE`, `envelope`, `event stream`
+
 - **Date:** 2026-08-19
 - **Status:** proposed
 - **Scope:** fleet

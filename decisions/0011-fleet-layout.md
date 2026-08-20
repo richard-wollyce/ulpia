@@ -1,5 +1,7 @@
 # ADR-0011: the fleet has one shape, and the library still accepts any path
 
+**Search for:** `fleet`, `fleet root`, `agent shape`, `layout`, `agents/`, `fleet.txt`, `attach`
+
 - **Date:** 2026-08-16
 - **Status:** proposed
 - **Scope:** fleet

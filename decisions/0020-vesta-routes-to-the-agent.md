@@ -5,6 +5,8 @@ stage: derived
 
 # ADR-0020: Vesta chooses which agent answers, and each scorer does the job it was measured to be better at
 
+**Search for:** `routing`, `agent selection`, `which agent`, `coordinator`, `orchestrator`
+
 - **Date:** 2026-08-18
 - **Status:** proposed
 - **Scope:** fleet
