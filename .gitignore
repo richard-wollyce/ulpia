@@ -34,3 +34,7 @@ kb-misses.txt
 # written down in the wrong repository, at fleet/zed/.gitignore, against a path that
 # does not exist there.
 tools/tray/src-tauri/gen/
+
+# Whisper model cache and generated transcripts: derived, large, and never
+# somebody else useful. The source of truth is the video.
+tools/scribe/transcripts/
