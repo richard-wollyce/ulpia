@@ -8,13 +8,20 @@
 #
 # Run `kb blocks .` to see what each one costs and what changing it costs.
 
-# Who the human is. One file, shared by the whole fleet: a person is not an agent,
-# so it lives in a base of its own that the router can read and never elect.
-#
 # Who the agent is and how it works. Changes rarely.
 [identity]
 CLAUDE.md
 index.md
+
+# Who the human is. One file, shared by the whole fleet: a person is not an agent,
+# so it lives in a base of its own that the router can read and never elect.
+#
+# The block is written here and not left to be added later. Until 2026-08-20 this
+# template carried the comment and not the block, so every generated agent booted
+# without knowing who it works for, which is the exact failure ADR-0024 was written
+# about. A comment describing a block that is not there is worse than neither.
+[user]
+../person/core.md
 
 # What exists in the base. Changes whenever a note is added, so it goes last among
 # the resident blocks, and it leaves the resident set once routing happens outside

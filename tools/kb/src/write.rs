@@ -199,6 +199,17 @@ pub fn note(fleet: &Path, agent: &str, slug: &str, spec: &Note) -> Result<Writte
 }
 
 fn stage(root: &Path, note: &Path, map: &Path) -> Staged {
+    // **A pathspec is resolved relative to `-C`, not to the shell's directory**, so the
+    // paths this function is handed have to lose the root prefix before git sees them.
+    // Without this, `kb write <agent> <slug> <fleet-root>` built `fleet/apelles/knowledge/
+    // masters.md`, handed it to `git -C fleet/apelles add`, and git looked for
+    // `fleet/apelles/fleet/apelles/knowledge/masters.md` and failed the whole call. The
+    // command still reported the note as written, so the note existed, was untracked, and
+    // therefore invisible to the router: exactly the unreachable file this module exists
+    // to prevent, produced by the step that exists to prevent it. Found on 2026-08-20 by
+    // creating an agent from the fleet root, which is the only way anybody creates one.
+    let note = note.strip_prefix(root).unwrap_or(note);
+    let map = map.strip_prefix(root).unwrap_or(map);
     let out = crate::base::quiet("git")
         .arg("-C")
         .arg(root)

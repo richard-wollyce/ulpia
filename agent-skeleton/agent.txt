@@ -6,3 +6,8 @@
 
 name = Skeleton
 role = 
+
+# Where this agent stops. Read by the classifier: a roster of roles alone
+# tells it what each agent does and never what none of them does, so an agent
+# generated without this line is one the classifier cannot bound.
+ends = 
