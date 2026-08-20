@@ -230,7 +230,13 @@ pub fn commit(paths: &[String], message: &str) -> Result<Committed, Error> {
         return Err(Error::NothingToCommit);
     }
 
-    run(&repo, &["add"], &rel)?;
+    // `--all` is scoped by the pathspec that follows it, so this is not the sweep the
+    // whole module exists to prevent: it stages additions, modifications AND removals,
+    // but only for the paths named. Plain `add` refuses a path whose file is gone with
+    // "pathspec did not match any files", which meant a deletion could be staged by hand
+    // and then never committed by this tool. The pathspec is still the guard; `--all`
+    // only widens which kinds of change are picked up within it.
+    run(&repo, &["add", "--all"], &rel)?;
 
     // Whether any of the named paths actually differs from HEAD. Without this, git
     // reports "nothing to commit" as a failure and the caller cannot tell that from a
@@ -312,6 +318,32 @@ fn relative_to(repo: &Path, path: &Path) -> String {
 
 #[cfg(test)]
 mod tests {
+
+    /// **The other half of the deletion bug**, and it survived the first fix. Plain
+    /// `git add <path>` refuses a path whose file is gone, so the tool walked correctly to
+    /// the repository and then failed one line later. Both halves had to go for a removal
+    /// to be committable, and a removal is most of what cleaning up is.
+    #[test]
+    fn a_deleted_file_can_be_committed_and_a_neighbour_is_left_alone() {
+        let dir = repo("delete-one");
+        std::fs::remove_file(dir.join("mine.md")).expect("remove");
+        std::fs::write(dir.join("theirs.md"), "another session was here
+").expect("write");
+
+        let done = commit(&[dir.join("mine.md").display().to_string()], "remove mine")
+            .expect("a deletion is committable");
+
+        assert!(
+            done.files.iter().any(|f| f.ends_with("mine.md")),
+            "the deletion is in the commit: {:?}",
+            done.files
+        );
+        assert!(
+            !done.files.iter().any(|f| f.ends_with("theirs.md")),
+            "the neighbour is not: {:?}",
+            done.files
+        );
+    }
 
     /// **Deleting a whole directory deletes the file's parent with it**, and `repo_root`
     /// walked up exactly one level, so `kb commit` refused every such removal with "not
