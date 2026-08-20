@@ -122,10 +122,18 @@ impl std::fmt::Display for Error {
 
 /// The repository a path belongs to, which is not assumed from the working directory.
 pub fn repo_root(path: &Path) -> Option<PathBuf> {
-    // A path that does not exist yet still has a parent that does, and `git -C` needs a
-    // directory. Deleted files land here too, which is why this walks up rather than
-    // requiring the path itself to exist.
-    let dir = if path.is_dir() { path.to_path_buf() } else { path.parent()?.to_path_buf() };
+    // A path that does not exist yet still has an ancestor that does, and `git -C` needs a
+    // directory that is there. Deleted files land here too, which is why this walks up.
+    //
+    // **It used to walk up exactly one level, and one level is not enough for the case that
+    // matters.** Removing a whole generated directory deletes the file's parent along with
+    // the file, so `git -C <parent>` failed and `kb commit` refused the deletion with "not
+    // inside a git repository". The tool could stage a removal and then not commit it, which
+    // made it useless for exactly the work that is mostly removals: cleaning up.
+    let mut dir = if path.is_dir() { path.to_path_buf() } else { path.parent()?.to_path_buf() };
+    while !dir.as_os_str().is_empty() && !dir.is_dir() {
+        dir = dir.parent()?.to_path_buf();
+    }
     let dir = if dir.as_os_str().is_empty() { PathBuf::from(".") } else { dir };
 
     let out = quiet("git").arg("-C").arg(&dir).args(["rev-parse", "--show-toplevel"]).output().ok()?;
@@ -304,6 +312,25 @@ fn relative_to(repo: &Path, path: &Path) -> String {
 
 #[cfg(test)]
 mod tests {
+
+    /// **Deleting a whole directory deletes the file's parent with it**, and `repo_root`
+    /// walked up exactly one level, so `kb commit` refused every such removal with "not
+    /// inside a git repository". The tool could stage the deletion and then not commit it.
+    #[test]
+    fn a_path_whose_whole_parent_directory_is_gone_still_finds_its_repository() {
+        let repo = scratch("deep-delete");
+        crate::base::quiet("git").arg("-C").arg(&repo).arg("init").arg("-q").output().ok();
+
+        let gone = repo.join("build").join("generated").join("schemas").join("thing.json");
+        assert!(!gone.exists(), "the point is that nothing on this path exists");
+
+        let found = repo_root(&gone).expect("walks up to the repository");
+        assert_eq!(
+            found.canonicalize().ok(),
+            repo.canonicalize().ok(),
+            "found {found:?} instead of {repo:?}"
+        );
+    }
     use super::*;
 
     fn scratch(name: &str) -> PathBuf {
