@@ -24,17 +24,37 @@ use crate::store::{Scope, Store};
 
 /// The keyword score below which a top result is not worth answering from.
 ///
-/// **Calibrated on n=1 and it says so.** Across the twenty question set of
-/// 2026-08-17 and the re-run of 2026-08-18, the single wrong top result scored 3.82
-/// and the lowest correct one scored 9.55. 6.0 sits in that gap, closer to the miss
-/// than to the hit because the asymmetry is not symmetric: answering confidently
-/// from the wrong file costs more than saying "this may not be covered" about a file
-/// that turned out to be right.
+/// **Re-derived 2026-08-20, and the honest headline is that this constant does much
+/// less than it used to.** It was 6.0, calibrated when the single wrong top result
+/// scored 3.82 and the lowest correct one scored 9.55. Then the keyword lines widened
+/// from a median of six terms to about seventy, every score moved up an order of
+/// magnitude, and 6.0 stopped touching anything: `kb eval` reported it flagging 0 of 11
+/// misses and demoting 0 of 9 hits. A gate that never fires is not conservative, it is
+/// decoration.
+///
+/// The measurement it now sits on, from the same run:
+///
+/// - correct answers scored **19.92 to 188.56**
+/// - wrong ones scored **21.39 to 133.43**, so **no number separates a hit from a miss**
+/// - questions the set says to decline scored 0.00, 15.1, 23.8, 23.8, 39.6, 39.6, 57.3
+///   and 71.6
+///
+/// 17.5 is the midpoint between the one declinable question that sits below every
+/// correct answer (15.1) and the lowest correct answer (19.92). It buys exactly one
+/// question and costs none, which is a small gain honestly derived rather than a large
+/// one invented.
+///
+/// **What it cannot do is the part worth writing down.** Six of the eight declinable
+/// questions score above every correct answer in the set, so no floor reaches them; they
+/// are real matches on files that are not the answer. Separating those is the
+/// classifier's job and the reason ADR-0027 exists. This constant's remaining job is the
+/// one it still does perfectly: telling nothing from something, which is why "ok
+/// obrigado" scores 0.00 and abstains.
 ///
 /// A number this thinly evidenced does not get to hide. `kb eval` prints the hit and
 /// miss score ranges on every run, so the gap this sits in is re-measured rather than
-/// remembered, and it moves when the evidence moves.
-pub const SCORE_FLOOR: f32 = 6.0;
+/// remembered, and it moves when the evidence moves. It has now moved twice.
+pub const SCORE_FLOOR: f32 = 17.5;
 
 /// **The incumbent margin was built, measured and removed on 2026-08-19.** The constant
 /// is gone; this note is what it left behind.
@@ -1123,7 +1143,9 @@ mod tests {
     #[test]
     fn a_score_over_the_floor_with_agreement_is_a_hit() {
         let m = empty_memory();
-        let c = m.confidence(&[found("zed", 0.9, 9.55, &["keywords #1", "text #2"])]);
+        // 9.55 was the lowest correct answer when the floor was 6.0. Written against
+        // the constant so it keeps meaning "over the floor" after the next re-derivation.
+        let c = m.confidence(&[found("zed", 0.9, SCORE_FLOOR + 3.5, &["keywords #1", "text #2"])]);
         assert_eq!(c.verdict, Verdict::Hit);
         assert!(c.note().is_none(), "a hit says nothing extra");
     }
@@ -1151,9 +1173,14 @@ mod tests {
     #[test]
     fn a_narrow_margin_no_longer_demotes_a_result_that_clears_the_floor() {
         let m = empty_memory();
+        // Scores are written against SCORE_FLOOR rather than as literals. The floor was
+        // re-derived on 2026-08-20 from 6.0 to 17.5 and these fixtures, at 11.0 and 10.8,
+        // silently stopped testing what they were named for: they became two results under
+        // the floor, and the test asserting a Hit failed for a reason nothing to do with
+        // margins. A fixture pinned to a constant's old value is a fixture that expires.
         let c = m.confidence(&[
-            found("zed", 0.9, 11.0, &["keywords #1"]),
-            found("steve", 0.8, 10.8, &["keywords #2"]),
+            found("zed", 0.9, SCORE_FLOOR + 5.0, &["keywords #1"]),
+            found("steve", 0.8, SCORE_FLOOR + 4.8, &["keywords #2"]),
         ]);
         assert!(c.margin < MIN_MARGIN, "the margin is still measured and reported");
         assert_eq!(c.verdict, Verdict::Hit, "and it is no longer what decides");

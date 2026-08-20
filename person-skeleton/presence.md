@@ -1,5 +1,7 @@
 # The person in public
 
+**Search for:** `presence`, `presenca`, `publico`, `public`, `posicionamento`, `positioning`, `marca pessoal`, `personal brand`, `portfolio`, `site`, `website`, `blog`, `redes`, `social`, `linkedin`, `github`, `twitter`, `instagram`, `objetivo`, `goal`, `meta`, `onde quero chegar`, `como me acham`, `reputacao`, `reputation`, `audiencia`, `audience`, `visibilidade`, `oportunidades`, `opportunities`
+
 > Retrieved, not resident. Replace everything below.
 
 ## The goal

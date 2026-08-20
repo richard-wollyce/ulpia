@@ -142,6 +142,12 @@ const PERSON_MAP: &str = "\
 const PERSON_CORE: &str = "\
 # The person, core
 
+**Search for:** `who am i`, `quem sou eu`, `quem e o usuario`, `sobre mim`, `user`, \
+`usuario`, `humano`, `pessoa`, `dono`, `owner`, `perfil`, `profile`, `identidade`, \
+`identity`, `nome`, `name`, `onde moro`, `cidade`, `fuso`, `timezone`, `idioma`, \
+`language`, `portugues`, `ingles`, `como trabalho`, `how i work`, `como me tratar`, \
+`preferencias`, `preferences`, `maquina`, `machine`, `notebook`, `hardware`, `setup`
+
 > **Resident in every agent's constitution**, so keep it short: it is paid for by every
 > question every agent answers. Detail belongs in the retrieved files beside this one.
 >
@@ -176,6 +182,12 @@ sometimes belongs beside this file, and the router will find it.
 const PERSON_WORK: &str = "\
 # The person at work
 
+**Search for:** `work`, `trabalho`, `emprego`, `job`, `carreira`, `career`, `cargo`, \
+`role`, `empresa`, `company`, `time`, `team`, `stack`, `tecnologias`, `linguagens`, \
+`languages`, `ferramentas`, `tools`, `nivel`, `level`, `senioridade`, `experiencia`, \
+`experience`, `projetos`, `projects`, `o que eu faco`, `what i do`, `cliente`, `clients`, \
+`freelance`, `renda`, `income`
+
 > Retrieved, not resident. Replace everything below.
 
 ## Employment
@@ -193,6 +205,12 @@ where possible.
 
 const PERSON_PRESENCE: &str = "\
 # The person in public
+
+**Search for:** `presence`, `presenca`, `publico`, `public`, `posicionamento`, \
+`positioning`, `marca pessoal`, `personal brand`, `portfolio`, `site`, `website`, `blog`, \
+`redes`, `social`, `linkedin`, `github`, `twitter`, `instagram`, `objetivo`, `goal`, \
+`meta`, `onde quero chegar`, `como me acham`, `reputacao`, `reputation`, `audiencia`, \
+`audience`, `visibilidade`, `oportunidades`, `opportunities`
 
 > Retrieved, not resident. Replace everything below.
 

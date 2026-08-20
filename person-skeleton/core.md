@@ -1,5 +1,7 @@
 # The person, core
 
+**Search for:** `who am i`, `quem sou eu`, `quem e o usuario`, `sobre mim`, `user`, `usuario`, `humano`, `pessoa`, `dono`, `owner`, `perfil`, `profile`, `identidade`, `identity`, `nome`, `name`, `onde moro`, `cidade`, `fuso`, `timezone`, `idioma`, `language`, `portugues`, `ingles`, `como trabalho`, `how i work`, `como me tratar`, `preferencias`, `preferences`, `maquina`, `machine`, `notebook`, `hardware`, `setup`
+
 > **Resident in every agent's constitution**, so keep it short: it is paid for by every
 > question every agent answers. Detail belongs in the retrieved files beside this one.
 >
