@@ -595,6 +595,16 @@ fn cmd_route(question: &str, paths: &[&str], all: bool, top: usize, hybrid: bool
         memory.agents.len(),
         memory.alias_count()
     );
+
+    // **A base that went missing says so.** `Memory::open` skips a base whose privacy git
+    // cannot answer for rather than closing the whole fleet, which is right, and silence
+    // about it would be the failure this repository keeps finding: degraded and quiet.
+    for gone in memory.skipped_bases() {
+        eprintln!(
+            "kb: left out {}: git could not be consulted there, so its files could be private and none are being served. A husk left by a rename in progress looks exactly like this, and so does a base nobody has committed yet.",
+            gone.display()
+        );
+    }
     println!();
 
     if !hybrid {
@@ -828,8 +838,19 @@ fn cmd_eval(gold_path: &Path, paths: &[&str], all: bool, top: usize, classify: b
     // `choose_agent_by_keyword` (memory.rs) and `boot::brief` routes on that. A day of
     // measurements was quoted off the top line before anybody checked which function it
     // called. An instrument that is easy to misread is a broken instrument.
+    // **The whole decision, not one of its arms.** This printed the arithmetic fold twice
+    // over, first the fused one and then the keyword one, and both are the FALLBACK: with a
+    // classifier configured `boot::brief` routes on the verdict's owner and only reaches the
+    // arithmetic through `.or_else`. Calling the fallback "the choice the hook actually
+    // makes" measured what happens when the model is down.
     println!(
-        "AGENT  routes  {}/{}  ({:.0}%), the choice the hook actually makes",
+        "AGENT  routes  {}/{}  ({:.0}%), what boot hands over, classifier included",
+        s.routed_hits,
+        s.ownable,
+        pct(s.routed_hits, s.ownable)
+    );
+    println!(
+        "       keyword {}/{}  ({:.0}%), the deterministic fold alone, which is the fallback          when no classifier answers",
         s.keyword_agent_hits,
         s.ownable,
         pct(s.keyword_agent_hits, s.ownable)
@@ -868,7 +889,7 @@ fn cmd_eval(gold_path: &Path, paths: &[&str], all: bool, top: usize, classify: b
     // the better one; the day the rejected fold won, the report would have credited routing
     // with a score no user ever gets. A summary allowed to pick its own number is not a
     // measurement.
-    let delta = s.keyword_agent_hits as i64 - s.baseline_hits as i64;
+    let delta = s.routed_hits as i64 - s.baseline_hits as i64;
     println!(
         "       routing beats the fixed choice by {}{} question{}",
         if delta >= 0 { "+" } else { "-" },

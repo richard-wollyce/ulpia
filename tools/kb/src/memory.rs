@@ -212,6 +212,10 @@ pub struct Memory {
     /// `fleet.txt` lives, and the identity tier reads it: after expansion only the
     /// agent directories remain, and the fleet's own name is not in any of them.
     pub opened: Vec<PathBuf>,
+    /// Bases that could not be opened and were left out, with the fleet still open.
+    /// Empty in every ordinary run. Non-empty means somebody is mid rename or a directory
+    /// in the fleet root is not a base at all, and the caller should say so out loud.
+    pub skipped: Vec<PathBuf>,
     /// True when any index had to be discarded on open. The caller has to surface
     /// this: an emptied index answers "nothing matched", which reads as "the base
     /// does not cover this".
@@ -256,13 +260,32 @@ impl Memory {
         let mut aliases = Vec::new();
         let mut agents = Vec::new();
         let mut index_was_rebuilt = false;
+        // Bases the open had to leave out. Carried on the Memory rather than logged, so a
+        // surface can say which ones went missing instead of quietly answering from fewer.
+        let mut skipped: Vec<PathBuf> = Vec::new();
 
         for root in expand_roots(paths) {
             let base = Base::discover(&root, private)
                 .map_err(|e| OpenError::Unreadable(root.clone(), e))?;
 
             if !private && !base.tracked_only {
-                return Err(OpenError::PrivacyUnknowable(root));
+                // **The base is skipped, not served, and the fleet stays open.**
+                //
+                // Refusing to serve a base whose privacy git cannot answer for is the whole
+                // point and it is unchanged: unknown is not public. What changed is the
+                // blast radius. This used to return, so one unreadable directory closed
+                // every base in the fleet, and after the discovery predicate became
+                // structural on 2026-08-20 that started happening for an ordinary reason:
+                // any husk left in the fleet root is a base, and a rename in progress leaves
+                // husks. It happened twice the same day, once to a profile directory whose
+                // index was locked and once to another session renaming two agents, where
+                // `fleet/aldo` held nothing but its `.kb` and took the fleet down with it.
+                //
+                // A base that contributes nothing is a base that contributes nothing. The
+                // guarantee is per base and skipping keeps it; failing the open turned one
+                // directory's problem into everybody's.
+                skipped.push(root);
+                continue;
             }
 
             let store =
@@ -280,6 +303,7 @@ impl Memory {
             aliases,
             scope: if private { Scope::All } else { Scope::Public },
             agents,
+            skipped,
             opened: paths.iter().map(|p| p.to_path_buf()).collect(),
             index_was_rebuilt,
         })
@@ -707,6 +731,11 @@ impl Memory {
     /// Read from the opened roots rather than stored at open time, because a fleet root
     /// is a path the caller gave and re-reading one small file costs nothing next to
     /// being wrong about which fleet is being served.
+    /// Bases the open had to leave out, so a surface can name them.
+    pub fn skipped_bases(&self) -> &[PathBuf] {
+        &self.skipped
+    }
+
     pub fn classifier(&self) -> crate::classify::Classifier {
         for root in &self.opened {
             if let (_, _, Some(cmd)) = manifest_full(&root.join(MANIFEST)) {
@@ -1046,7 +1075,8 @@ mod tests {
     fn empty_memory() -> Memory {
         Memory {
             entries: vec![], aliases: vec![],
-            scope: Scope::Public, agents: vec![], opened: vec![], index_was_rebuilt: false,
+            scope: Scope::Public, agents: vec![], opened: vec![], skipped: vec![],
+            index_was_rebuilt: false,
         }
     }
 
@@ -1309,20 +1339,33 @@ mod tests {
         assert_eq!(expand_roots(&[&empty]), vec![empty]);
     }
 
-    /// The refusal that the privacy fix exists to make possible. A base outside git
-    /// has no knowable private layer, and opening it read only would be a guess.
+    /// The guarantee the privacy gate exists for: a base outside git has no knowable
+    /// private layer, so **nothing in it is served**.
+    ///
+    /// **What changed on 2026-08-20 is the blast radius, not the guarantee.** This used to
+    /// assert a refusal that closed the whole fleet, and once the discovery predicate became
+    /// structural that started firing for ordinary reasons: any husk in the fleet root is a
+    /// base, and a rename in progress leaves husks. It happened twice in one day. The base
+    /// is now skipped and named, which serves nothing from it exactly as before and stops
+    /// one directory's problem from becoming every base's.
     #[test]
-    fn opening_a_base_outside_git_is_refused_unless_the_private_layer_was_asked_for() {
+    fn a_base_outside_git_is_skipped_and_named_rather_than_closing_the_fleet() {
         let root = scratch("nogit");
         let base = make_base(&root, "loose");
-        match Memory::open(&[&base], false) {
-            Err(OpenError::PrivacyUnknowable(p)) => assert_eq!(p, base),
-            Err(e) => panic!("expected a privacy refusal, got {e}"),
-            Ok(_) => panic!("a base outside git must not open read only: privacy is unknowable"),
-        }
+
+        let m = Memory::open(&[&base], false).expect("the fleet still opens");
+        assert!(m.agents.is_empty(), "nothing from an unknowable base is served");
+        assert_eq!(m.entry_count(), 0, "and none of its entries reach the index");
+        assert_eq!(
+            m.skipped_bases(),
+            &[base.clone()],
+            "and it is named, because skipping in silence is the failure this repository \
+             keeps finding"
+        );
 
         // Asking for it explicitly is allowed: that is the deliberate act.
         let m = Memory::open(&[&base], true).expect("private open");
         assert_eq!(m.scope(), Scope::All);
+        assert!(m.skipped_bases().is_empty(), "nothing was skipped when it was asked for");
     }
 }

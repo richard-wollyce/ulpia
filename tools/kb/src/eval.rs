@@ -135,6 +135,40 @@ impl Row {
         }
     }
 
+    /// **Who `boot::brief` would actually hand the message to.**
+    ///
+    /// Third attempt at this line and the first that models the whole decision. It graded
+    /// the fold over the fused list, then the fold over the keyword list, and both are
+    /// wrong for the same reason: with a classifier configured, `boot` routes on
+    /// `verdict.owner`, and the arithmetic is only reached through `.or_else` when the
+    /// classifier says nothing. Grading the fallback and calling it "the choice the hook
+    /// actually makes" measured the path taken when the model is down.
+    ///
+    /// The order below is `brief`'s order, including the part that is easy to forget: a
+    /// verdict whose coverage is not `Covered` routes NOBODY, whatever owner it named.
+    pub fn routed(&self) -> Option<&str> {
+        if let Some(v) = &self.classified {
+            if v.coverage != crate::classify::Coverage::Covered {
+                return None;
+            }
+            return v.owner.as_deref();
+        }
+        // No classifier ran. The deterministic choice stands, gated by the floor exactly as
+        // `brief` gates it.
+        if self.confidence.verdict != Verdict::Hit {
+            return None;
+        }
+        self.keyword_agent.as_ref().map(|c| c.agent.as_str())
+    }
+
+    /// True when that hand-off went to an agent the gold set accepts.
+    pub fn routed_hit(&self) -> bool {
+        match self.routed() {
+            Some(a) => self.correct_agents().contains(&a),
+            None => false,
+        }
+    }
+
     /// A classifier hit, meaning **the hook would have routed to a correct agent**.
     ///
     /// **Coverage decides this and it used to be ignored.** `boot::brief` returns
@@ -339,6 +373,8 @@ pub struct Summary {
     pub keyword_hits: usize,
     pub agent_hits: usize,
     pub keyword_agent_hits: usize,
+    /// What `boot::brief` would hand over, classifier included. The number that ships.
+    pub routed_hits: usize,
     /// Correct owners chosen by the classifier, and how many questions it was asked.
     pub classified_hits: usize,
     pub classified_asked: usize,
@@ -408,6 +444,7 @@ pub fn summarise(rows: &[Row]) -> Summary {
         keyword_hits: answerable.iter().filter(|r| r.keyword_hit()).count(),
         agent_hits: ownable.iter().filter(|r| r.agent_hit()).count(),
         keyword_agent_hits: ownable.iter().filter(|r| r.keyword_agent_hit()).count(),
+        routed_hits: ownable.iter().filter(|r| r.routed_hit()).count(),
         classified_hits: ownable.iter().filter(|r| r.classified_hit()).count(),
         classified_asked: rows.iter().filter(|r| r.classified.is_some()).count(),
         ownable: ownable.len(),

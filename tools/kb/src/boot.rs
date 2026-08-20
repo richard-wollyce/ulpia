@@ -183,6 +183,47 @@ pub fn brief(memory: &Memory, root: &Path, req: &Request, top: usize) -> Briefin
     let chosen = verdict.as_ref().and_then(|v| v.owner.clone());
 
     let Some(agent) = chosen else {
+        // **No agent owns it, and that has two meanings the fleet used to run together.**
+        //
+        // A base with no `agent.txt` is read by the router and can never be chosen as the
+        // one who answers. Until now, evidence landing there produced the same sentence as
+        // evidence landing nowhere: *the base does not appear to cover it*. Those are
+        // different states. `general/` holds what the fleet knows without any agent owning
+        // it, and `person/` holds the human; when the answer is in one of them it is not a
+        // gap, it is Vesta's own.
+        //
+        // Richard's framing, and it is why this branch exists: *deveria existir uma base de
+        // conhecimento geral, que e a base em que a propria Vesta responde por conta propria
+        // ao inves de rotear para algum agente.*
+        let routable: Vec<&str> = memory
+            .agents
+            .iter()
+            .filter(|a| a.routable)
+            .map(|a| a.name.as_str())
+            .collect();
+        let mine: Vec<String> = answer
+            .found
+            .iter()
+            .filter(|f| !routable.iter().any(|r| r.eq_ignore_ascii_case(&f.base)))
+            .take(top)
+            .map(|f| format!("  {}/{}", f.base, f.path))
+            .collect();
+
+        if !mine.is_empty() && answer.confidence.verdict != Verdict::Nothing {
+            return Briefing {
+                agent: None,
+                switched: false,
+                text: format!(
+                    "VESTA: no agent owns this and it does not need one. The library holds \
+                     it in a base that everyone reads and nobody answers for, so this one \
+                     is mine.\n\n\
+                     Answer as the fleet's librarian, from these, and say plainly if they \
+                     do not actually cover the question:\n{}\n",
+                    mine.join("\n")
+                ),
+            };
+        }
+
         return Briefing {
             agent: None,
             switched: false,
