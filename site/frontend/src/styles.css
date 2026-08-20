@@ -1340,3 +1340,76 @@ input[type="email"]:focus-visible {
     }
   }
 }
+
+/* ---- writing: the index and the articles. Same book page as the documents,
+ * with a list that reads as a table of contents rather than as cards. ---- */
+
+.post-list {
+  list-style: none;
+  padding: 0;
+  margin: 2rem 0 0;
+}
+
+.post-list li {
+  padding-bottom: 1.5rem;
+  margin-bottom: 1.5rem;
+  border-bottom: 1px solid var(--rule);
+}
+
+.post-list li:last-child {
+  border-bottom: 0;
+}
+
+.post-list > li > a {
+  font-size: 1.25rem;
+  text-decoration-thickness: 1px;
+}
+
+.post-meta {
+  font-size: var(--size-small);
+  color: var(--ink-2);
+  margin: 0.25rem 0 0;
+}
+
+.post-desc {
+  margin: 0.5rem 0 0;
+  color: var(--ink-2);
+}
+
+/* Code inside an article. The terminal plate is a quotation of a machine; this
+ * is just code in a text, so it takes the plate's material without its ceremony. */
+.doc pre {
+  background: var(--plate);
+  border: 1px solid var(--plate-border);
+  padding: 1rem 1.25rem;
+  overflow-x: auto;
+  margin-bottom: 1rem;
+}
+
+.doc pre code {
+  background: none;
+  padding: 0;
+  font-size: var(--size-mono);
+}
+
+.doc code {
+  font-family: ui-monospace, "Cascadia Code", SFMono-Regular, Menlo, Consolas,
+    "Liberation Mono", monospace;
+  font-size: 0.9em;
+  background: var(--plate);
+  padding: 0.1em 0.3em;
+}
+
+.doc blockquote {
+  margin: 0 0 1rem;
+  padding-left: 1rem;
+  border-left: 2px solid var(--accent);
+  color: var(--ink-2);
+}
+
+.doc h3 {
+  font-size: 1.0625rem;
+  font-weight: 600;
+  margin-top: 1.75rem;
+  margin-bottom: 0.5rem;
+}
