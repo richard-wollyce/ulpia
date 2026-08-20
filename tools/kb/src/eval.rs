@@ -237,8 +237,8 @@ pub fn run_with(
             // more accurate one.
             let kw_started = Instant::now();
             let keyword = memory.route(question, top);
-            let keyword_agent = memory.choose_agent_by_keyword(&keyword);
             let keyword_micros = kw_started.elapsed().as_micros();
+            let _ = &keyword;
 
             Row {
                 question: question.clone(),
@@ -246,7 +246,20 @@ pub fn run_with(
                 top: answer.found.first().map(|f| format!("{}/{}", f.base, f.path)),
                 keyword_top: answer.keyword_top.clone(),
                 agent: memory.choose_agent(&answer.found),
-                keyword_agent,
+                // **The router's own answer, taken rather than re-derived.**
+                //
+                // This used to be a second fold computed here from `memory.route(question,
+                // top)`, five hits deep. `Memory::ask` routes at `top *
+                // retrieve::KEYWORD_OVERSAMPLE`, which is twenty, filters the entries with
+                // no file behind them, and folds THAT. So the instrument graded a fold over
+                // a quarter of the list the router folds over, and understated the shipped
+                // router by three questions of twenty while the report called it "the
+                // choice the hook actually makes".
+                //
+                // The value was already in hand: `ask` returns it in `Answer.agent`, and
+                // `boot::brief` routes on exactly that field. Recomputing something the
+                // callee already computed is how the two drifted apart, so now it is read.
+                keyword_agent: answer.agent.clone(),
                 classified: if classify {
                     crate::classify::run(
                         &classifier,

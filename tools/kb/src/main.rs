@@ -779,7 +779,11 @@ fn cmd_eval(gold_path: &Path, paths: &[&str], all: bool, top: usize, classify: b
         } else {
             (
                 if row.file_hit() { "ok" } else { "MISS" },
-                if row.agent_hit() { "ok" } else { "MISS" },
+                // The router's own choice, so the column a reader scans for failures is
+                // the same router the headline reports. It showed the fused fold while the
+                // summary above it reported routing, so the two disagreed on which
+                // questions missed.
+                if row.keyword_agent_hit() { "ok" } else { "MISS" },
             )
         };
         println!(

@@ -626,7 +626,30 @@ impl Memory {
     /// competing agents are owners and breadth of coverage is the actual evidence of
     /// ownership.
     pub fn choose_agent(&self, found: &[Retrieved]) -> Option<AgentChoice> {
-        tally(found.iter().map(|f| (f.base.as_str(), f.score)))
+        // **Filters routable bases, so the comparison against the keyword fold is
+        // like for like.** It did not, and the difference was being read as a verdict on
+        // fusion when it was an artefact of eligibility: an attached base can be the answer
+        // to a question and can never be the agent who answers, so a fold that names
+        // `decisions` scores as a miss by definition. Measured on the gold set, that
+        // happened on 14 of 29 questions.
+        //
+        // The two folds now differ in exactly one thing, which is the list they fold, and
+        // that is the thing ADR-0018 was about.
+        let routable: Vec<&str> = self
+            .agents
+            .iter()
+            .filter(|a| a.routable)
+            .map(|a| a.name.as_str())
+            .collect();
+
+        // An empty roster does not filter, which is the same convention `eval::Row`
+        // already uses and is safe here for a reason rather than for convenience: a
+        // `Memory` with no agents opened no bases, so `found` is empty too and the tally
+        // returns `None` regardless. The branch is unreachable outside a unit test that
+        // is exercising the tally arithmetic and nothing else.
+        tally(found.iter().filter(|f| {
+            routable.is_empty() || routable.iter().any(|r| r.eq_ignore_ascii_case(&f.base))
+        }).map(|f| (f.base.as_str(), f.score)))
     }
 
     /// The same fold over the keyword scorer's own ranking, skipping fusion.
