@@ -36,7 +36,7 @@
 //! unavailable.**
 
 use std::io::Write;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use crate::memory::{AgentChoice, Memory};
 use crate::retrieve::Retrieved;
@@ -288,6 +288,41 @@ pub fn is_uncontested(choice: Option<&AgentChoice>, verdict: crate::memory::Verd
     c.score / total >= UNCONTESTED
 }
 
+/// An empty directory, outside the fleet, for the classifier to run in.
+///
+/// **This is worth 33 seconds a message and it is the difference between the classifier
+/// fitting inside the hook's budget and not.** Measured on 2026-08-20 with the same
+/// dossier, the same model and the same flags, varying only the working directory:
+///
+/// | working directory | wall | of which API |
+/// |---|---|---|
+/// | the fleet root | 47.4s | 12.8s |
+/// | an empty directory | 11.5s | 7.1s |
+///
+/// A CLI runtime inspects the directory it starts in: its instruction files, its settings,
+/// its git repository, its tree. This fleet root holds 11,510 files and 2.5 GB of Rust
+/// build output, and the classifier was paying to have all of it looked at, on every
+/// message, to answer a question whose entire input arrives on stdin.
+///
+/// **It is also the isolation the design already claimed.** `classify-claude.cmd` spends
+/// two flags stopping the classifier from reading the base, on the grounds that a
+/// classifier that can search stops being a judge and becomes a second agent. Starting it
+/// inside the base contradicted that, and the cost was the tell.
+///
+/// Outside the fleet rather than under `.kb/`, because a runtime that walks up from its
+/// working directory looking for instruction files would find the fleet's own from any
+/// directory inside it, and the saving would quietly disappear.
+fn scratch_cwd(root: &Path) -> PathBuf {
+    let dir = std::env::temp_dir().join("kb-classifier-cwd");
+    // Best effort on purpose. If the directory cannot be made, running in the root is
+    // slow and correct, and slow and correct beats refusing to route.
+    if std::fs::create_dir_all(&dir).is_ok() {
+        dir
+    } else {
+        root.to_path_buf()
+    }
+}
+
 /// Runs the classifier and returns its verdict, or None when it cannot be reached.
 ///
 /// Every failure path returns None rather than an error, because the caller's fallback is
@@ -300,9 +335,17 @@ pub fn run(classifier: &Classifier, root: &Path, dossier: &str, roster: &[String
     let program = parts.next()?;
     let args: Vec<&str> = parts.collect();
 
-    let mut child = crate::base::quiet(program)
+    // The command is named relative to the fleet root in `fleet.txt`, so it has to be
+    // resolved against the root before the working directory stops being the root.
+    // An absolute path or a bare name on PATH passes through untouched.
+    let resolved = {
+        let candidate = root.join(program);
+        if candidate.is_file() { candidate } else { PathBuf::from(program) }
+    };
+
+    let mut child = crate::base::quiet(&resolved.to_string_lossy())
         .args(&args)
-        .current_dir(root)
+        .current_dir(scratch_cwd(root))
         .stdin(std::process::Stdio::piped())
         .stdout(std::process::Stdio::piped())
         .stderr(std::process::Stdio::null())
