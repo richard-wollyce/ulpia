@@ -1,0 +1,10 @@
+{
+  "name": "ulpia-eye",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "description": "Aldus's eye: renders a surface and reports what it actually looks like.",
+  "devDependencies": {
+    "playwright": "^1.56.0"
+  }
+}

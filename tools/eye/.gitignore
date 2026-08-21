@@ -1,0 +1,9 @@
+# Installed and captured, both derived. ADR-0003's rule applied to the eye:
+# the source is tracked, everything reproducible from it is not.
+node_modules/
+
+# The renders themselves. A screenshot is evidence for one review at one commit,
+# and it is reproducible by running the tool again, so it is not history. The
+# browser binary they need is larger than this repository and lives in the
+# playwright cache outside it.
+shots/
