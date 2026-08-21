@@ -6,21 +6,41 @@ profile/
 records/
 projects/
 
-# Transcripts fetched for this agent, which are two things at once: derived by
-# ADR-0003, because the recording they came from is the source of truth and the
-# text is a projection of it, and usually somebody else's words rather than ours.
-# Tracked is our notes and a citation; ignored is their words.
+# The inbox, denied by default. The root of it is ours, the subfolders are
+# theirs: an agent keeps its own notes as loose files here, and every typed
+# subfolder receives somebody else's material. That material is derived by
+# ADR-0003, because the source it came from is the truth and the file is a
+# projection of it, and it is usually under somebody else's copyright.
 #
-# Only this folder, and not `inbox/` itself. An inbox already holds the agent's
-# own notes awaiting distillation, and bases like zed and yaron keep a typed
-# structure in it with a `what-goes-here.md`. Ignoring the whole inbox would take
-# the structure out with the payload, which is the opposite of the intent.
+# **Denied by default because the enumerated version provably failed.** The
+# first shape of this rule listed each payload folder by hand. In yaron's base
+# that list covered four of the six folders his own `what-goes-here.md`
+# documents, missing `articles/` and `posts/`, and the parallel list further
+# down the same file missed exactly the same two. A rule you have to remember
+# to extend is a rule that is one forgotten line away from committing a file
+# nobody meant to publish, and git history is expensive to retract.
 #
-# SOURCES.md is the exception that makes the rest honest: ignoring a derived file
-# is only safe when what it was derived from is written down. Without the ledger
-# a fresh clone cannot regenerate a transcript and cannot even say what used to
-# be here, so "derived, therefore disposable" would be a claim with nothing
-# behind it. The folder and its ledger are created on the first ingest.
-inbox/transcripts/*
-!inbox/transcripts/.gitkeep
-!inbox/transcripts/SOURCES.md
+# The failure modes are not symmetrical, which is the whole argument: forgetting
+# to ignore puts somebody else's material in the history permanently, while
+# forgetting to un-ignore only means a note of ours is not backed up, and that
+# is noticed and fixed in a minute. Prefer the failure you can see.
+#
+# Line by line, because three of these four are load bearing and none is obvious:
+#   inbox/**             everything under the inbox, at any depth.
+#   !inbox/*.md          our own notes, at the root only. A `*` never crosses a
+#                        `/`, so this cannot reach into a subfolder.
+#   !inbox/**/           re-includes the DIRECTORIES. Without this line git never
+#                        descends into an excluded directory and every negation
+#                        below it dies in silence, which is the single mistake
+#                        this pattern is usually written with.
+#   !inbox/**/.gitkeep   git versions files and not folders, so an empty folder
+#                        does not survive a clone. This file is what makes the
+#                        structure exist.
+#   !inbox/**/SOURCES.md the ledger. Ignoring a derived file is only honest when
+#                        what it came from is written down, or a fresh clone can
+#                        neither regenerate the material nor say what was here.
+inbox/**
+!inbox/*.md
+!inbox/**/
+!inbox/**/.gitkeep
+!inbox/**/SOURCES.md

@@ -170,6 +170,13 @@ def main() -> None:
                          "video into an afternoon")
     ap.add_argument("--language", default=None,
                     help="force a language code such as pt or en; detected when omitted")
+    # Additive, and the default is the whole point: omitted, this writes exactly where
+    # it always has, so the scribe's own workflow is unchanged. Given, it drops the
+    # transcript straight into another base's inbox/, which is what a recording fetched
+    # FOR somebody else needs. Raw material has to land where its reader already looks,
+    # or it lands in a shared folder that only the person who put it there knows about.
+    ap.add_argument("--out", default=None, metavar="DIR",
+                    help="write the .txt and .json here instead of tools/scribe/transcripts/")
     mode = ap.add_mutually_exclusive_group()
     mode.add_argument("--captions", action="store_true",
                       help="use YouTube's own caption track and fail if there is none")
@@ -177,7 +184,8 @@ def main() -> None:
                       help="always listen to the audio, even when captions exist")
     args = ap.parse_args()
 
-    OUT_DIR.mkdir(parents=True, exist_ok=True)
+    out_dir = Path(args.out).expanduser() if args.out else OUT_DIR
+    out_dir.mkdir(parents=True, exist_ok=True)
 
     # The fast path first, unless told otherwise.
     if is_url(args.source) and not args.asr:
@@ -188,8 +196,8 @@ def main() -> None:
         if got:
             text, segments, code = got
             stem = slugify(title)
-            (OUT_DIR / f"{stem}.txt").write_text(text, encoding="utf-8")
-            (OUT_DIR / f"{stem}.json").write_text(
+            (out_dir / f"{stem}.txt").write_text(text, encoding="utf-8")
+            (out_dir / f"{stem}.json").write_text(
                 json.dumps({"source": args.source, "title": title, "language": code,
                             "method": "youtube-captions", "segments": segments},
                            ensure_ascii=False, indent=1), encoding="utf-8")
@@ -197,7 +205,7 @@ def main() -> None:
             if text[:400].count(".") + text[:400].count("?") < 2:
                 print("scribe: it arrived without punctuation, which is normal for an "
                       "automatic track. Run again with --asr if that matters here.")
-            print(f"scribe: wrote transcripts/{stem}.txt and transcripts/{stem}.json")
+            print(f"scribe: wrote {stem}.txt and {stem}.json in {out_dir}")
             return
         if args.captions:
             sys.exit("scribe: no caption track on that video")
@@ -240,15 +248,15 @@ def main() -> None:
 
     stem = slugify(title)
     text = " ".join(s["text"] for s in collected)
-    (OUT_DIR / f"{stem}.txt").write_text(text, encoding="utf-8")
-    (OUT_DIR / f"{stem}.json").write_text(
+    (out_dir / f"{stem}.txt").write_text(text, encoding="utf-8")
+    (out_dir / f"{stem}.json").write_text(
         json.dumps({"source": args.source, "title": title, "language": info.language,
                     "method": f"whisper-{args.model}",
                     "duration_s": round(info.duration, 1), "segments": collected},
                    ensure_ascii=False, indent=1),
         encoding="utf-8",
     )
-    print(f"scribe: wrote transcripts/{stem}.txt and transcripts/{stem}.json "
+    print(f"scribe: wrote {stem}.txt and {stem}.json in {out_dir} "
           f"({len(text.split())} words)")
 
 
