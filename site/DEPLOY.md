@@ -51,11 +51,28 @@ test -f dist/_headers && echo "headers present"
 
 ## 3. Deploy
 
-Direct upload, so no git remote or GitHub connection is required:
+**A push to `main` deploys this page. That is the whole mechanism.** The Pages project is
+git-connected, so Cloudflare builds and publishes on its own when the branch moves.
+
+Measured on 2026-08-21, not read from a dashboard screenshot:
+`npx wrangler pages project list` returns `Git Provider: Yes` for `ulpia`, and
+`npx wrangler pages deployment list --project-name ulpia` shows one production deployment
+per commit on `main`, including the one that carried `9af0d57`.
+
+**This section previously said the opposite**, that the deploy was a direct upload and that
+no git remote or GitHub connection was required. That was true when it was written and stopped
+being true without anybody updating the file, which is how a person following the runbook ends
+up publishing twice by two different routes.
+
+The manual upload still works and is the fallback when the git path is broken or when
+publishing a tree that is deliberately not on `main`:
 
 ```bash
 npx wrangler pages deploy dist --project-name ulpia
 ```
+
+**Do not use both for the same change.** A direct upload and a git build are two publishing
+paths into one origin, and the last one to finish wins regardless of which one you meant.
 
 The first run creates the project and prints a `*.pages.dev` URL. Verify there before
 attaching the domain: a broken deploy behind the real name is a worse minute than a
@@ -199,7 +216,14 @@ curl -s http://127.0.0.1:8080/health   # expect: ok
 ## 7. Redeploying the page
 
 ```bash
-cd site/frontend && npm run build && npx wrangler pages deploy dist --project-name ulpia
+git push origin main
+```
+
+That is it. Build locally first to see what you are about to publish, because the local build
+is the only place you get to look before strangers do:
+
+```bash
+cd site/frontend && npm run build
 ```
 
 Before a deploy that includes the terminal block, re-take the capture if the base it

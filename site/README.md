@@ -25,6 +25,11 @@ cd ../server && cargo run
 
 ## Deploy
 
-[`DEPLOY.md`](DEPLOY.md). Short version: build both on the VPS, systemd runs the
-binary on loopback, Caddy owns the public port and the certificates, DNS points the
-apex at the VPS.
+[`DEPLOY.md`](DEPLOY.md). Short version, and it is the present tense: the page is on
+Cloudflare Pages and the project is git-connected, so **a push to `main` publishes it**.
+Nothing else is required and nothing else should be run.
+
+The VPS, systemd and the reverse proxy described in `DEPLOY.md` section 6 are the future,
+for when the server earns its place. This line used to summarise that section as though it
+were today, which made two operational documents appear to disagree about where the site
+runs.
