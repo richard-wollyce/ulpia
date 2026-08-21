@@ -370,6 +370,44 @@ const W_TITLE: f32 = 3.0;
 const W_STEM: f32 = 3.0;
 const W_SUMMARY: f32 = 1.0;
 
+/// How many words a key was written with, counted **before** `normalise` touches it.
+///
+/// Whitespace is the only boundary, so `q4_K_M` and `text-embedding-3-small` are one word
+/// each. That alone is not enough, and an earlier version of this comment claimed it was:
+/// it argued that counting after `normalise` would evict terms of art, using `q4_K_M` as
+/// the example. That example is wrong. `normalise` drops tokens of length one, so `q4_K_M`
+/// becomes `["q4"]` and would have passed either count. The case that actually forces the
+/// raw count is `long context`, which normalises to the single word `context` because
+/// `long` is a stopword.
+///
+/// The punctuation boundary is closed by the second half of the predicate in
+/// [`Prepared::new`], not here. See it for why one condition was not enough.
+/// Keys that reach neither the keyword bag nor the phrase bag.
+///
+/// **Defined here so the linter and the index cannot disagree about it.** `kb check` reports
+/// these as W07, and a check that reimplemented the rule would drift from the router the
+/// first time either moved, which is the failure this repository has now paid for twice.
+///
+/// A key lands here when it is several written words AND normalises to one, so the raw count
+/// keeps it out of the keyword bag and the normalised count keeps it out of phrases. There
+/// is no code fix: recovering the surviving word is `long context` becoming `context` again.
+/// It is an authoring problem and this is how the author is told.
+pub fn unreachable_keys(keys: &[String]) -> Vec<String> {
+    keys.iter()
+        .filter(|k| {
+            let n = normalise(k);
+            let in_keywords = raw_word_count(k) == 1 && n.len() == 1;
+            let in_phrases = n.len() > 1;
+            !in_keywords && !in_phrases
+        })
+        .cloned()
+        .collect()
+}
+
+fn raw_word_count(key: &str) -> usize {
+    key.split_whitespace().count()
+}
+
 struct Prepared<'a> {
     entry: &'a Entry,
     keywords: Vec<String>,
@@ -382,6 +420,24 @@ struct Prepared<'a> {
 
 impl<'a> Prepared<'a> {
     fn new(entry: &'a Entry) -> Self {
+        // **The phrase filter stays on the NORMALISED count, and that asymmetry is a
+        // decision, not an oversight.** Two keys fall in the gap and each gets what it
+        // deserves:
+        //
+        // - A key written as several words that still normalises to several words, such as
+        //   `bits per weight`, is a phrase and matches whole. That is where its recall went.
+        // - A key written as several words that normalises to one, such as `nao emagreci`
+        //   or `false positive`, is dropped from **both** bags and becomes unroutable by
+        //   keyword. That is the intended outcome. The alternative was widening this filter
+        //   to the raw count too, which would have registered `nao emagreci` as a one token
+        //   "phrase" matching the bare word `emagreci` at `W_PHRASE` 10.0 instead of
+        //   `W_KEYWORD` 6.0, strengthening the exact inversion this change exists to
+        //   remove. Such a key is broken as written; the fix belongs in the map line, and
+        //   the file is still reachable by its title, stem, summary and its other keys.
+        //
+        // A key written as one word that normalises away entirely, such as a bare `false`
+        // after the 2026-08-20 stopword batch, contributes nothing to either bag. That
+        // needs no rule: `normalise` returns empty and `flat_map` adds nothing.
         let phrases = entry
             .keywords
             .iter()
@@ -391,7 +447,54 @@ impl<'a> Prepared<'a> {
 
         Prepared {
             entry,
-            keywords: entry.keywords.iter().flat_map(|k| normalise(k)).collect(),
+            // **A key enters the keyword bag only when it is one written word AND one
+            // word after normalising.** This used to be a bare `flat_map(normalise)`, so
+            // every component of a multi word key became a standalone term at full
+            // `W_KEYWORD`; idf rewards rarity, so a fragment that happened to be unique to
+            // one file routed confidently on its own.
+            //
+            // The worst of it inverts meaning, because the negation is a stopword. Measured
+            // 2026-08-20 against the pre-change binary, `kb route contestar --all` and
+            // `kb route "nao contestar" --all` both returned the same file at **exactly
+            // 25.62**: an audit note whose instruction is that a rejection must NOT be
+            // appealed, filed under the word for appealing. 21 keys in this corpus invert
+            // that way, counted by parsing STOPWORDS out of this file and applying it to
+            // `kb index --json --all`.
+            //
+            // **Two conditions, because each closes a boundary the other leaves open.**
+            //
+            // Raw count, taken before normalising. Counting after was tried and shipped and
+            // is wrong: `normalise` strips stopwords first, so `long context` arrives as the
+            // single word `context` and sails through any post-normalise count.
+            //
+            // Normalised count, because a single written word can still be several words.
+            // `text-embedding-3-small` is one word by whitespace, so the raw count admits
+            // it, and then `normalise` sheds `text` and `embedding` into the bag as
+            // standalone terms. That is the same defect at the punctuation boundary, and
+            // one condition alone does not see it.
+            //
+            // Recall for the phrase is not lost: a key normalising to more than one word is
+            // in `phrases` at `W_PHRASE`, which is higher, and matches when the question
+            // carries the whole thing rather than one piece of it.
+            //
+            // **What this does cost, stated because it is a real loss and not a rounding
+            // error.** A key that is multi word raw AND normalises to one word lands in
+            // neither bag and cannot be found by keyword at all. Measured over 8580 keys:
+            // 3808 in the keyword bag, 4621 in phrases, and **137 distinct keys dead**, of
+            // which 21 are the negations above and 116 are not, like `AI slop`, `Gen Z` and
+            // `Nova York`. Recovering the surviving word for the 116 was considered and
+            // rejected: it is exactly `long context` becoming `context` again, and no
+            // mechanical rule separates `AI slop` keeping its meaning in `slop` from
+            // `Gen Z` losing it in `gen`. So the code does not guess and `kb check` says
+            // W07 instead, which turns a silent loss into a line somebody can rewrite.
+            keywords: entry
+                .keywords
+                .iter()
+                .filter(|k| raw_word_count(k) == 1)
+                .map(|k| normalise(k))
+                .filter(|n| n.len() == 1)
+                .flatten()
+                .collect(),
             phrases,
             title: normalise(&entry.title),
             stem: normalise(&entry.stem),
@@ -596,8 +699,22 @@ pub fn route<'a>(
         let mut score = 0.0f32;
         let mut matched: Vec<String> = Vec::new();
 
-        // A multi word keyword appearing whole in the question is the strongest
-        // signal there is, so it is scored before the individual words.
+        // A multi word keyword appearing whole in the question is the strongest signal a
+        // single key can give, so it is scored before the individual words.
+        //
+        // **It is no longer the strongest signal an entry can give, and that changed when
+        // the components left the keyword bag.** The weight is `W_PHRASE` times the MEAN
+        // idf of the words, which was calibrated while those same words were ALSO scoring
+        // `W_KEYWORD` each, so a whole n word match used to be worth `10*m + 6*n*m` and is
+        // now worth `10*m`. Against an entry that lists the same n words as n separate
+        // single word keys, `10*m` loses to `6*n*m` for every n above one. See
+        // `a_phrase_no_longer_outranks_the_same_words_listed_separately`, which pins it.
+        //
+        // Scoring the phrase on the SUM instead of the mean restores it and was measured
+        // rather than argued: on the 2026-08-20 gold set it took AGENT keyword 19 to 20 and
+        // routes 18 to 19, and cost FILE keyword 11 to 10. It is a separate decision from
+        // the raw word predicate and is deliberately not bundled with it, because bundling
+        // them would make neither number attributable.
         for (original, norm) in &p.phrases {
             if query_norm.contains(norm) {
                 let weight: f32 = norm
@@ -761,15 +878,42 @@ mod tests {
         assert_eq!(hits[0].entry.stem, "the-bar");
     }
 
+    /// What the phrase bonus still buys: a whole phrase beats an entry that shares only
+    /// one of its words. This is the case the bonus was written for and it is unaffected.
     #[test]
-    fn a_whole_phrase_outranks_scattered_words() {
+    fn a_whole_phrase_outranks_a_single_shared_word() {
+        let entries = vec![
+            entry("a", "A", &["memory bandwidth"]),
+            entry("b", "B", &["memory", "disk"]),
+        ];
+        let hits = route("explique memory bandwidth", &entries, &[], 5);
+        assert_eq!(hits[0].entry.stem, "a");
+        assert!(hits[0].score > hits[1].score);
+    }
+
+    /// **A known cost of dropping the components, pinned rather than hidden.**
+    ///
+    /// This test used to read `a_whole_phrase_outranks_scattered_words` and it passed,
+    /// but not for the reason its name gave. Entry `a` won because the flattening put
+    /// `memory` and `bandwidth` in its keyword bag too, so it collected the phrase bonus
+    /// AND both component hits: `10*m + 6*2*m` against `b`'s `6*2*m`. The phrase bonus was
+    /// never carrying that ranking on its own.
+    ///
+    /// With the components gone the arithmetic is `W_PHRASE * mean(idf)` against
+    /// `W_KEYWORD * sum(idf)`, which is 10 against 12 for a two word key, so `b` wins. The
+    /// fix is to score the phrase on the sum rather than the mean; it was measured (AGENT
+    /// keyword 19 to 20, FILE keyword 11 to 10 on the 2026-08-20 gold set) and left out of
+    /// this change so the two are separately attributable. Whoever makes that change should
+    /// see this test go red, which is the point of leaving it here saying what is true.
+    #[test]
+    fn a_phrase_no_longer_outranks_the_same_words_listed_separately() {
         let entries = vec![
             entry("a", "A", &["memory bandwidth"]),
             entry("b", "B", &["memory", "bandwidth"]),
         ];
         let hits = route("explique memory bandwidth", &entries, &[], 5);
-        assert_eq!(hits[0].entry.stem, "a");
-        assert!(hits[0].score > hits[1].score);
+        assert_eq!(hits[0].entry.stem, "b", "10 * mean loses to 6 * sum at two words");
+        assert_eq!(hits[1].entry.stem, "a", "the phrase entry is still found, just second");
     }
 
     #[test]
@@ -865,6 +1009,91 @@ mod tests {
         let entries = vec![entry("ram", "RAM", &["single channel"])];
         let out = suggest("o que e um channel", &entries, 5);
         assert_eq!(out, vec!["single channel"], "one word aligning is enough to offer it");
+    }
+
+    /// **The test that fails under the rejected spec.**
+    ///
+    /// "admit only single word keys" counted after `normalise`, which strips stopwords
+    /// first. `long context` is two words as written and one word after normalising,
+    /// because `long` joined STOPWORDS in the 2026-08-20 generic adjective batch, so the
+    /// entry was still filed under the bare word `context`. Counting the raw key is what
+    /// closes it, and 132 keys in the live corpus collapse this way.
+    #[test]
+    fn a_key_that_normalises_to_one_word_is_still_multi_word() {
+        let entries = vec![entry("kv-cache", "KV cache", &["long context"])];
+        assert!(
+            route("context", &entries, &[], 5).is_empty(),
+            "a two word key must not be findable by one of its words"
+        );
+    }
+
+    /// The inversion, from the live corpus. `nao` is a stopword, so the note about the
+    /// week the weight did *not* move used to be indexed under the word for losing
+    /// weight, scoring identically to the file that actually means it.
+    #[test]
+    fn a_negation_does_not_index_as_the_word_it_negates() {
+        // `nao contestar` is a real key in this fleet, on an audit note saying a rejection
+        // must not be appealed. Before this rule, `contestar` and `nao contestar` both
+        // returned it at exactly 25.62.
+        let entries = vec![
+            entry("auditoria", "Auditoria", &["nao contestar"]),
+            entry("recurso", "Recurso", &["contestar"]),
+        ];
+        let hits = route("contestar", &entries, &[], 5);
+        assert_eq!(hits.len(), 1, "only the file that means it may answer");
+        assert_eq!(hits[0].entry.stem, "recurso");
+    }
+
+    /// The punctuation boundary, which the raw word count alone does not close.
+    #[test]
+    fn a_written_word_that_normalises_to_several_does_not_shed_them() {
+        let entries = vec![
+            entry("models", "Models", &["text-embedding-3-small"]),
+            entry("prose", "Prose", &["text"]),
+        ];
+        // One written word, so the raw count admits it, and then normalise makes two.
+        // Without the second condition `text` and `embedding` enter the bag alone.
+        let hits = route("text", &entries, &[], 5);
+        assert_eq!(hits.len(), 1, "a component of a written term is not a key");
+        assert_eq!(hits[0].entry.stem, "prose");
+        assert!(
+            !route("explique text-embedding-3-small", &entries, &[], 5).is_empty(),
+            "the whole term still answers, as a phrase"
+        );
+    }
+
+    /// Where the recall went. Removing the components does not remove the phrase, which
+    /// was already scored higher, so the key still answers the question it was written for.
+    #[test]
+    fn a_multi_word_key_still_answers_the_whole_phrase() {
+        let entries = vec![entry("ram", "RAM", &["memory bandwidth"])];
+        let hits = route("explique memory bandwidth", &entries, &[], 5);
+        assert_eq!(hits[0].entry.stem, "ram");
+        assert!(route("memory", &entries, &[], 5).is_empty(), "half of it is not it");
+    }
+
+    /// Internal punctuation is spelling, not a word boundary. A term of art written as
+    /// one word stays one word, or the rule would evict `q4_K_M` and `K-quant` from the
+    /// index that exists to find them.
+    #[test]
+    fn punctuation_inside_a_single_written_word_is_not_a_word_boundary() {
+        assert_eq!(raw_word_count("q4_K_M"), 1);
+        assert_eq!(raw_word_count("text-embedding-3-small"), 1);
+        assert_eq!(raw_word_count("bits per weight"), 3);
+        assert_eq!(raw_word_count("  spaced   out  "), 2);
+
+        let entries = vec![entry("quantization", "Quantization", &["q4_K_M"])];
+        assert!(!route("cabe em q4_K_M", &entries, &[], 5).is_empty());
+    }
+
+    /// A key written as one word that normalises away entirely contributes nothing, and
+    /// needs no rule of its own. Pinned so a later stopword batch cannot make it panic
+    /// or resurrect the term.
+    #[test]
+    fn a_single_word_key_that_is_a_stopword_contributes_nothing() {
+        let entries = vec![entry("detector", "Detector", &["false", "precision"])];
+        assert!(route("false", &entries, &[], 5).is_empty());
+        assert!(!route("precision", &entries, &[], 5).is_empty());
     }
 
     #[test]

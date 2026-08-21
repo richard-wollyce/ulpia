@@ -5,3 +5,22 @@
 profile/
 records/
 projects/
+
+# Transcripts fetched for this agent, which are two things at once: derived by
+# ADR-0003, because the recording they came from is the source of truth and the
+# text is a projection of it, and usually somebody else's words rather than ours.
+# Tracked is our notes and a citation; ignored is their words.
+#
+# Only this folder, and not `inbox/` itself. An inbox already holds the agent's
+# own notes awaiting distillation, and bases like zed and yaron keep a typed
+# structure in it with a `what-goes-here.md`. Ignoring the whole inbox would take
+# the structure out with the payload, which is the opposite of the intent.
+#
+# SOURCES.md is the exception that makes the rest honest: ignoring a derived file
+# is only safe when what it was derived from is written down. Without the ledger
+# a fresh clone cannot regenerate a transcript and cannot even say what used to
+# be here, so "derived, therefore disposable" would be a claim with nothing
+# behind it. The folder and its ledger are created on the first ingest.
+inbox/transcripts/*
+!inbox/transcripts/.gitkeep
+!inbox/transcripts/SOURCES.md

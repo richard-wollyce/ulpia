@@ -372,6 +372,33 @@ fn check_reachable(file: &MdFile, findings: &mut Vec<Finding>) {
                 ),
             });
         }
+
+            // **Asked of every keyed file, not only the thin ones.** This sat inside the
+        // `keywords.len() < 12` branch for one build and reported zero findings across
+        // the whole fleet, which read exactly like a corpus with no dead keys in it.
+        //
+        // A key in neither bag is a term the author believed they had written and that
+        // no question can ever use. That is the silence E02 exists to break, one level
+        // down: E02 catches a file nothing can reach, this catches a term nothing can
+        // reach inside a file that is otherwise fine.
+        let dead = crate::index::unreachable_keys(&keywords);
+        if !dead.is_empty() {
+            findings.push(Finding {
+                level: Level::Warning,
+                code: "W07",
+                file: file.rel.clone(),
+                line: 0,
+                message: format!(
+                    "unsearchable key(s): {}. Several written words that reduce to one \
+                     after stopwords, so the term reaches neither the keyword index nor \
+                     the phrase index and no question can find it. Rewrite so the word \
+                     that carries the meaning is the one that survives: `nao contestar` \
+                     indexed as `contestar`, its own opposite, until it became \
+                     `proibido contestar`",
+                    dead.join(", ")
+                ),
+            });
+        }
     }
 
 }
