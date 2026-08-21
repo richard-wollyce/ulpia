@@ -48,6 +48,13 @@ kb-rejections.txt
 # does not exist there.
 tools/tray/src-tauri/gen/
 
+# Python bytecode. Derived from the .py beside it and regenerated on every run,
+# so by ADR-0003 it was never source. It was also tracked, and the marshalled
+# header embeds the absolute path of the machine that compiled it, which is a
+# home directory and a username published as a side effect of running a script.
+__pycache__/
+*.pyc
+
 # Whisper model cache and generated transcripts: derived, large, and never
 # somebody else useful. The source of truth is the video.
 tools/scribe/transcripts/
