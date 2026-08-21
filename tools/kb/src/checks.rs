@@ -146,7 +146,12 @@ pub fn front_matter(text: &str) -> Option<Vec<(String, String)>> {
 /// provenance says who made the claim, stage says where it is in its life, and
 /// collapsing them is how a base loses track of what was verified.
 const PROVENANCE: &[&str] = &["human", "agent", "external"];
-const STAGE: &[&str] = &["raw", "distilled", "derived"];
+/// `captured` is the rung a promoted note lands on.
+///
+/// Kept out of `distilled` deliberately. A note that arrived through `kb promote` was read
+/// by a model and reviewed by a model and by no person, and ADR-0007's rule is that an
+/// agent claim is never quietly promoted. The word says who has and has not looked at it.
+const STAGE: &[&str] = &["raw", "captured", "distilled", "derived"];
 
 pub struct MapEntry {
     pub line: usize,
@@ -271,6 +276,18 @@ pub fn run(base: &Base) -> Vec<Finding> {
             });
         }
 
+        // **Reachability is asked of every file, because `index::build` walks every file.**
+        //
+        // This used to sit inside `if base.is_note(file)`, so it ran only over the knowledge
+        // folder. `index::build` stopped iterating map entries on 2026-08-20 and started
+        // walking `base.files`; the check did not move with it. Measured the same week: 33
+        // real knowledge files outside `knowledge/` carried no `Search for:` line, were
+        // absent from the index and could not be returned by any question, while
+        // `kb check fleet/zed` printed "31 tracked files, clean" over the top of them. A
+        // linter that certifies an unreachable file is worse than no linter, because it is
+        // the reason nobody looked.
+        check_reachable(file, &mut findings);
+
         if base.is_note(file) {
             check_note(base, file, &mut findings);
         }
@@ -300,22 +317,18 @@ pub fn run(base: &Base) -> Vec<Finding> {
 }
 
 /// Checks that only apply to a distilled note inside the knowledge folder.
-fn check_note(_base: &Base, file: &MdFile, findings: &mut Vec<Finding>) {
-    // **Files that orient a person rather than answer a question**, exempt from the
-    // reachability rules because nobody searches for them: they are found by standing in
-    // the directory they describe.
-    //
-    // Three names, because one name was doing three jobs across thirteen files and a reader
-    // could not tell which they had opened. README.md is a base's front door.
-    // `what-goes-here.md` is a folder legend, read by whoever is about to drop a file in.
-    // `MOVED.md` is a signpost where content used to be, and it shouts because it has to
-    // catch somebody who arrived expecting the content.
-    let name = file.rel.to_lowercase();
-    let is_readme = name.ends_with("readme.md")
-        || name.ends_with("what-goes-here.md")
-        || name.ends_with("moved.md");
+/// Can a question reach this file at all.
+///
+/// Split out of `check_note` so it runs over every file the index walks rather than only over
+/// the knowledge folder. The two halves answer different questions: this one asks whether the
+/// router can see the file, and `check_note` asks whether a note it CAN see carries the
+/// provenance the evidence rules require.
+fn check_reachable(file: &MdFile, findings: &mut Vec<Finding>) {
+    if is_exempt(file) {
+        return;
+    }
 
-    if !is_readme {
+    {
         // **E02 asks the same question it always asked, of the file instead of the map.**
         //
         // It used to read the base's `MAP.md`: a note the map did not list was unreachable,
@@ -361,6 +374,51 @@ fn check_note(_base: &Base, file: &MdFile, findings: &mut Vec<Finding>) {
         }
     }
 
+}
+
+/// Files nothing should ever search for, in three classes whose reasons are not interchangeable.
+///
+/// **Orientation files** are found by standing in the directory they describe, never by a
+/// question. Three names, because one name was doing three jobs across thirteen files and a
+/// reader could not tell which they had opened: `README.md` is a base's front door,
+/// `what-goes-here.md` is a folder legend read by whoever is about to drop a file in, and
+/// `MOVED.md` is a signpost that shouts because it has to catch somebody who arrived expecting
+/// content. `MAP.md` is a reading list for a person and `CLAUDE.md` is injected by the runtime,
+/// so neither is ever retrieved.
+///
+/// **`inbox/` is a quarantine and its invisibility is the feature.** Material lands there
+/// unreviewed, and a base that answers from unreviewed material is the failure this repository
+/// is built against. It becomes findable when somebody promotes it, which is the deliberate act
+/// ADR-0016 exists to protect.
+///
+/// **`records/` is an append-only log**, one near-identical file per day. Keying them would put
+/// the same vocabulary on dozens of files and collapse the idf of every word they share, which
+/// charges the files that answer questions to benefit files that answer lookups. Looking
+/// something up by date is a different job from asking a question and wants its own mechanism.
+fn is_exempt(file: &MdFile) -> bool {
+    let name = file.rel.to_lowercase();
+    let orientation = name.ends_with("readme.md")
+        || name.ends_with("what-goes-here.md")
+        || name.ends_with("moved.md")
+        || name.ends_with("map.md")
+        || name.ends_with("claude.md");
+
+    let in_dir =
+        |dir: &str| name.starts_with(&format!("{dir}/")) || name.contains(&format!("/{dir}/"));
+
+    orientation || in_dir("inbox") || in_dir("records") || name.contains("calculation-log/")
+}
+
+fn check_note(_base: &Base, file: &MdFile, findings: &mut Vec<Finding>) {
+    // **Files that orient a person rather than answer a question**, exempt from the
+    // reachability rules because nobody searches for them: they are found by standing in
+    // the directory they describe.
+    //
+    // Three names, because one name was doing three jobs across thirteen files and a reader
+    // could not tell which they had opened. README.md is a base's front door.
+    // `what-goes-here.md` is a folder legend, read by whoever is about to drop a file in.
+    // `MOVED.md` is a signpost where content used to be, and it shouts because it has to
+    // catch somebody who arrived expecting the content.
     // The tier and the version only make sense for a note distilled from a
     // source. A house document that happens to live in the knowledge folder,
     // like the evidence ruler itself, is not evidence about anything, so the

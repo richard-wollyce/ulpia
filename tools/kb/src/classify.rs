@@ -409,7 +409,7 @@ pub fn is_uncontested(choice: Option<&AgentChoice>, verdict: crate::memory::Verd
 /// Outside the fleet rather than under `.kb/`, because a runtime that walks up from its
 /// working directory looking for instruction files would find the fleet's own from any
 /// directory inside it, and the saving would quietly disappear.
-fn scratch_cwd(root: &Path) -> PathBuf {
+pub(crate) fn scratch_cwd(root: &Path) -> PathBuf {
     let dir = std::env::temp_dir().join("kb-classifier-cwd");
     // Best effort on purpose. If the directory cannot be made, running in the root is
     // slow and correct, and slow and correct beats refusing to route.

@@ -6,7 +6,10 @@
 
 
 use kb::checks::{Finding, Level};
-use kb::{base, blocks, boot, checks, commit, eval, index, init, mcp, memory, remember, store, ui, write};
+use kb::{
+    base, blocks, boot, checks, classify, commit, eval, index, init, mcp, memory, promote,
+    remember, store, ui, write,
+};
 use base::Base;
 use std::path::Path;
 use std::process::ExitCode;
@@ -44,6 +47,13 @@ commit exists because more than one session writes these repositories at once.
 It commits exactly the paths you name and then reads the commit back to prove it,
 so another session's in-flight work cannot be swept into your message. There is
 deliberately no flag meaning everything.
+
+promote reads each agent's inbox/ and offers what it finds to two promoters. The first
+proposes notes and never sees the base; the second decides, three times through three
+different questions, and never sees the first one's reasoning. Only a unanimous accept
+writes, at stage `captured`. A refusal is counted in kb-rejections.txt, because the same
+proposal refused three times is a gap in the base rather than a bad proposal.
+    --dry-run   decide everything and write nothing
 
 write reads the note body from stdin and creates the file and its MAP entry in one
 act. A note the map does not list is a note no question can reach, so there is no
@@ -159,6 +169,12 @@ fn main() -> ExitCode {
             cmd_commit(&positional, &message)
         }
         "boot" => cmd_boot(&paths_or_default(&positional), all, top),
+        "promote" => cmd_promote(
+            &paths_or_default(&positional),
+            all,
+            top,
+            args.iter().any(|a| a == "--dry-run"),
+        ),
         "ui" => {
             let port = flag_value(&args, "--port")
                 .and_then(|v| v.parse().ok())
@@ -596,15 +612,8 @@ fn cmd_route(question: &str, paths: &[&str], all: bool, top: usize, hybrid: bool
         memory.alias_count()
     );
 
-    // **A base that went missing says so.** `Memory::open` skips a base whose privacy git
-    // cannot answer for rather than closing the whole fleet, which is right, and silence
-    // about it would be the failure this repository keeps finding: degraded and quiet.
-    for gone in memory.skipped_bases() {
-        eprintln!(
-            "kb: left out {}: git could not be consulted there, so its files could be private and none are being served. A husk left by a rename in progress looks exactly like this, and so does a base nobody has committed yet.",
-            gone.display()
-        );
-    }
+    // The notice this loop used to print now comes out of `Memory::open` itself, so every
+    // surface gets it instead of this one.
     println!();
 
     if !hybrid {
@@ -673,6 +682,115 @@ fn cmd_route(question: &str, paths: &[&str], all: bool, top: usize, hybrid: bool
 /// shows the user a hook error. Neither is an acceptable outcome for a routing step that
 /// failed: the message is the user's and it must reach the model whatever the router
 /// thinks. So every failure path here prints nothing and succeeds.
+
+/// `kb promote`: the deposit becomes knowledge, or it does not and says why.
+///
+/// The whole design is in `promote.rs`. What lives here is the reporting, and it reports
+/// refusals as loudly as writes: a promotion run whose output is only what it wrote is a
+/// run that looks successful when it accepted everything.
+fn cmd_promote(paths: &[&str], all: bool, top: usize, dry_run: bool) -> ExitCode {
+    let given: Vec<&Path> = paths.iter().map(Path::new).collect();
+    let memory = match memory::Memory::open(&given, all) {
+        Ok(m) => m,
+        Err(e) => {
+            eprintln!("kb: {e}");
+            return ExitCode::from(1);
+        }
+    };
+
+    let root = given.first().copied().unwrap_or_else(|| Path::new("."));
+    let promoter = memory.promoter();
+    let reviewer = memory.reviewer();
+
+    // **Both must be configured, and they must not be assumed.** A promotion run with no
+    // reviewer is automatic extraction into the durable base, which is the exact thing
+    // `promote.rs` was written to not be. Refusing here is cheaper than discovering it in
+    // a diff a week later.
+    if matches!(promoter, classify::Classifier::None) {
+        eprintln!("kb promote: no `promoter = ...` in the fleet manifest, so there is nothing to propose with.");
+        return ExitCode::from(2);
+    }
+    if matches!(reviewer, classify::Classifier::None) {
+        eprintln!(
+            "kb promote: no `reviewer = ...` in the fleet manifest. Running the proposer alone \
+             would write straight into the base from unreviewed material, which is what this \
+             command exists to not do."
+        );
+        return ExitCode::from(2);
+    }
+
+    let today = today();
+    let outcome = promote::run(&memory, root, &promoter, &reviewer, top, dry_run, &today);
+
+    if dry_run {
+        println!("dry run: nothing was written and no refusal was recorded.\n");
+    }
+
+    for d in &outcome.decided {
+        let head = format!("{}/{}", d.proposal.agent, d.proposal.slug);
+        if d.accepted() {
+            match &d.written {
+                Some(p) => println!("  wrote   {head}\n          {}", p.display()),
+                None => println!("  would write {head}"),
+            }
+        } else {
+            println!("  refused {head}");
+            // Every lens that refused, not only the first. Reporting one made it look
+            // like the contradiction lens was doing all the work, when what was really
+            // happening is that it had been given duplication's question.
+            for r in d.refusals() {
+                println!("          {} says: {}", r.lens.name(), r.reason);
+            }
+        }
+        println!("          from {}", d.proposal.source);
+    }
+
+    for b in &outcome.barren {
+        println!("  nothing worth keeping in {b}");
+    }
+
+    // Degraded and silent is the combination this repository keeps paying for.
+    for u in &outcome.unreachable {
+        eprintln!("kb promote: could not reach {u}, so nothing was written for it.");
+    }
+
+    println!(
+        "\n{} proposal(s): {} written, {} refused. {} deposit file(s) held nothing.",
+        outcome.decided.len(),
+        outcome.written(),
+        outcome.refused(),
+        outcome.barren.len()
+    );
+    if outcome.refused() > 0 && !dry_run {
+        println!("Refusals are counted in {}.", promote::REJECTIONS_TXT);
+    }
+
+    if outcome.unreachable.is_empty() { ExitCode::SUCCESS } else { ExitCode::from(1) }
+}
+
+/// Today, as YYYY-MM-DD, for the rejection record.
+///
+/// Days since the epoch, converted by the civil-from-days algorithm. The crate has one
+/// dependency and it is not a date library, which is a constraint ADR-0001 set and this is
+/// not the feature worth spending it on.
+fn today() -> String {
+    let secs = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_secs() as i64)
+        .unwrap_or(0);
+    let z = secs / 86_400 + 719_468;
+    let era = if z >= 0 { z } else { z - 146_096 } / 146_097;
+    let doe = z - era * 146_097;
+    let yoe = (doe - doe / 1460 + doe / 36_524 - doe / 146_096) / 365;
+    let y = yoe + era * 400;
+    let doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
+    let mp = (5 * doy + 2) / 153;
+    let d = doy - (153 * mp + 2) / 5 + 1;
+    let m = if mp < 10 { mp + 3 } else { mp - 9 };
+    let y = if m <= 2 { y + 1 } else { y };
+    format!("{y:04}-{m:02}-{d:02}")
+}
+
 fn cmd_boot(paths: &[&str], all: bool, top: usize) -> ExitCode {
     use std::io::Read;
 

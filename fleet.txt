@@ -43,3 +43,19 @@ role = Keeper of the fleet: knows who is here, routes what arrives, and holds th
 # any runtime satisfies it, and when this line is absent or the command fails, the
 # deterministic choice stands, so the fleet never stops routing.
 classifier = tools\classify-claude.cmd
+
+
+# Promotion: how the deposit becomes knowledge. See decisions/0030 and promote.rs.
+#
+# Two models and they must not be the same one. The first reads inbox/ and proposes;
+# it never sees the base. The second decides, three times through three different
+# questions, and never sees the first one's reasoning: it is handed the proposal and
+# what the deterministic router says the base already holds for those words.
+#
+# The second is the stronger reader on purpose. A note written badly costs one note.
+# A note admitted wrongly costs every question it later wins.
+#
+# Absent either line, `kb promote` refuses to run rather than degrading into automatic
+# extraction, which is the thing it exists to not be.
+promoter = tools\promote-claude.cmd
+reviewer = tools\review-claude.cmd

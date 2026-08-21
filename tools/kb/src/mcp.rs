@@ -289,6 +289,12 @@ impl Server {
 
     fn route(&self, question: &str, top: usize) -> String {
         let hits = self.memory.route(question, top);
+        // The ranked list stays the keyword scorer's, because ADR-0018 measured fusion
+        // to be the wrong rule for picking a winner. The confidence costs a second pass
+        // over the corpus and is taken anyway: this tool is called once per question by
+        // a person or a model, never in a loop, and a ranked list with no evidence
+        // beside it is the whole defect being fixed here.
+        let confidence = self.memory.ask(question, top).confidence;
         if hits.is_empty() {
             if self.memory.is_empty() {
                 return nothing_to_search();
@@ -299,6 +305,7 @@ impl Server {
         }
 
         let mut out = format!("Files to open for: {question}\n\n");
+        out.push_str(&evidence(&confidence));
         for (i, hit) in hits.iter().enumerate() {
             out.push_str(&format!(
                 "{}. {}/{}  ({})\n   matched: {}\n   {}\n",
@@ -314,7 +321,11 @@ impl Server {
     }
 
     fn retrieve(&self, question: &str, top: usize) -> String {
-        let found = self.memory.retrieve(question, top);
+        // `Memory::retrieve` is `Memory::ask` minus the confidence and the agent, over
+        // the same expansion and the same two scorers. Asking for the whole answer here
+        // is the same work and carries the evidence back.
+        let answer = self.memory.ask(question, top);
+        let found = answer.found;
         if found.is_empty() {
             if self.memory.is_empty() {
                 return nothing_to_search();
@@ -325,6 +336,8 @@ impl Server {
         }
 
         let mut out = format!("Passages for: {question}\n\n");
+
+        out.push_str(&evidence(&answer.confidence));
 
         // Every file ranked by keywords and none by text means the full text index
         // does not cover these files, which usually means it is stale. Without this
@@ -616,4 +629,38 @@ mod tests {
             "por que o poke é caro em proteína?"
         );
     }
+}
+
+/// The gate's evidence, in the same words every other surface uses.
+///
+/// **This surface used to emit none of it.** `kb ui` reports verdict, score, floor and
+/// margin; `kb route` and `kb boot` report them too; `kb serve`, the one surface a model
+/// actually queries, reported two prose NOTE blocks and no number at all. A model reading
+/// this tool could not tell a top score of 188.6 from one of 19.9, so "the base does not
+/// cover this" and "here are five files" arrived looking the same. Confidence that does
+/// not reach the caller is confidence the caller cannot act on.
+///
+/// Agreement is reported and does not gate, for the reason recorded in
+/// `Memory::confidence_of`: the text side is merged round robin per agent, so a file that
+/// is its own agent's best match is admitted without competing against the others.
+fn evidence(c: &crate::memory::Confidence) -> String {
+    format!(
+        "EVIDENCE: keyword score {:.1} against a floor of {:.1}; {} of the two independent \
+         scorers ranked the top file; it leads the runner-up by {:.2}x. Verdict: {}.\n\n",
+        c.keyword_score,
+        crate::memory::SCORE_FLOOR,
+        match c.agreement {
+            2 => "both",
+            1 => "only one",
+            _ => "neither",
+        },
+        c.margin,
+        match c.verdict {
+            crate::memory::Verdict::Hit => "something here matches",
+            crate::memory::Verdict::Guess =>
+                "a guess, too weak or too close to the runner-up to tell from a coincidence \
+                 of vocabulary",
+            crate::memory::Verdict::Nothing => "nothing matched",
+        }
+    )
 }

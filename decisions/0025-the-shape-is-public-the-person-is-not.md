@@ -114,6 +114,45 @@ and to Steve's products. The person was the last thing without a published shape
   prerequisite rather than a commitment. The licence line in the README still reads not
   chosen.
 
+## Amended 2026-08-20: the local hook reads the private layer, the server still does not
+
+The split above is about **publishing**. It was being enforced as though it were about
+**reading**, and those are not the same line.
+
+`Base::discover(root, all)` narrows the file list to what git tracks unless `all` is set.
+Every agent's `.gitignore` excludes `profile/`, `records/` and `projects/`, so those files
+were absent from the index of any surface that did not pass the flag. `kb boot`, the
+`UserPromptSubmit` hook, did not pass it. The effect, measured on this machine:
+
+| question | without `--all` | with `--all` |
+|---|---|---|
+| *posso trocar o frango por outra proteina no almoco* | `person/body.md` at 80.96 | `yaron/plans/diet/base-plan.md` at 110.62 |
+
+The file that holds the answer, with `trocar o frango` as a literal key, could not be
+returned to Richard on his own machine about his own meal plan. 28 files were in that state,
+including his health history and the standing diet plan.
+
+**The flag is now passed by the hook and by nothing else.** Richard's decision, on being
+shown the split: *sim pode passar --all pro hook poder enxergar os arquivos git ignored.*
+
+The distinction that makes this safe is which surface is which:
+
+- **`kb boot`** runs locally, on Richard's machine, on Richard's own message, and injects
+  context into his own session. Nothing leaves the machine. Withholding his files from him
+  protected nobody.
+- **`kb serve`**, the MCP server in `.mcp.json`, is invoked as `serve .` with **no `--all`**,
+  and that is deliberate and unchanged. It is the surface a model queries and the one whose
+  output could be carried anywhere, so it continues to serve only what git tracks.
+
+So the promise this record makes is narrowed to what it always meant: **nothing private is
+published, and nothing private leaves the machine.** It never meant that the person's own
+fleet may not read the person's own files.
+
+What to watch, because this is the direction the mistake would come from: any new surface
+gets the public list by default and has to argue for `--all`, and the argument has to be
+that it cannot carry data off the machine. `kb ui` serves over HTTP on localhost and does
+not pass the flag today; if it ever binds to anything but loopback, that stays true.
+
 ## Revisit trigger
 
 - **A second human**, which turns `profile/` into a directory of people and makes the
@@ -124,3 +163,6 @@ and to Steve's products. The person was the last thing without a published shape
   one person.
 - A decision to publish under a licence, which is when the private line stops being a
   convention of this machine and becomes a promise to strangers.
+- **Any surface that both passes `--all` and can send its output off the machine.** The
+  2026-08-20 amendment holds only while the two sets do not overlap, and nothing in the code
+  enforces that they do not.

@@ -304,6 +304,23 @@ impl Memory {
                 // A base that contributes nothing is a base that contributes nothing. The
                 // guarantee is per base and skipping keeps it; failing the open turned one
                 // directory's problem into everybody's.
+                //
+                // **The notice is emitted here, and it used to be emitted by one caller.**
+                // `skipped_bases()` was read only by `cmd_route`, so `kb serve`, `kb boot`,
+                // `kb ui`, `kb eval`, `kb check` and `kb index` all opened a fleet with an
+                // agent missing and said nothing. That is the combination `boot.rs` names as
+                // the most expensive to find: degraded and silent. Putting the sentence at
+                // the skip rather than at a caller is what makes forgetting it impossible;
+                // the accessor stays for callers that want to render it their own way.
+                //
+                // stderr, not stdout, because `kb serve` speaks JSON-RPC on stdout and
+                // `kb index --json` is parsed by machines.
+                eprintln!(
+                    "kb: left out {}: git could not be consulted there, so its files could be \
+                     private and none are being served. A husk left by a rename in progress \
+                     looks exactly like this, and so does a base nobody has committed yet.",
+                    root.display()
+                );
                 skipped.push(root);
                 continue;
             }
@@ -575,7 +592,7 @@ impl Memory {
         let found = retrieve::fuse(&keyword, &text, top);
 
         Answer {
-            confidence: self.confidence_of(&keyword),
+            confidence: self.confidence_of(&keyword, &text),
             agent: self.choose_agent_by_keyword(&keyword),
             keyword_top: keyword.first().map(|h| format!("{}/{}", h.entry.base, h.entry.rel)),
             found,
@@ -586,7 +603,11 @@ impl Memory {
     ///
     /// Kept separate from [`Memory::ask`] so the eval can drive it against a list it
     /// chose, which is how the fused-versus-keyword table above was produced.
-    pub fn confidence_of(&self, hits: &[index::Hit<'_>]) -> Confidence {
+    pub fn confidence_of(
+        &self,
+        hits: &[index::Hit<'_>],
+        text: &[crate::store::Hit],
+    ) -> Confidence {
         let Some(top) = hits.first() else {
             return Confidence {
                 verdict: Verdict::Nothing,
@@ -598,13 +619,41 @@ impl Memory {
         let runner_up = hits.get(1).map(|h| h.score).unwrap_or(0.0);
         let margin = if runner_up > 0.0 { top.score / runner_up } else { 1.0 };
 
-        // Agreement is not observable from the keyword list alone, and claiming it
-        // would be inventing evidence. One scorer voted, which is what is recorded.
+        // **Agreement is observed here, and used to be the literal 1.**
+        //
+        // The old comment said agreement was not observable from the keyword list
+        // alone, which was true of the argument and false of the caller. `ask` runs
+        // both scorers before it gets here, so the evidence was one parameter away
+        // the whole time. The constant was not a lie in this function; it became one
+        // in `classify::dossier`, which renders 1 as "Only one of the two independent
+        // scorers ranked that file" and follows it with "one scorer alone is the case
+        // this system reports as a guess rather than an answer". That sentence went to
+        // the classifier on every message, including perfect hits, and it argued
+        // against exactly the coverage judgement ADR-0027 leans on. A field meaning
+        // "not observed" was being read as "observed, and bad".
+        //
+        // What it means, stated narrowly so nobody reads more into it: the text
+        // scorer also surfaced the file the keyword scorer put first. `search_all`
+        // merges each agent's chunks round robin by rank, so a file that is its own
+        // agent's best match is admitted without competing against other agents. That
+        // makes a 2 cheaper than the phrase "both scorers agreed" suggests. It is
+        // reported and it does not gate, for that reason and for the measured one
+        // below.
+        let agreement = match hits.first() {
+            Some(top) => {
+                let seen_by_text = text
+                    .iter()
+                    .any(|h| h.base == top.entry.base && h.path == top.entry.rel);
+                if seen_by_text { 2 } else { 1 }
+            }
+            None => 0,
+        };
+
         // The floor alone. See MIN_MARGIN for the measurement that removed the
         // margin from this line and why the reasoning behind it was wrong.
         let verdict = if top.score >= SCORE_FLOOR { Verdict::Hit } else { Verdict::Guess };
 
-        Confidence { verdict, agreement: 1, keyword_score: top.score, margin }
+        Confidence { verdict, agreement, keyword_score: top.score, margin }
     }
 
     /// The older gate, over a fused list.
@@ -759,6 +808,29 @@ impl Memory {
     pub fn classifier(&self) -> crate::classify::Classifier {
         for root in &self.opened {
             if let (_, _, Some(cmd)) = manifest_full(&root.join(MANIFEST)) {
+                return crate::classify::Classifier::Command(cmd);
+            }
+        }
+        crate::classify::Classifier::None
+    }
+
+    /// The model that reads a deposit and proposes notes. See `promote.rs`.
+    pub fn promoter(&self) -> crate::classify::Classifier {
+        self.manifest_command("promoter")
+    }
+
+    /// The model that decides, three times, on a proposal it did not write.
+    ///
+    /// Configured separately from the promoter on purpose: this one is meant to be the
+    /// stronger reader, and a single key would make them the same model, which is the
+    /// arrangement `promote.rs` exists to avoid.
+    pub fn reviewer(&self) -> crate::classify::Classifier {
+        self.manifest_command("reviewer")
+    }
+
+    fn manifest_command(&self, key: &str) -> crate::classify::Classifier {
+        for root in &self.opened {
+            if let Some(cmd) = manifest_key(&root.join(MANIFEST), key) {
                 return crate::classify::Classifier::Command(cmd);
             }
         }
@@ -968,6 +1040,23 @@ fn manifest(path: &Path) -> (Vec<String>, Vec<String>) {
 ///
 /// Separate from `manifest` because `expand_roots` runs before a `Memory` exists and
 /// only needs the first two, while the classifier is read once the fleet root is known.
+/// One `key = value` out of the manifest, for keys that carry a command.
+///
+/// Separate from `manifest_full` rather than a fourth and fifth element of its tuple: that
+/// tuple already has three unnamed slots and a caller reading `(_, _, Some(cmd))` is one
+/// reorder away from a silent bug.
+fn manifest_key(path: &Path, want: &str) -> Option<String> {
+    let text = std::fs::read_to_string(path).ok()?;
+    for line in text.lines() {
+        let line = line.split('#').next().unwrap_or("").trim();
+        let Some((key, value)) = line.split_once('=') else { continue };
+        if key.trim() == want && !value.trim().is_empty() {
+            return Some(value.trim().to_string());
+        }
+    }
+    None
+}
+
 fn manifest_full(path: &Path) -> (Vec<String>, Vec<String>, Option<String>) {
     let text = match std::fs::read_to_string(path) {
         Ok(t) => t,

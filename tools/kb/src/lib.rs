@@ -26,6 +26,7 @@ pub mod json;
 pub mod mcp;
 pub mod memory;
 pub mod misses;
+pub mod promote;
 pub mod remember;
 pub mod retrieve;
 pub mod store;
