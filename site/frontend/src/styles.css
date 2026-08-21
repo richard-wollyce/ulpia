@@ -234,6 +234,15 @@ a:active {
   display: flex;
   align-items: center;
   gap: 1.5rem;
+  /* Every horizontal term in this band is rem-derived and the viewport is not,
+   * so above roughly 18.4px of root font-size the band's demand crosses the
+   * supply at 320px and the whole document starts scrolling sideways. Measured
+   * by rendering: at 360px with the browser set to 24px it overflows on all
+   * three pages, in both schemes. Wrapping trades height for width, which is
+   * the one currency a band can spend, and the reader who set 24px is the exact
+   * reader who cannot afford a page that scrolls sideways. */
+  flex-wrap: wrap;
+  row-gap: 0.5rem;
 }
 
 .wordmark {
@@ -242,6 +251,13 @@ a:active {
   text-transform: uppercase;
   letter-spacing: 0.3em;
   color: var(--chrome-ink);
+  /* letter-spacing is applied after the last letter too, so ULPIA carries an
+   * empty 0.3em past the final A. The identity hairline is meant to sit between
+   * two equal 1.5rem gaps and was sitting 5.40px off centre at 320px and 6.60px
+   * from 960px up. Cancelled in the same em as the tracking, so it stays exact
+   * at every value the clamp produces instead of being a second number to keep
+   * in sync. */
+  margin-inline-end: -0.3em;
 }
 
 /* The lamp (spec 15.B, from Richard's sketch): a single toggle whose icon IS
@@ -271,8 +287,28 @@ html:not([data-js]) .lamp-toggle {
   transition: background-color 120ms ease-out;
 }
 
-.lamp-toggle:hover {
-  background: color-mix(in srgb, var(--chrome-ink) 8%, transparent);
+/* The icon scales with the button. It was width="28" height="28" in the markup,
+ * fixed, inside a button that is 2.75rem: 44px at the default, 66px at a 24px
+ * root. The icon fell from 64% of the button to 42% of it, so it shrank in
+ * relation to the band precisely when a low-vision reader enlarged the type.
+ * 1.75rem is exactly 28px at the default, so nothing moves for anyone who
+ * changed nothing, and 1.75rem + 2 x 0.5rem padding is the 2.75rem button. */
+.lamp-toggle svg {
+  width: 1.75rem;
+  height: 1.75rem;
+}
+
+/* Guarded, because on a touch browser a tap applies :hover and leaves it applied
+ * until the next tap somewhere else. The lamp is the only control in the band
+ * that does not unload the page: it flips data-theme in place, so the tapped
+ * button stays the last-touched element and would keep this wash indefinitely,
+ * a permanent highlight on a control the reader is no longer touching. :active
+ * and :focus-visible stay outside the guard, so touch keeps a real press and
+ * the keyboard keeps its ring. */
+@media (hover: hover) and (pointer: fine) {
+  .lamp-toggle:hover {
+    background: color-mix(in srgb, var(--chrome-ink) 8%, transparent);
+  }
 }
 
 .lamp-toggle:active {
@@ -1307,15 +1343,33 @@ input[type="email"]:focus-visible {
   border-top: 1px solid var(--rule);
 }
 
-/* The wordmark becomes the way home on every page but the front one. */
+/* The wordmark becomes the way home on every page but the front one. Its
+ * link state borrows the nav's mechanism rather than inventing one: same
+ * color and press transition, same durations. Before this it had none, so
+ * identity snapped while navigation eased beside it in the same band. No
+ * underline draw: that device stays reserved for the nav's ::after, or
+ * identity would carry the same marker section 3 uses case and tracking to
+ * withhold from it. Motion says "this is also a link"; typography still
+ * says which kind. */
 .wordmark a,
 .wordmark a:visited {
   color: inherit;
   text-decoration: none;
+  transition: color 120ms ease-out, transform 90ms ease-out;
 }
 
 .wordmark a:hover {
   color: var(--accent);
+}
+
+.wordmark a:active {
+  transform: translateY(1px);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .wordmark a {
+    transition: none;
+  }
 }
 
 /* The disclosure boxes open by sliding rather than snapping. Two modern pieces
@@ -1486,6 +1540,44 @@ input[type="email"]:focus-visible {
   transform: scaleX(1);
 }
 
+/* Where there is no hover, the marker is drawn at rest instead of never. The
+ * nav link carries text-decoration: none and the wordmark's own colour, so the
+ * only thing separating "destination" from "the name of the site" is this
+ * hairline, and it lives at scaleX(0) until a pointer arrives. On a phone no
+ * pointer ever arrives, so a touch reader was being shown a nav item with no
+ * evidence it was a link at all. Drawn at 1px here; the current page keeps its
+ * 2px and its weight, so the two states stay distinguishable without hover. */
+@media (hover: none) {
+  .nav a::after {
+    transform: scaleX(1);
+  }
+}
+
+/* Dark: --chrome-ink and --accent are both gold (law 2 leaves dark mode no
+ * red), so the color shift above lands on the same value it started from and
+ * reads as no hover at all. The nav still has the underline draw to carry it,
+ * but the wordmark has no second signal, so this is load-bearing for it, not
+ * cosmetic for either. gold-sheen already exists for this exact case, hover
+ * on cover material, and the band is cover material in dark (spec 15.A).
+ * These are all :hover rules, so they cannot touch the resting current-page
+ * marker, which is what "never colour alone" protects. An earlier draft carried
+ * :not([aria-current]) here out of caution about exactly that, and the caution
+ * was misplaced: it removed the current item's hover entirely in dark, which
+ * the renderer caught as a state that changed nothing.
+ * Written twice, like every dark value: once for the system preference, once
+ * for the switch choosing dark. */
+:root[data-theme="dark"] .nav a:hover,
+:root[data-theme="dark"] .wordmark a:hover {
+  color: var(--gold-sheen);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) .nav a:hover,
+  :root:not([data-theme="light"]) .wordmark a:hover {
+    color: var(--gold-sheen);
+  }
+}
+
 .nav a:active {
   transform: translateY(1px);
 }
@@ -1505,6 +1597,18 @@ input[type="email"]:focus-visible {
 .nav a[aria-current]::after {
   transform: scaleX(1);
   height: 2px;
+}
+
+/* The current item still has to answer a pointer. `.nav a:hover` and
+ * `.nav a[aria-current]` are both specificity (0,2,1), so the later one wins on
+ * source order alone and the rule above was silently cancelling the hover above
+ * it. The item is not decorative: the door wears the mark while you are in any
+ * room behind it, so on an article page this is marked current and is still a
+ * real destination, and a live link that answers nothing is a link that lies.
+ * Restated at the same specificity, after it, so order settles it the same way
+ * it caused it. The resting marker is untouched: weight and the 2px rule stay. */
+.nav a[aria-current]:hover {
+  color: var(--accent);
 }
 
 @media (prefers-reduced-motion: reduce) {
