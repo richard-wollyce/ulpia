@@ -1355,6 +1355,16 @@ input[type="email"]:focus-visible {
 .wordmark a:visited {
   color: inherit;
   text-decoration: none;
+  /* inline-block is what makes the press below exist at all. A transform does
+   * not apply to a non-replaced inline box, so as a plain inline anchor the
+   * rule computed its matrix and moved nothing: the declaration was live and
+   * the pixels were not. `.nav a` never had the bug because it already carried
+   * inline-block for its padding. Measured on the built page: as inline the box
+   * top stays at 15 under :active, as inline-block it goes 19 to 20. The band
+   * does not pay for it, the hairline gap stays 17.41px and the band stays 60px
+   * tall, because only the anchor's own box changes and its glyph centre moves
+   * half a pixel. */
+  display: inline-block;
   transition: color 120ms ease-out, transform 90ms ease-out;
 }
 
@@ -1546,7 +1556,17 @@ input[type="email"]:focus-visible {
  * hairline, and it lives at scaleX(0) until a pointer arrives. On a phone no
  * pointer ever arrives, so a touch reader was being shown a nav item with no
  * evidence it was a link at all. Drawn at 1px here; the current page keeps its
- * 2px and its weight, so the two states stay distinguishable without hover. */
+ * 2px and its weight, so the two states stay distinguishable without hover.
+ *
+ * **The wordmark is deliberately left out, and that is a decision rather than
+ * an oversight.** A reviewer raised it as a gap: on touch the wordmark has no
+ * resting marker either. It does not get one, because the name in the top left
+ * leading home is among the oldest conventions this medium has, and because
+ * the system spends case and tracking specifically to stop identity and
+ * navigation reading as one phrase. Handing identity the navigation's own
+ * marker would undo that in order to restate something the reader already
+ * knows. What it does get is the press, which is what the inline-block on
+ * `.wordmark a` exists for. */
 @media (hover: none) {
   .nav a::after {
     transform: scaleX(1);
