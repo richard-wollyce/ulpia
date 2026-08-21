@@ -1,8 +1,4 @@
-Removed my two probe files from `tools/eye/` after running them; the tree is back to what it was.
-
----
-
-# `eye` — a specification
+# `eye`, a specification
 
 **One line contract.** `eye` renders a surface in headless Chromium across the whole review matrix Aldus's constitution names, samples computed styles at every interaction state, diffs each state against rest, and reports a state that changed nothing as a failure. Pixels are the by-product for Richard. The diff is the product for Aldus.
 
@@ -501,6 +497,24 @@ No pixel diffing against golden images: a golden-image suite fails on every inte
 
 ## 10. Honest status
 
-Nothing in section 1 through 9 has been run as `eye.mjs`, because `eye.mjs` does not exist yet. What I ran was two probes that settle the mechanisms the spec depends on, listed with their results in section 0, and those files are deleted. The measurements that are load-bearing and verified: the settle drain, the false reading from sampling too early, pseudo-element sampling, `:focus-visible` on programmatic focus, the Tab walk leaving the document, the touch active state arriving after release, the coarse-pointer media facts, the infinite-animation hang and its filter, and headless capture with no visible pane. The runtime estimate in section 4 is a guess. `TOUCH_DEAD`, `REDUCE_KILLS_STATE`, `MOTION_5S`, the stateful-target click cancellation and the CDP-free contrast walk are designed but unrun.
+**What has been run.** `eye.mjs` exists and implements the matrix, the preflight, `NO_OP`,
+`TOUCH_DEAD`, `HOVER_ONLY`, `WEAK_SIGNAL`, `CONTRAST_TEXT`, `UNMEASURED` and the per-page
+overflow check. It has been run against the band on all three pages, at 320, 360, 768 and 1280,
+at root font sizes 16, 20 and 24, in both schemes, on a fine and a coarse pointer.
 
-Relevant absolute paths: `C:\Users\user\Desktop\ulpia\tools\eye\` (tool root, `package.json` and `.gitignore` present, `verify-band.mjs` to be deleted on landing), `C:\Users\user\Desktop\ulpia\site\frontend\eye.sheet.mjs` (the sheet, to be created), `C:\Users\user\Desktop\ulpia\site\frontend\src\styles.css` (breakpoints at lines 617 and 1183, reduce collapse at 886, band and nav rules from 1440), `C:\Users\user\Desktop\ulpia\site\frontend\public\theme.js` (the scheme resolution that forces the per-load scheme axis), `C:\Users\user\Desktop\ulpia\fleet\aldus\knowledge\design-system.md` (sections 2 and 7, the source of the canonical token table and the two ground laws).
+The mechanisms this specification was built on, and which the implementation then confirmed by
+failing without them: sampling after the transition settles rather than during it,
+pseudo-element sampling, `:focus-visible` not matching programmatic focus so the walk has to be
+real Tab presses, the coarse-pointer media facts, and headless capture with no visible pane.
+
+**What is designed and not implemented.** The tool prints this list on every run rather than
+letting a green result imply it: the reduced-motion axis, `REDUCE_KILLS_STATE`, `REDUCE_LEAK`,
+`MOTION_5S`, `CONTRAST_NONTEXT`, the no-JavaScript pass, waivers and the contact sheet. The
+runtime estimate in section 4 is still a guess.
+
+**A limit found by a reviewer and not by the tool, which is the honest place to record it.**
+This tool diffs computed styles, and a computed value can change while nothing renders: a
+`transform` on a non-replaced inline box resolves to a matrix and moves no pixels. A state can
+therefore pass `NO_OP` while being invisible to a person. Sampling the bounding box alongside
+the computed set would close it, and until that exists a passing `NO_OP` means the declaration
+changed, not that the reader saw anything.
