@@ -106,6 +106,37 @@ pub struct Briefing {
     pub text: String,
 }
 
+/// Removes one kind of envelope, `open` to `close`, wherever it appears.
+///
+/// An unterminated block is treated as running to the end of the text: a truncated
+/// envelope is still an envelope, and the alternative is to keep half a machine message
+/// and score it as if a person had typed it.
+fn strip_blocks(text: &str, open: &str, close: &str) -> String {
+    let mut out = String::with_capacity(text.len());
+    let mut rest = text;
+    loop {
+        let Some(i) = rest.find(open) else {
+            out.push_str(rest);
+            return out;
+        };
+        out.push_str(&rest[..i]);
+        let after = &rest[i + open.len()..];
+        let Some(j) = after.find(close) else { return out };
+        rest = &after[j + close.len()..];
+    }
+}
+
+/// The runtime's own envelopes, taken out before the prompt is judged to be a question.
+///
+/// **Stripping, not matching.** A substring test for the notification marker would also
+/// silence a real message that quotes a notification in order to ask about it, which is
+/// how this defect was reported in the first place. What survives the envelopes is what
+/// the person actually typed, and if nothing survives then nothing was asked.
+pub fn without_machine_blocks(prompt: &str) -> String {
+    let s = strip_blocks(prompt, "<system-reminder>", "</system-reminder>");
+    strip_blocks(&s, "<task-notification>", "</task-notification>")
+}
+
 /// Routes one message and produces what the runtime should inject.
 pub fn brief(memory: &Memory, root: &Path, req: &Request, top: usize) -> Briefing {
     // An empty prompt is a session opening rather than a question. Routing it would rank
@@ -114,7 +145,26 @@ pub fn brief(memory: &Memory, root: &Path, req: &Request, top: usize) -> Briefin
         return Briefing { agent: None, switched: false, text: roster(memory) };
     }
 
-    let answer = memory.ask(&req.prompt, top);
+    // **Machine text is not a question.** The runtime submits background task
+    // notifications on this same hook, in the same field, so without this the router
+    // ranked files against "a background command has completed" and paid a classifier
+    // subprocess to decide who owns it. Observed over three consecutive notifications it
+    // answered zed, then zed with a caveat, then nobody: three different answers to a
+    // question nobody asked.
+    //
+    // **Silence, not the roster.** The last routed agent's constitution is still in the
+    // conversation, so emitting nothing leaves whoever was working still working, which
+    // is the only correct response to a notification. It also leaves the session's
+    // remembered agent untouched, because nothing below this line runs. The roster above
+    // is for a session opening, which is a different event with a different right answer.
+    let asked = without_machine_blocks(&req.prompt);
+    if asked.trim().is_empty() {
+        return Briefing { agent: None, switched: false, text: String::new() };
+    }
+
+    // Everything downstream scores `asked` rather than the raw prompt, so an envelope
+    // appended to a real question cannot contribute its vocabulary to the ranking.
+    let answer = memory.ask(&asked, top);
 
     // **Retrieval is code; choosing who answers is a judgement.** ADR-0013 said so and
     // this is where it finally holds: the deterministic sum is now the fallback, and a
@@ -131,7 +181,7 @@ pub fn brief(memory: &Memory, root: &Path, req: &Request, top: usize) -> Briefin
     let verdict = crate::classify::run(
         &classifier,
         root,
-        &crate::classify::dossier(memory, &req.prompt, &answer.found, answer.confidence),
+        &crate::classify::dossier(memory, &asked, &answer.found, answer.confidence),
         &roster_names,
     )
     .or_else(|| {
@@ -364,6 +414,61 @@ mod tests {
     #[test]
     fn a_payload_that_is_not_json_is_not_a_panic() {
         assert!(parse_request("not json at all").is_none());
+    }
+
+    /// The defect this guard exists for: the runtime submits background task
+    /// notifications on the same hook and in the same field as a question, so the router
+    /// was ranking files against machine text and paying a classifier subprocess to
+    /// decide who owns it.
+    #[test]
+    fn a_notification_leaves_nothing_to_ask() {
+        let notification = "<system-reminder>\n[SYSTEM NOTIFICATION - NOT USER INPUT]\n\
+             <task-notification>\n<task-id>abc</task-id>\n<status>completed</status>\n\
+             </task-notification>\n</system-reminder>";
+        assert!(without_machine_blocks(notification).trim().is_empty());
+    }
+
+    /// Why this strips rather than matching a marker. A person quoting a notification in
+    /// order to ask about it is asking a question, and a substring test would have
+    /// silenced the very message that reported this defect.
+    #[test]
+    fn a_question_that_quotes_a_notification_survives() {
+        let asked = without_machine_blocks(
+            "<system-reminder>[SYSTEM NOTIFICATION - NOT USER INPUT]</system-reminder>\n\
+             porque o roteador recebe isso?",
+        );
+        assert!(!asked.trim().is_empty());
+        assert!(asked.contains("porque o roteador recebe isso?"));
+        assert!(!asked.contains("SYSTEM NOTIFICATION"));
+    }
+
+    /// An envelope appended to a real question must not lend its vocabulary to the
+    /// ranking. The question is what gets scored, and nothing else.
+    #[test]
+    fn an_envelope_never_reaches_the_ranking() {
+        let asked = without_machine_blocks(
+            "quanto de proteina<system-reminder>cwd, git status, background task\
+             </system-reminder>",
+        );
+        assert_eq!(asked.trim(), "quanto de proteina");
+    }
+
+    /// A truncated envelope is still an envelope. Keeping the half that arrived would
+    /// score machine text as though a person had typed it.
+    #[test]
+    fn an_unterminated_envelope_is_dropped_to_the_end() {
+        assert_eq!(without_machine_blocks("<system-reminder>cortado ao meio").trim(), "");
+    }
+
+    /// The two events are different and have different right answers: a session opening
+    /// gets the roster so the model knows who exists, a notification gets silence so
+    /// whoever was already working stays working.
+    #[test]
+    fn a_notification_is_not_the_same_event_as_an_empty_prompt() {
+        assert!(without_machine_blocks("").trim().is_empty());
+        assert!(without_machine_blocks("<task-notification>x</task-notification>")
+            .trim()
+            .is_empty());
     }
 
     /// The session id arrives from outside the program and is used to build a path.
