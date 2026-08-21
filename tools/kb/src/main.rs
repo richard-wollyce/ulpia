@@ -351,14 +351,22 @@ fn cmd_init(name: &str, fleet: &Path) -> ExitCode {
         Ok(made) => {
             println!("created {}", made.path.display());
             println!("  {} files and directories", made.files);
-            if made.git {
-                println!("  git initialised");
-            } else {
+            match made.vcs {
+                init::Vcs::Initialised => println!("  git initialised"),
+                // Said out loud rather than left implicit, because the alternative was
+                // a repository nested inside the fleet's own, and nothing complains
+                // about that until a gitlink is committed months later.
+                init::Vcs::Enclosing => {
+                    println!("  a repository already covers this path, so none was created:");
+                    println!("  the files are staged into it and yours is the commit to write.");
+                }
                 // Not cosmetic. The privacy gate reads `git ls-files` per base, so a
                 // base outside git has no knowable private layer and `Memory::open`
                 // refuses to serve it.
-                eprintln!("  git could NOT be initialised. Run `git init` here before");
-                eprintln!("  serving this agent, or its private layer is unknowable.");
+                init::Vcs::Untouched => {
+                    eprintln!("  git could NOT be run here. Put this base under a repository");
+                    eprintln!("  before serving the agent, or its private layer is unknowable.");
+                }
             }
             println!();
             println!("Next: fill in agent.txt's role, then index.md. Both are placeholders,");
