@@ -197,6 +197,13 @@ pub struct Outcome {
     /// Promoters that were configured and did not answer. Degraded and silent is the
     /// combination this repository keeps paying for, so it is carried rather than logged.
     pub unreachable: Vec<String>,
+    /// The cap, if a cap ended the run before the deposit was exhausted.
+    ///
+    /// Carried rather than inferred, because a run that stopped at its cap and a run that
+    /// finished the deposit print the same counts, and only one of them means "the rest of
+    /// the deposit is still there". A truncated run that looks complete is how an unattended
+    /// command quietly stops doing half its job.
+    pub stopped_at: Option<usize>,
 }
 
 impl Outcome {
@@ -206,6 +213,115 @@ impl Outcome {
 
     pub fn refused(&self) -> usize {
         self.decided.iter().filter(|d| !d.accepted()).count()
+    }
+
+    /// Proposals all three lenses admitted, whether or not a file was written for them.
+    ///
+    /// This and not [`Outcome::written`] is what the cap counts, so `--dry-run --max 3`
+    /// stops where the real run would stop. A cap that only bites when something is
+    /// written cannot be rehearsed, and a cap nobody can rehearse is a cap nobody trusts.
+    pub fn admitted(&self) -> usize {
+        self.decided.iter().filter(|d| d.accepted()).count()
+    }
+}
+
+// -- one run at a time -------------------------------------------------------
+
+/// Where the running-now marker lives, beside `fleet.txt` and `kb-rejections.txt`.
+pub const LOCK: &str = ".kb-promote.lock";
+
+/// How long a marker is believed before it is treated as debris, in seconds.
+///
+/// A promotion run is minutes, not hours, because it is bounded by model calls that each
+/// have their own timeout. An hour is long enough that no live run is ever shot in the
+/// back, and short enough that a machine which lost power at the wrong moment promotes
+/// again the same day instead of never again.
+pub const LOCK_STALE_SECS: u64 = 3600;
+
+/// Held for the duration of a run, released by dropping it.
+///
+/// **Why this exists at all:** the trigger is a session-end hook, and sessions end
+/// together. Two runs over the same deposit both call promoter one on the same file, and
+/// the duplication lens cannot save them, because it is shown what the base holds and
+/// neither run has written anything yet. Both proposals look new, both are admitted, and
+/// the base gains the same note twice. Serialising the runs is the only place that is
+/// fixable: by the time the reviewer sees it, the information needed is in another process.
+#[derive(Debug)]
+pub struct Lock {
+    path: PathBuf,
+    /// Set when this lock was taken over from a marker old enough to be debris. The
+    /// caller prints it. A run that quietly stepped over another run's marker is a run
+    /// that will do it again next time and never say so.
+    pub took_over: Option<String>,
+}
+
+impl Lock {
+    /// Takes the lock, or explains who has it.
+    ///
+    /// The mechanism is `create_new`, which is `O_EXCL` on Unix and `CREATE_NEW` on
+    /// Windows: the file system decides the race, so two processes cannot both believe
+    /// they created it. A check-then-create would leave exactly the window this exists
+    /// to close.
+    pub fn take(fleet_root: &Path) -> Result<Lock, String> {
+        let path = fleet_root.join(LOCK);
+        match Self::create(&path) {
+            Ok(()) => return Ok(Lock { path, took_over: None }),
+            Err(e) if e.kind() != std::io::ErrorKind::AlreadyExists => {
+                return Err(format!("could not write {}: {e}", path.display()));
+            }
+            Err(_) => {}
+        }
+
+        // Somebody holds it, or somebody died holding it. A lock that is never broken
+        // turns one crash into a feature that is off forever and says nothing.
+        let age = std::fs::metadata(&path)
+            .and_then(|m| m.modified())
+            .ok()
+            .and_then(|t| t.elapsed().ok())
+            .map(|d| d.as_secs());
+
+        match age {
+            Some(secs) if secs > LOCK_STALE_SECS => {
+                let held = std::fs::read_to_string(&path).unwrap_or_default().trim().to_string();
+                let _ = std::fs::remove_file(&path);
+                match Self::create(&path) {
+                    Ok(()) => Ok(Lock {
+                        path,
+                        took_over: Some(format!(
+                            "took over a lock last touched {} minutes ago, left by {}. \
+                             A previous run died without releasing it.",
+                            secs / 60,
+                            if held.is_empty() { "an unnamed process" } else { &held }
+                        )),
+                    }),
+                    Err(e) => Err(format!("stale lock, and re-taking it failed: {e}")),
+                }
+            }
+            Some(secs) => Err(format!(
+                "another promotion run holds {} (started {}s ago).",
+                path.display(),
+                secs
+            )),
+            None => Err(format!("another promotion run holds {}.", path.display())),
+        }
+    }
+
+    fn create(path: &Path) -> std::io::Result<()> {
+        use std::io::Write as _;
+        let mut f = std::fs::OpenOptions::new().write(true).create_new(true).open(path)?;
+        writeln!(f, "pid {}", std::process::id())
+    }
+
+    pub fn path(&self) -> &Path {
+        &self.path
+    }
+}
+
+impl Drop for Lock {
+    fn drop(&mut self) {
+        // Best effort on purpose. A lock file left behind is recovered by the staleness
+        // rule above; a panic inside Drop while unwinding would abort the process.
+        let _ = std::fs::remove_file(&self.path);
     }
 }
 
@@ -656,6 +772,11 @@ pub fn deposit_files(agent_root: &Path) -> Vec<PathBuf> {
 /// model in it, and promoter two sees the router's answer and the proposal but never
 /// promoter one. Each step is separated by a function boundary rather than by discipline,
 /// so the independence survives whoever edits the prompts next.
+/// `max` caps how many proposals one run may admit before it stops and leaves the rest of
+/// the deposit where it is. It exists because this command now runs with nobody watching:
+/// a bounded blast radius is the difference between a bad afternoon and a base to restore.
+/// It is **not** the self-limiting rule ADR-0030 leaves unbuilt, which is a junk-rate
+/// threshold measured from what was written, and which cannot be chosen from zero runs.
 pub fn run(
     memory: &Memory,
     fleet_root: &Path,
@@ -664,11 +785,21 @@ pub fn run(
     top: usize,
     dry_run: bool,
     today: &str,
+    max: Option<usize>,
 ) -> Outcome {
     let mut outcome = Outcome::default();
 
-    for agent in memory.agents.iter().filter(|a| a.routable) {
+    'agents: for agent in memory.agents.iter().filter(|a| a.routable) {
         for file in deposit_files(&agent.root) {
+            // Checked before the deposit file is read rather than after it is decided, so
+            // the cap costs nothing once it has bitten. A run that keeps calling models
+            // after it stopped writing is paying for output it already refused to use.
+            if let Some(cap) = max {
+                if outcome.admitted() >= cap {
+                    outcome.stopped_at = Some(cap);
+                    break 'agents;
+                }
+            }
             let name = file.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
             let source = format!("{}/{}/{}", agent.name, DEPOSIT, name);
             let Ok(text) = std::fs::read_to_string(&file) else { continue };
@@ -686,6 +817,15 @@ pub fn run(
             }
 
             for proposal in proposals {
+                // And again here, because one deposit file can produce several proposals
+                // and the cap is a cap on notes, not on files.
+                if let Some(cap) = max {
+                    if outcome.admitted() >= cap {
+                        outcome.stopped_at = Some(cap);
+                        break 'agents;
+                    }
+                }
+
                 // The independent input. Deterministic, no model, our own router.
                 let evidence = evidence_for(memory, &proposal, top);
 
@@ -761,6 +901,85 @@ mod tests {
                  argument to reach the reviewer. See the module header."
             );
         }
+    }
+
+    fn scratch(name: &str) -> PathBuf {
+        let dir = std::env::temp_dir().join(format!("kb-promote-{name}"));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).expect("mkdir");
+        dir
+    }
+
+    #[test]
+    fn a_second_run_is_turned_away_while_the_first_holds_the_lock() {
+        // The trigger is a session-end hook and sessions end together. If both runs get
+        // in, both call promoter one on the same deposit file, both proposals look new to
+        // the duplication lens because neither has written yet, and the base gains the
+        // note twice. This is the only place that race is visible.
+        let dir = scratch("two-runs");
+        let first = Lock::take(&dir).expect("the first run takes it");
+        assert!(first.took_over.is_none(), "nothing was there to take over");
+        assert!(dir.join(LOCK).exists(), "the marker is a real file or it guards nothing");
+
+        let second = Lock::take(&dir);
+        assert!(second.is_err(), "a second run must not start while the first is in flight");
+
+        drop(first);
+        assert!(!dir.join(LOCK).exists(), "releasing the lock removes the marker");
+        Lock::take(&dir).expect("once released, the next run may start");
+    }
+
+    #[test]
+    fn a_marker_left_by_a_dead_run_does_not_switch_promotion_off_forever() {
+        // The opposite failure to the one above, and the more expensive one: a machine
+        // that lost power mid-run leaves a marker, every later run declines, and the
+        // feature is off with nobody told. Backdating the file is how the staleness rule
+        // gets tested without waiting an hour.
+        let dir = scratch("stale");
+        std::fs::write(dir.join(LOCK), "pid 4242\n").expect("plant a marker");
+        let old = std::time::SystemTime::now() - std::time::Duration::from_secs(LOCK_STALE_SECS + 60);
+        filetime_set(&dir.join(LOCK), old);
+
+        let took = Lock::take(&dir).expect("a stale marker is debris, not a holder");
+        let note = took.took_over.clone().expect("taking one over is never silent");
+        assert!(note.contains("4242"), "the note names who left it: {note}");
+    }
+
+    /// Backdates a file's modified time. Written by hand because the crate has one
+    /// dependency and adding a second to age a file in one test is not a trade.
+    fn filetime_set(path: &Path, when: std::time::SystemTime) {
+        let f = std::fs::OpenOptions::new().write(true).open(path).expect("open");
+        f.set_modified(when).expect("set mtime");
+    }
+
+    #[test]
+    fn the_cap_counts_what_was_admitted_so_a_dry_run_stops_where_a_real_run_would() {
+        // `--max` has to bite identically with and without `--dry-run`, or the rehearsal
+        // is not a rehearsal. `written()` is zero in a dry run, so counting writes would
+        // make the cap silently infinite there.
+        let admit = |accept: bool| Decided {
+            proposal: Proposal {
+                agent: "zed".into(),
+                slug: "s".into(),
+                folder: "knowledge".into(),
+                summary: "x".into(),
+                keys: vec!["a".into()],
+                body: "b".into(),
+                source: "inbox/x.md".into(),
+            },
+            reviews: Lens::ALL
+                .iter()
+                .map(|&lens| Review { lens, accept, reason: String::new() })
+                .collect(),
+            written: None,
+        };
+
+        let outcome = Outcome {
+            decided: vec![admit(true), admit(false), admit(true)],
+            ..Outcome::default()
+        };
+        assert_eq!(outcome.written(), 0, "a dry run writes nothing");
+        assert_eq!(outcome.admitted(), 2, "and still admitted two, which is what the cap counts");
     }
 
     #[test]

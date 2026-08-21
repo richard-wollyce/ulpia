@@ -30,6 +30,7 @@ usage:
     kb eval <gold.tsv> [path]... [--top N] [--all] [--classify]
     kb commit <path>... -m <message>
     kb boot [path]... [--top N] [--all]
+    kb promote [path]... [--top N] [--all] [--dry-run] [--max N] [--lock]
     kb ui [path]... [--port N] [--all]
     kb serve [path]... [--top N] [--all]
 
@@ -37,10 +38,14 @@ usage:
     --emit      blocks: print the assembled resident constitution instead of the report
     --strict    check: count warnings toward the exit code
     --all       include files git does not track, normally the private layer
-    --top N     route: how many candidates to print, default 5
+    --top N     how many candidates to carry, default 5. route, boot, eval,
+                promote and serve all read it
     --keys      write: the words a real question would use. Required, no way to skip
-    --summary   write: one line for the map, saying what the note is about
+    --summary   write: one line saying what the note is about, for its `Exists to:`
+                header and for the map entry
     --folder    write: where under the agent it lands, default knowledge
+    --provenance write: human, agent or external. Default agent
+    --stage     write: raw, distilled or derived. Default derived
     -m          commit: the message. Required, and so is at least one path
 
 commit exists because more than one session writes these repositories at once.
@@ -54,32 +59,52 @@ different questions, and never sees the first one's reasoning. Only a unanimous 
 writes, at stage `captured`. A refusal is counted in kb-rejections.txt, because the same
 proposal refused three times is a gap in the base rather than a bad proposal.
     --dry-run   decide everything and write nothing
+    --max N     stop after N proposals are admitted and leave the rest of the deposit
+                where it is. A bound on the blast radius of a run nobody is watching,
+                counted the same in a dry run so the cap can be rehearsed
+    --lock      refuse to start while another run holds .kb-promote.lock. Needed when
+                promotion runs from a session-end hook, because sessions end together
+                and two runs over one deposit both propose the same note before either
+                has written it, which is a duplicate no lens can see
 
-write reads the note body from stdin and creates the file and its MAP entry in one
-act. A note the map does not list is a note no question can reach, so there is no
-flag that writes one without the other.
+write reads the note body from stdin and writes the keys twice: into the note's own
+`**Search for:**` header, which since ADR-0028 is the only thing the router indexes,
+and into an entry in the agent's MAP.md, which is a reading list for a person. Keys
+are required and there is no flag to skip them, because a file with no `Search for:`
+line builds no index entry and scores zero on every question. The map is optional to
+`kb check` and to the index, and not to this command: write refuses when the agent
+has no MAP.md, and a failed map write deletes the note again rather than leaving one
+half behind.
 
 Each agent keeps its own index at <agent>/.kb/index.db. There is no shared index
 and no --db flag: which database you get used to depend on where you were standing,
 and that cost three separate incidents.
-    --json      index: print the map entries as JSON instead of building the index
+    --json      index: print the index entries as JSON instead of building the index
     --hybrid    route: fuse the keyword scorer with full text search over chunks
 
 serve speaks MCP over stdio, so Claude Code, Claude Desktop or any other MCP client
-can search the base. It never serves what git ignores unless --all says so, and it
-refuses to start when git cannot be consulted, because unknown is not public.
+can search the base. It never serves what git ignores unless --all says so, and a
+base where git could not be consulted is left out of the open with a notice on
+stderr rather than served, because unknown is not public. The rest of the fleet
+still opens: one husk from a rename in progress used to close every base.
 
 checks:
     E01 broken-link     a [[link]] with no file behind it
-    E02 not-indexed     a note in the knowledge folder with no `Search for:` line
+    E02 not-indexed     a file with no `Search for:` line, so the index has no entry
     W01 ambiguous-link  a [[link]] matching more than one file
-    W02 no-search-line  a map entry with no Search for line
+    W02 no-search-line  a map entry with no Search for line, where a map exists
     W06 thin-keywords   a `Search for:` line too short to be found by a real question
     W07 dead-key        a key that reaches neither the keyword nor the phrase index
     W03 dash            an em dash or en dash, which house style forbids
-    W04 front-matter    a note declaring a source with no evidence_tier or valid_for
+    W04 front-matter    front matter declaring source or type with no evidence_tier
+                        or valid_for
     W05 no-provenance   a note with no provenance or stage, so who wrote it is unknown
     E04 bad-provenance  provenance or stage carries a value outside the legal set
+
+E02, W06 and W07 are asked of every file the index walks, not only of the knowledge
+folder, and they skip the files nobody searches for: README.md, MAP.md, CLAUDE.md,
+what-goes-here.md, MOVED.md, and anything under inbox/ or records/. There is no rule
+demanding a MAP.md any more; the index walks files and a base without one indexes.
 
 exit code is 1 when check finds errors, or when --strict and it finds warnings.
 ";
@@ -89,7 +114,7 @@ const LINES_SHOWN: usize = 3;
 
 /// Flags that consume the argument after them.
 const VALUE_FLAGS: &[&str] =
-    &["--top", "--keys", "--summary", "--folder", "--provenance", "--stage", "-m", "--port"];
+    &["--top", "--keys", "--summary", "--folder", "--provenance", "--stage", "-m", "--port", "--max"];
 
 fn main() -> ExitCode {
     let args: Vec<String> = std::env::args().skip(1).collect();
@@ -175,6 +200,8 @@ fn main() -> ExitCode {
             all,
             top,
             args.iter().any(|a| a == "--dry-run"),
+            flag_value(&args, "--max").and_then(|v| v.parse().ok()),
+            args.iter().any(|a| a == "--lock"),
         ),
         "ui" => {
             let port = flag_value(&args, "--port")
@@ -697,7 +724,14 @@ fn cmd_route(question: &str, paths: &[&str], all: bool, top: usize, hybrid: bool
 /// The whole design is in `promote.rs`. What lives here is the reporting, and it reports
 /// refusals as loudly as writes: a promotion run whose output is only what it wrote is a
 /// run that looks successful when it accepted everything.
-fn cmd_promote(paths: &[&str], all: bool, top: usize, dry_run: bool) -> ExitCode {
+fn cmd_promote(
+    paths: &[&str],
+    all: bool,
+    top: usize,
+    dry_run: bool,
+    max: Option<usize>,
+    lock: bool,
+) -> ExitCode {
     let given: Vec<&Path> = paths.iter().map(Path::new).collect();
     let memory = match memory::Memory::open(&given, all) {
         Ok(m) => m,
@@ -728,8 +762,32 @@ fn cmd_promote(paths: &[&str], all: bool, top: usize, dry_run: bool) -> ExitCode
         return ExitCode::from(2);
     }
 
+    // Taken after both promoters are known to be configured and before the first model
+    // call, so a misconfigured fleet does not leave a marker behind for the run that would
+    // have worked. Held by the binding until this function returns: `Lock` releases on
+    // drop, which covers the early returns below without any of them remembering to.
+    let _held = if lock {
+        match promote::Lock::take(root) {
+            Ok(l) => {
+                if let Some(note) = &l.took_over {
+                    eprintln!("kb promote: {note}");
+                }
+                Some(l)
+            }
+            Err(e) => {
+                // Exit 0, not an error. Declining because a run is already in flight is
+                // this flag doing its job, and a hook that reports success only when it
+                // did work is a hook whose failures nobody can find.
+                println!("kb promote: {e} Nothing was read and nothing was written.");
+                return ExitCode::SUCCESS;
+            }
+        }
+    } else {
+        None
+    };
+
     let today = today();
-    let outcome = promote::run(&memory, root, &promoter, &reviewer, top, dry_run, &today);
+    let outcome = promote::run(&memory, root, &promoter, &reviewer, top, dry_run, &today, max);
 
     if dry_run {
         println!("dry run: nothing was written and no refusal was recorded.\n");
@@ -772,6 +830,13 @@ fn cmd_promote(paths: &[&str], all: bool, top: usize, dry_run: bool) -> ExitCode
     );
     if outcome.refused() > 0 && !dry_run {
         println!("Refusals are counted in {}.", promote::REJECTIONS_TXT);
+    }
+    // Said out loud, because the counts above look identical to a run that finished.
+    if let Some(cap) = outcome.stopped_at {
+        println!(
+            "Stopped at the cap of {cap}. The rest of the deposit was not read and is \
+             still there. Run again, or raise --max, once you have looked at these."
+        );
     }
 
     if outcome.unreachable.is_empty() { ExitCode::SUCCESS } else { ExitCode::from(1) }

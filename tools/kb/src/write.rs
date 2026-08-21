@@ -33,8 +33,10 @@
 
 use std::path::{Path, PathBuf};
 
-const PROVENANCE: &[&str] = &["human", "agent", "external"];
-const STAGE: &[&str] = &["raw", "distilled", "derived"];
+// The linter's lists, not a second pair. Keeping a copy here is what let `captured` be legal
+// to `kb check` and illegal to `kb write` at the same time, which made `kb promote` unable to
+// write anything it admitted. See the note on those constants.
+use crate::checks::{PROVENANCE, STAGE};
 
 /// What a note needs before it is allowed to exist.
 pub struct Note {
@@ -93,7 +95,7 @@ pub enum WriteError {
     Exists(PathBuf),
     NoKeys,
     EmptyBody,
-    BadField(&'static str, String, &'static str),
+    BadField(&'static str, String, String),
     Io(PathBuf, std::io::Error),
 }
 
@@ -264,11 +266,10 @@ fn check_field(
     if legal.contains(&got) {
         return Ok(());
     }
-    let joined = if name == "provenance" {
-        "human, agent, external"
-    } else {
-        "raw, distilled, derived"
-    };
+    // Built from the list rather than typed beside it. The hand written version said
+    // "raw, distilled, derived" for months after a fourth rung existed, so the message
+    // that was supposed to tell you the legal values was itself the stale copy.
+    let joined: String = legal.join(", ");
     Err(WriteError::BadField(name, got.to_string(), joined))
 }
 
@@ -377,6 +378,27 @@ mod tests {
         )
         .expect("write map");
         dir
+    }
+
+    #[test]
+    fn the_stage_a_promotion_writes_is_a_stage_this_can_write() {
+        // The bug this pins: `checks.rs` gained `captured` for ADR-0030 and this file kept
+        // its own copy of the list, so the linter accepted the word and the writer refused
+        // it. `kb promote` could admit a proposal unanimously and then fail at the write,
+        // and nobody saw it, because until the trigger existed every proposal had been
+        // refused before it got that far. Asserting the constant rather than the string
+        // means the next rung is added in one place or the test says so.
+        assert!(
+            STAGE.contains(&crate::promote::CAPTURED),
+            "promote::CAPTURED is '{}', which kb write will not accept, so promotion \
+             cannot write the notes it admits",
+            crate::promote::CAPTURED
+        );
+
+        let dir = base("captured-stage");
+        let mut spec = spec();
+        spec.stage = crate::promote::CAPTURED.into();
+        note(&dir, "zed", "promoted-note", &spec).expect("a promoted note is writable");
     }
 
     #[test]

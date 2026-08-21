@@ -21,9 +21,15 @@
 //!    whatever version the client named rather than asserting one.
 //!
 //! What it deliberately does not have yet is a write tool. `kb_remember` measures and
-//! proposes; nothing here edits a file. A write tool reached by a model is a
+//! proposes; no tool here writes to the base. A write tool reached by a model is a
 //! different security surface and gets built deliberately, not as an afterthought
 //! while the retrieval side is still warm.
+//!
+//! One file is written, and saying "nothing is written" hid it: a miss in `kb_route`
+//! or `kb_retrieve` calls `Memory::record_miss`, which appends the question and the
+//! terms offered back to `kb-misses.txt` beside the fleet manifest. That is a log of
+//! what could not be answered, not knowledge, and it is the record ADR-0016's
+//! successor reads to find out which gaps are real.
 
 use std::io::{BufRead, Write};
 use std::path::{Path, PathBuf};
@@ -56,10 +62,11 @@ pub fn serve(paths: &[&str], all: bool, top: usize) -> ExitCode {
     let owned: Vec<PathBuf> = paths.iter().map(PathBuf::from).collect();
     let refs: Vec<&Path> = owned.iter().map(|p| p.as_path()).collect();
 
-    // Everything the server knows about the base comes through Memory, including the
-    // refusal when git could not be consulted. Rebuilding the pipeline here is how a
-    // second caller ends up expanding aliases for one scorer and not the other, which
-    // has already happened once in this codebase.
+    // Everything the server knows about the base comes through Memory, including what
+    // happens when git could not be consulted: `Memory::open` leaves that base out and
+    // says so on stderr, and the open succeeds with the rest. Rebuilding the pipeline
+    // here is how a second caller ends up expanding aliases for one scorer and not the
+    // other, which has already happened once in this codebase.
     let memory = match Memory::open(&refs, all) {
         Ok(m) => m,
         Err(e) => {
@@ -203,9 +210,12 @@ impl Server {
                 tool(
                     "kb_route",
                     "Ask which files in the knowledge base a question should open. Returns \
-                     ranked file paths with the words that matched, so a bad ranking can be \
-                     diagnosed rather than guessed at. Cheap and does not return file contents. \
-                     Use it to decide what to read; use kb_retrieve when you want the text. \
+                     ranked file paths with the words that matched and an EVIDENCE line \
+                     carrying the score, the floor and the verdict, so a bad ranking can be \
+                     diagnosed rather than guessed at. It returns no file contents, which is \
+                     the difference from kb_retrieve; it is not cheaper, because the evidence \
+                     costs the same second pass over the corpus. Use it to decide what to \
+                     read; use kb_retrieve when you want the text. \
                      When nothing matches it offers back terms the base does know that look \
                      like the words you used, which is a spelling comparison and not a \
                      semantic one: it reaches a typo or a cognate and never reaches a \
@@ -349,9 +359,13 @@ impl Server {
                 concat!(
                 "NOTE: only one of the two scorers ranked any of these, so this is a guess ",
                 "rather than an answer. Agreement between the keyword index and the full text ",
-                "index is the strongest signal available without a model, and there is none ",
-                "here. Treat these as leads, and consider that the base may not cover the ",
-                "question at all.
+                "index is observed here rather than assumed, and there is none of it. Read it ",
+                "for what it is: agreement says a file is on topic and says nothing about ",
+                "whether the base covers the topic, so it is reported and never gates a ",
+                "verdict. It is also worth less than the word suggests, because the text side ",
+                "is merged round robin per agent, so a file that is its own agent's best match ",
+                "is admitted without competing against the others. Treat these as leads, and ",
+                "consider that the base may not cover the question at all.
 
 ",
             )
@@ -449,10 +463,11 @@ const SUGGEST_LIMIT: usize = 8;
 fn nothing_to_search() -> String {
     "This base has no knowledge files yet, so nothing could have matched. That is a \
      fact about the base and not about the question.\n\n\
-     A base is filled by putting markdown in the agent's knowledge/ folder, listing \
-     each file in MAP.md with a `Search for:` line naming the words a real question \
-     would use, and running `kb index`. An entry without that line is an entry \
-     nothing can reach.\n\n\
+     A base is filled by putting markdown in the agent's folder, giving each file a \
+     `Search for:` line of its own near the top, naming the words a real question \
+     would use, and running `kb index`. The line lives in the file it describes, not \
+     in a list somewhere else, so a file without one is a file nothing can reach and \
+     no map can rescue.\n\n\
      kb_fleet works regardless: who this fleet is and which agents exist is read \
      from fleet.txt and each agent.txt, not from the index, so identity is \
      answerable before a single note is written."

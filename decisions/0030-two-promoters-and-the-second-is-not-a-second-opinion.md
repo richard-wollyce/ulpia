@@ -141,15 +141,47 @@ the entire reason this record was written. Kept as the outer gate rather than th
 
 ## What is not built yet, and is named so it is not mistaken for built
 
-- **The trigger.** Richard's design is idle detection: a session that stopped receiving
-  input. In Claude Code that is a `Stop` or `SessionEnd` hook, not a cron, because
-  ociosidade is observable and a clock is not. `kb promote` runs by hand today.
+- ~~**The trigger.**~~ **Built 2026-08-20**, and the two decisions it forced are below.
 - **What writes into the deposit.** Nothing does. Files arrive there by hand. Session capture
   is the other half of the episodic story and is its own decision.
 - **The self-limiting rule.** The measurement that makes automatic promotion safe is the
   junk rate of what it wrote, countable from `git diff` because the output is files. A run
   that exceeds a threshold should stop and wait for a person. The number is not yet chosen,
   and choosing it from zero runs would be inventing it.
+
+## Amended 2026-08-20: the trigger, and the two things building it decided
+
+**`SessionEnd`, not `Stop`.** `Stop` fires after every assistant turn, which is not idleness:
+the person is reading and about to type. `SessionEnd` fires once, when the session actually
+stops receiving input, which is the ociosidade this record asked for.
+
+**A real run, not `--dry-run`.** A dry run writes nothing ever, so a trigger firing one is a
+scheduled no-op whose whole output is a log nobody opens, and promotion would still only
+happen when somebody typed the command. That is the state this record exists to leave. The
+safety does not come from refusing to write; it comes from unanimity across three lenses, from
+every ambiguity resolving toward writing nothing, and from `stage: captured` marking every
+note no person has read.
+
+**It does not block the exit.** `kb promote` is one Sonnet call per deposit file plus three
+Opus calls per proposal, which is minutes. A hook that holds a session open for minutes is a
+hook people switch off, so `.claude/hooks/promote-on-idle.sh` detaches the run and returns.
+Measured: the hook returns in about 0.2s; the detached run took roughly six minutes and
+outlived the shell that spawned it. The cost of detaching is that no exit code reaches Claude
+Code, so `fleet/kb-promote.log` is the only record, and it lives under `fleet/` because
+refusal reasons quote private notes verbatim.
+
+**`--lock` and `--max`.** Two sessions ending at once would otherwise both promote from the
+same deposit. `--max 3` bounds the blast radius of one run. **Three is a chosen number and not
+a measured one**, and it is not the self-limiting rule this record still leaves open: that rule
+is a junk rate counted from what promotion actually wrote, and it cannot be chosen yet because
+promotion has written nothing.
+
+**What the trigger does not do is write into the deposit.** That is still the second unbuilt
+item and it belongs to the transcription work: `tools/scribe` writes `.txt` and `.json` plus a
+`SOURCES.md` ledger into `<agent>/inbox/transcripts/`, while `promote::deposit_files` is a non
+recursive read of `<agent>/inbox` filtered to `.md`. The two do not collide, and they do not
+yet meet. Promotion becomes reachable for a transcript when something writes an adapted `.md`
+at the top level of the deposit, which is one file placement and no code change on either side.
 
 ## Consequences
 

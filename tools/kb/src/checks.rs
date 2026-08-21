@@ -145,13 +145,19 @@ pub fn front_matter(text: &str) -> Option<Vec<(String, String)>> {
 /// Legal values for the two axes in ADR-0007. They are orthogonal on purpose:
 /// provenance says who made the claim, stage says where it is in its life, and
 /// collapsing them is how a base loses track of what was verified.
-const PROVENANCE: &[&str] = &["human", "agent", "external"];
+///
+/// **Public because `write.rs` reads them from here rather than keeping its own copy.**
+/// It kept its own copy until 2026-08-20, and the two drifted the moment `captured` was
+/// added: the linter accepted the word, the writer rejected it, and `kb promote` could not
+/// write a single note. Nobody saw it, because every proposal until then had been refused
+/// before reaching the write. One list, so a new rung is added once or not at all.
+pub const PROVENANCE: &[&str] = &["human", "agent", "external"];
 /// `captured` is the rung a promoted note lands on.
 ///
 /// Kept out of `distilled` deliberately. A note that arrived through `kb promote` was read
 /// by a model and reviewed by a model and by no person, and ADR-0007's rule is that an
 /// agent claim is never quietly promoted. The word says who has and has not looked at it.
-const STAGE: &[&str] = &["raw", "captured", "distilled", "derived"];
+pub const STAGE: &[&str] = &["raw", "captured", "distilled", "derived"];
 
 pub struct MapEntry {
     pub line: usize,

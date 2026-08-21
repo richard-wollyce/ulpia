@@ -10,6 +10,17 @@
           }
         ]
       }
+    ],
+    "SessionEnd": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"$CLAUDE_PROJECT_DIR/.claude/hooks/promote-on-idle.sh\"",
+            "timeout": 10
+          }
+        ]
+      }
     ]
   }
 }

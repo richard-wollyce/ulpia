@@ -9,8 +9,13 @@ library, which was Rome's public reading room and its official record office in 
 building, and that pair is exactly what this software is.
 
 Vesta answers *which of your files a question should open*, across every agent you
-have, in about ten milliseconds, without sending anything anywhere and without a model
-in the loop.
+have, in a few tens of milliseconds, without sending anything anywhere and without a
+model in the loop. Five runs of `kb eval` on an
+otherwise idle machine, over a base of 113 entries, put both scorers together between 22
+and 33 ms per question, and the keyword scorer alone between 16 and 24. Runs taken while a
+build shared the machine roughly doubled that, which is the whole reason this gives a
+range and no headline figure: a single number here measures how busy the laptop was, and
+so does an average taken across runs that were not competing for the same cores.
 
 Then you hand those files to whatever model you like. Yours, locally. Claude, through
 MCP. Something else next year. The memory outlives the model.
@@ -30,49 +35,79 @@ answer, forever, and when it is wrong it tells you why in words you can act on.
 ```
 $ kb route "quantas calorias posso comer hoje" .
 
-  0.032  yaron    protocols/checkin.md          keywords #2 + text #5
-  0.016  yaron    calculations/formulas.md      text #1
+question: quantas calorias posso comer hoje
+indexed:  113 entries across 8 agents, 216 aliases
+
+   1.  70.55  person/body.md
+      matched: calorias, comer, calories
+   2.  21.93  yaron/templates/diet-plan.md
+      matched: calorias
 ```
 
-Two independent scorers rank every file: a keyword index built from your own map, and
-SQLite full text search over the content. Their results are fused with Reciprocal Rank
-Fusion.
+That is one scorer, the keyword index built from your own map, which is what `kb route`
+prints by default. There is a second, SQLite full text search over the content, and
+`kb route --hybrid` runs both and fuses the two rankings with Reciprocal Rank Fusion.
 
 **Each scorer does the job it was measured to be better at, and they are not
 interchangeable.** Fusion rewards agreement, which is what you want when assembling
 passages for a person to read: a file both scorers noticed belongs in front of them. It
 is the wrong rule for picking a single winner, because a file each scorer ranks fourth
-beats a file one scorer ranks first. Measured over 19 questions: the keyword scorer
-alone picks the right file 18 times, the fusion it feeds picks it 11 times.
+beats a file one scorer ranks first. Measured over the 24 answerable questions of this
+fleet's 33 question answer key: the keyword scorer alone picks the right file 11 times,
+the fusion it feeds picks it 8 times.
+
+**Read that as a comparison, not as a score.** The answer key's own header records that
+the keyword lines in the maps were tuned against these same questions on the day they
+were graded, so the keyword column is flattered and 11/24 is not a clean benchmark of
+anything. What survives the bias is the direction: the fusion, fed by that same
+flattered scorer, still lands behind it when the job is to name one file.
 
 So **the reading comes from agreement and the verdict comes from intent.** Vesta ranks
-who should answer using the keywords you wrote in your own map, and tells you when it is
-guessing:
+who should answer using the keywords you wrote in your own map, and on the same 24
+questions that deterministic fold names the right agent 19 times. What `kb boot` hands
+over, with the classifier that sits in front of it, gets 18. The best a fixed choice
+could do on this set is 13. It also grades its own confidence, and on this set it fails
+that grade:
 
 ```
 $ kb eval fleet/zed/fleet/eval/gold.tsv .
 
-  GATE   flagged 1/1 of its own misses as a guess
-         demoted 0/18 correct answers to a guess
-         hit scores 9.29 to 179.24, miss scores 0.00
-         SEPARATES: every hit outscored every miss.
+  GATE   flagged 1/13 of its own misses as a guess
+         demoted 0/11 correct answers to a guess
+         abstained on 4/9 question(s) the set says to decline
+         hit scores  28.36 to 131.41
+         miss scores 7.53 to 88.51
+         OVERLAPS: no floor tells a hit from a miss on this set.
 ```
 
-That is `kb eval`, and it ships in the tool rather than in a benchmark harness, so the
-numbers on this page are ones you can re-run. It grades against your own answer key and
-**refuses to run if the answer key points at files that have moved**, which is how the
-last stale measurement was caught.
+**`OVERLAPS` is the tool failing its own test in public, and that is why the block is
+still here.** A miss scores 88.51 and a hit scores 28.36, so no single confidence floor
+separates the two, and the gate flags only 1 of its 13 misses as a guess. What it does
+not do is demote a correct answer, and it declines 4 of the 9 questions the key says to
+decline. An earlier version of this page quoted a run that separated cleanly; that run
+was a 19 question set that no longer exists.
+
+That is `kb eval`, and it ships in the tool rather than in a benchmark harness, so these
+are numbers re-run rather than numbers a harness produced once. **You cannot reproduce
+these exact figures**, because the answer key lives in a private fleet this repository
+gitignores; you point the same command at your own. The key behind the numbers above is
+33 questions, 24 answerable and 9 the fleet is supposed to decline. `kb eval` grades
+against it and **refuses to run if it points at files that have moved**, which is how
+the last stale measurement was caught.
 
 **And when nothing matches, the base answers with its own vocabulary.**
 
 ```
-$ kb route "o que e um protocolo de ingestao" .
+$ kb route "come funziona il protocollo" .
+
+question: come funziona il protocollo
+indexed:  113 entries across 8 agents, 216 aliases
 
   nothing matched. Either the base does not cover it, or the
   Search for lines do not carry the words a real question uses.
 
   the base does know these, and they look like words you used:
-    ingest a source
+    comer, comer fora, protocolo, protocolo de checkin, protocolo de ingestao, protocols, sair para comer, protocolos
   that is spelling and not meaning, so it finds a typo or a cognate
   and never finds a translation.
 ```
@@ -284,7 +319,7 @@ Early, used daily, and honest about which is which.
 
 | | |
 |---|---|
-| `tools/kb` | Works. 173 tests. One dependency. |
+| `tools/kb` | Works. `cargo test` in `tools/kb` is green, and the count is left out on purpose: it was published as 208 and was 212 by the time somebody checked and 217 an hour later, because more than one session writes this. One dependency. |
 | `kb ui` | The reading room, set in the site's own type and palette: the fleet, the catalog, the stacks (shelves and book spines, ribbons where another agent works the document), the desk (chat routed by the same boot hook as every session), block budgets, doctor. One embedded page plus three Garamond faces, loopback only. |
 | `tools/tray` | Windows only, and young. |
 | `site` | The page at [ulpia.io](https://ulpia.io). Static front, one Rust binary behind it. |
