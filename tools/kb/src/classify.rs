@@ -106,7 +106,7 @@ pub fn dossier(
     confidence: crate::memory::Confidence,
 ) -> String {
     let mut out = stable_prefix(memory);
-    out.push_str(&variable_tail(question, found, confidence));
+    out.push_str(&variable_tail(question, found, confidence, &species_table(memory, question)));
     out
 }
 
@@ -214,10 +214,49 @@ fn one_line(summary: &str) -> String {
 
 /// Everything that changes with the message: what retrieval found, the message itself,
 /// and the four lines to answer in.
+/// The best keyword score per species per agent, over the fold's own window.
+///
+/// **Computed here and not from the fused top 5, which was the first version's defect.**
+/// Measured on the ads-library probe: the fold counted Steve's tools declaration at keyword
+/// rank 8 (memory 115.9 plus tools 37.8), while the fused top 5 was five memory files, so
+/// the classifier was told one species contributed when the router had acted on two. Same
+/// query and the same oversample as `Memory::ask`, so the table and the fold cannot see
+/// different worlds. Lives beside `dossier` rather than inside `variable_tail` so the tail
+/// stays testable without a fleet on disk.
+fn species_table(memory: &Memory, question: &str) -> Vec<(String, [f32; 3])> {
+    let hits = memory.route(question, 5 * crate::retrieve::KEYWORD_OVERSAMPLE);
+    let mut per: Vec<(String, [f32; 3])> = Vec::new();
+    for h in &hits {
+        if h.score <= 0.0 {
+            continue;
+        }
+        let k = crate::index::kind_of(&h.entry.rel) as usize;
+        match per.iter_mut().find(|(b, _)| *b == h.entry.base) {
+            Some((_, slots)) => {
+                if h.score > slots[k] {
+                    slots[k] = h.score;
+                }
+            }
+            None => {
+                let mut slots = [0.0f32; 3];
+                slots[k] = h.score;
+                per.push((h.entry.base.clone(), slots));
+            }
+        }
+    }
+    per.sort_by(|a, b| {
+        let sa: f32 = a.1.iter().sum();
+        let sb: f32 = b.1.iter().sum();
+        sb.partial_cmp(&sa).unwrap_or(std::cmp::Ordering::Equal)
+    });
+    per
+}
+
 fn variable_tail(
     question: &str,
     found: &[Retrieved],
     confidence: crate::memory::Confidence,
+    species: &[(String, [f32; 3])],
 ) -> String {
     let mut out = String::new();
 
@@ -268,53 +307,28 @@ fn variable_tail(
 
     // **The three questions, separated, per agent.** ADR-0031: "knows about it" is memory,
     // "knows how" is skills, "has the means" is tools, and a list of five files cannot
-    // carry that distinction on its own. This is the same aggregation the fold uses, shown
-    // rather than summed, so the classifier reads the evidence the router acted on instead
-    // of re-deriving a worse version from filenames.
-    {
-        let mut per: Vec<(String, [f32; 3])> = Vec::new();
-        for f in found {
-            if f.keyword_score <= 0.0 {
-                continue;
-            }
-            let k = crate::index::kind_of(&f.path) as usize;
-            match per.iter_mut().find(|(b, _)| *b == f.base) {
-                Some((_, slots)) => {
-                    if f.keyword_score > slots[k] {
-                        slots[k] = f.keyword_score;
-                    }
-                }
-                None => {
-                    let mut slots = [0.0f32; 3];
-                    slots[k] = f.keyword_score;
-                    per.push((f.base.clone(), slots));
-                }
-            }
-        }
-        if !per.is_empty() {
-            per.sort_by(|a, b| {
-                let sa: f32 = a.1.iter().sum();
-                let sb: f32 = b.1.iter().sum();
-                sb.partial_cmp(&sa).unwrap_or(std::cmp::Ordering::Equal)
-            });
-            out.push_str(
-                "\nBEST OF EACH SPECIES, per agent: knows about it (memory), knows how \
-                 (skills), has the means (tools). A dash is no evidence of that species at \
-                 all, which is itself information:\n",
-            );
-            for (base, slots) in per.iter().take(4) {
-                let cell = |v: f32| {
-                    if v > 0.0 { format!("{v:.1}") } else { "-".into() }
-                };
-                out.push_str(&format!(
-                    "  {base}: memory {}, skills {}, tools {}\n",
-                    cell(slots[0]),
-                    cell(slots[1]),
-                    cell(slots[2])
-                ));
-            }
+    // carry that distinction on its own. The table arrives computed from the fold's own
+    // window (see `species_table` for the measured defect that rule closes), so what the
+    // classifier reads is the evidence the router acted on.
+    if !species.is_empty() {
+        out.push_str(
+            "\nBEST OF EACH SPECIES, per agent: knows about it (memory), knows how \
+             (skills), has the means (tools). A dash is no evidence of that species at \
+             all, which is itself information:\n",
+        );
+        for (base, slots) in species.iter().take(4) {
+            let cell = |v: f32| {
+                if v > 0.0 { format!("{v:.1}") } else { "-".into() }
+            };
+            out.push_str(&format!(
+                "  {base}: memory {}, skills {}, tools {}\n",
+                cell(slots[0]),
+                cell(slots[1]),
+                cell(slots[2])
+            ));
         }
     }
+
     out.push_str(&format!(
         "\nWHAT RETRIEVAL THINKS OF THAT. Top keyword score {:.1}, against a floor of {:.1} \
          below which nothing is worth answering from. {} of the two independent scorers \
@@ -612,8 +626,15 @@ mod tests {
     /// gained two things that turn a list of paths into evidence a reader can weigh: an
     /// `about:` line per file saying what it is for, and a paragraph carrying what retrieval
     /// thinks of its own answer. 1400 characters became 1489. Both earn their room, and 1800
-    /// is still roughly 450 tokens against a 550 token prefix, so the prefix is still the
-    /// larger half and caching it still pays.
+    /// was still roughly 450 tokens against a 550 token prefix.
+    ///
+    /// Raised again to 2200 on 2026-08-21, when ADR-0031 added the species table, and this
+    /// time the halves are roughly equal rather than prefix-heavy. Taken with eyes open:
+    /// the table IS the coverage judgement stated as data (knows about it, knows how, has
+    /// the means, per agent), which is the one judgement the classifier exists to make, so
+    /// it outranks everything else in the tail for its cost. Caching the prefix still pays;
+    /// what stops paying at this size is adding anything more, and the next addition should
+    /// evict something instead of raising this number a third time.
     #[test]
     fn the_variable_half_stays_small_enough_for_caching_the_other_half_to_pay() {
         let tail = variable_tail(
@@ -625,9 +646,17 @@ mod tests {
                 keyword_score: 40.0,
                 margin: 2.0,
             },
+            // A realistic species table, so the budget below is measured against the tail
+            // as it actually ships and not against a version with the block missing.
+            &[
+                ("zed".into(), [40.0, 12.5, 8.0]),
+                ("steve".into(), [21.0, 0.0, 5.5]),
+                ("yaron".into(), [11.0, 0.0, 0.0]),
+                ("aldus".into(), [7.5, 3.0, 0.0]),
+            ],
         );
         assert!(
-            tail.len() < 1800,
+            tail.len() < 2200,
             "the variable tail grew to {} chars; caching the prefix stops paying",
             tail.len()
         );
