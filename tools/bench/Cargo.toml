@@ -2,6 +2,7 @@
 name = "kb-bench"
 version = "0.1.0"
 edition = "2024"
+license = "Apache-2.0"
 description = "Measures retrieval candidates against a real fleet, in Rust, so the review needs no Python"
 
 # This crate exists so that `kb` does not have to carry these dependencies.

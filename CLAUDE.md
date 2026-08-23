@@ -20,7 +20,7 @@ that agent's constitution into the conversation. You are handed an identity; you
 choose one by reading a conditional.
 
 This paragraph used to be that conditional, and it named one agent literally, so a
-question about nutrition still woke the architect. Setup and reasoning:
+question about another agent's subject still woke the architect. Setup and reasoning:
 [`decisions/0022-the-fleet-boots-the-agent.md`](decisions/0022-the-fleet-boots-the-agent.md).
 
 If nothing was injected, the hook is not installed or the router abstained. In that case
@@ -36,8 +36,9 @@ one is mid edit right now.**
 kb commit <path>... -m "message"
 ```
 
-Name every path. There is deliberately no flag meaning everything, and `git add -A` is how
-commit `cdc0e52` came to contain two sessions' unrelated work under one message. A raw
+Name every path. There is deliberately no flag meaning everything, and `git add -A` is how a
+commit in the private repository, `cdc0e52`, came to contain two sessions'
+unrelated work under one message. A raw
 `git commit` is refused by a hook.
 
 The mechanism, because the rule is useless without it: `git commit -- <paths>` builds the

@@ -57,7 +57,7 @@ trivial in a single table.
 Neo4j earns its keep on **variable depth traversal and path finding**, where the query is
 "how are these connected, at any distance". We do not have that query yet. Adopting the technology
 first and looking for the problem afterwards is precisely the weak decision named at the top of
-[`../protocols/the-bar.md`](../protocols/the-bar.md), and it would be the first thing this repository
+`the-bar.md` (a protocol in the private layer), and it would be the first thing this repository
 did after writing that file down.
 
 There is also a mismatch nobody mentions until they hit it: **graphs are good at relationships and bad

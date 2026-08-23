@@ -491,7 +491,8 @@ fn agent_txt(title: &str) -> String {
 }
 
 const BLOCKS_TXT: &str = "\
-# The constitution, as blocks. See zed/decisions/0007-memory-architecture.md.
+# The constitution, as blocks. See decisions/0007-memory-architecture.md in the
+# Ulpia repository.
 #
 # Order is by how often a block changes, most stable first, and it is not cosmetic.
 # Prefix caching reuses the KV state of a prompt only up to the first token that

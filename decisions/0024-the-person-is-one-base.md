@@ -27,15 +27,15 @@ What the fleet actually held, verified:
 | Where | What | Language | Written |
 |---|---|---|---|
 | `zed/profile/richard.md` | 145 lines: identity, level, projects, how they work | English | 2026-08-13 |
-| `yaron/profile/profile.md` | 168 lines: body, training, health, sleep, mind | Portuguese | 2026-08-10 |
+| `yaron/profile/profile.md` | 168 lines: a second profile of the same person | Portuguese | 2026-08-10 |
 | `steve/blocks.txt` | **no `[user]` block at all** | | |
 | `aldo/blocks.txt` | **no `[user]` block at all** | | |
 
 So the same human was written twice, in two languages, in two private folders, and two
 agents had nothing. **The cost was paid the same day, in public.** The router woke Steve to
 answer a question about Richard's own website and CV, and Steve's constitution carried no
-line saying who Richard is, while two folders away a file recorded that *presence strong
-enough that relevant, well paid work comes to him* is half of his twelve month goal. The
+line saying who Richard is, while two folders away a file recorded a twelve month
+professional goal that was precisely the marketing agent's business. The
 marketing agent is the one that most needed that sentence and the only one that could not
 read it.
 
@@ -110,9 +110,9 @@ consolidation was cheaper than the duplication it replaced.
   other file, so it stops for a human. Yaron carries both his own profile and the shared
   core meanwhile, which is duplication accepted for exactly as long as it takes to ask.
 - `richardwollyce.com` entered as a source and **contradicted the base twice**, recorded in
-  `work.md` rather than overwritten, per the ingestion protocol: Docker sits in his
-  professional infrastructure although the base filed it under hates, and Rust stopped
-  being an aspiration.
+  `work.md` rather than overwritten, per the ingestion protocol: a tool he uses
+  professionally had been filed under dislikes, and a recorded aspiration had already
+  been achieved.
 - A class of profile error is now named: **a profile assembled by asking about goals misses
   the job**, because nobody volunteers their own title to someone they assume already knows
   it. The base had no record that he leads engineering for a living until his own public

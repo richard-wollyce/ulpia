@@ -50,7 +50,7 @@ pub struct Retrieved {
     /// What the map says this file is for. Empty when only the text scorer found it.
     ///
     /// **A path is not evidence about a subject.** The classifier was being shown
-    /// `steve/knowledge/research/2026-01-14-redacted-stories-algorithm-prompt.md
+    /// `steve/knowledge/research/2026-01-14-stories-algorithm-prompt.md
     /// score 15.3 matched: zero` and asked whether the fleet covers production
     /// deployment. It has to guess what that file is from its own filename.
     pub purpose: String,

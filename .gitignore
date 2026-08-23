@@ -58,3 +58,14 @@ __pycache__/
 # Whisper model cache and generated transcripts: derived, large, and never
 # somebody else useful. The source of truth is the video.
 tools/scribe/transcripts/
+
+# The anchored rules above protect only the repository root. A fleet moved, cloned or
+# vendored anywhere below it deserves the same invisibility, and an anchored pattern
+# with a leading slash matches nowhere else. Same reasoning for the eye's screenshots,
+# which default to a shots/ folder beside whatever sheet invoked them.
+fleet/
+agents/
+shots/
+
+# Per-user runtime permissions written by the harness on this machine, never shared.
+.claude/settings.local.json

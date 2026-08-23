@@ -87,7 +87,7 @@ disagreed.
 - The same applies to the session records and the backlog entries that mention the old
   paths. History describing the past correctly is not a broken link.
 - `kb eval` unchanged across the rename: keyword 17/26 at file level, routing 19/20 at agent
-  level. The person is reachable: *quanto eu peso* returns `person/body.md` at 43.54.
+  level. The person is reachable: a first-person question about the body returns `person/body.md` at 43.54.
 
 ## Revisit trigger
 

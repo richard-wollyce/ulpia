@@ -197,7 +197,7 @@ tokens from an agent is its own experiment and not a side effect of this one.
   hand: the map summaries average 524 characters and only 19 of 114 are under 160, so
   extracting the first sentence ships 95 bad ones.
 - **The classifier's evidence stops being a path.** Measured on the same dossier: shown
-  `steve/.../redacted-stories-algorithm-prompt.md score 15.3 matched: zero`, the classifier
+  `steve/.../stories-algorithm-prompt.md score 15.3 matched: zero`, the classifier
   has to infer the subject from a filename. Shown *about: a copy-paste prompt that turns an
   LLM into an Instagram Algorithm Specialist*, it does not. Carrying the map summary into that
   slot moved owner selection from 9/10 to 10/10 and coverage not at all, and the one

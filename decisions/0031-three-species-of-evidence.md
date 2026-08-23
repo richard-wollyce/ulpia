@@ -48,7 +48,7 @@ measured on 2026-08-18 and removed: dividing by base share boosts small bases in
 levelling large ones, and the gold set scored 12/13 either way. It closes with *the volume
 concern is real and still open; the answer is not this.* This record is the second answer.
 
-Measured the day before this record, *"meu anúncio no meta foi bloqueado"* returned five
+Measured the day before this record, *"um anúncio no meta foi bloqueado"* returned five
 files and all five were `knowledge/`: five memories, zero skills, zero tools. The fifth was
 a transcript **about** the Meta Ads MCP, which is memory about a tool and not the tool. The
 question that decides whether Steve can go look at the account, rather than talk about it,

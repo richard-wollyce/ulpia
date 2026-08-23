@@ -517,7 +517,7 @@ mod tests {
 
     /// This guards a leak that was real and reproduced on this machine before the
     /// fix: `kb index --all` wrote the private layer into the index, and then
-    /// `kb route --hybrid` *without* `--all` returned `profile/richard.md`, because
+    /// `kb route --hybrid` *without* `--all` returned a file from the private profile/ folder, because
     /// the tracked filter lived on the file walk and `search` had no filter at all.
     /// The database could not say which of its rows were private, so it served all
     /// of them.

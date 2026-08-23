@@ -513,8 +513,9 @@ impl Memory {
     /// `retrieve.rs`. It was computed and never used as a gate, so a result nobody
     /// agreed on was presented exactly like one everybody agreed on.
     ///
-    /// Measured on three real questions against the fleet: "quantas calorias posso
-    /// comer hoje" scored 0.032 with both scorers, "é melhor postar video no
+    /// Measured on three real questions against the fleet: a personal nutrition
+    /// question (redacted here; the score is what matters) scored 0.032 with both
+    /// scorers, "é melhor postar video no
     /// instagram ou youtube" scored 0.033 with both, and "quem é você?" scored 0.016
     /// with the text scorer alone and returned marketing psychology. The number that
     /// separates the two right answers from the wrong one is not the score, it is

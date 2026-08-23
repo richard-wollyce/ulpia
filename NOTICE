@@ -1,0 +1,9 @@
+Ulpia
+Copyright 2026 richard-wollyce
+
+Licensed under the Apache License, Version 2.0.
+
+This repository bundles the EB Garamond typeface (tools/kb/src/fonts/), which is
+licensed separately under the SIL Open Font License 1.1, not Apache 2.0. The OFL
+text and the font's copyright notice accompany the font files at
+tools/kb/src/fonts/OFL.txt, and they travel with any binary that embeds them.

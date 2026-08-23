@@ -126,11 +126,11 @@ were absent from the index of any surface that did not pass the flag. `kb boot`,
 
 | question | without `--all` | with `--all` |
 |---|---|---|
-| *posso trocar o frango por outra proteina no almoco* | `person/body.md` at 80.96 | `yaron/plans/diet/base-plan.md` at 110.62 |
+| *a meal-plan question of his, quoted in substance rather than verbatim* | `person/<a private file>` at 80.96 | `yaron/plans/<the standing plan>` at 110.62 |
 
-The file that holds the answer, with `trocar o frango` as a literal key, could not be
-returned to Richard on his own machine about his own meal plan. 28 files were in that state,
-including his health history and the standing diet plan.
+The file that holds the answer, with the question's own words as literal keys, could not
+be returned to Richard on his own machine about his own files. 28 files were in that
+state, across the person's private base.
 
 **The flag is now passed by the hook and by nothing else.** Richard's decision, on being
 shown the split: *sim pode passar --all pro hook poder enxergar os arquivos git ignored.*

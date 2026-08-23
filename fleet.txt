@@ -1,4 +1,4 @@
-# The fleet. See zed/decisions/0011-fleet-layout.md.
+# The fleet. See decisions/0011-fleet-layout.md.
 #
 # Everything under fleet/ is an agent, found by shape rather than declared here,
 # so no configuration can be wrong about it. This file is only for what convention
@@ -11,7 +11,7 @@
 #   disable = steve
 #
 # The orchestrator's identity, read by kb_fleet and handed to whatever model is
-# answering. See zed/decisions/0012-naming-and-hosting.md for why this name.
+# answering. See decisions/0012-naming-and-hosting.md for why this name.
 
 name = Vesta
 role = Keeper of the fleet: knows who is here, routes what arrives, and holds the fleet's memory

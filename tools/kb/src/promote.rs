@@ -1159,7 +1159,7 @@ mod tests {
     #[test]
     fn a_well_formed_proposal_parses() {
         let reply = "noise before\nPROPOSAL\nslug: sleep-target\nfolder: knowledge/reference\n\
-                     summary: How much sleep Richard targets\nkeys: sono, sleep, dormir\nbody:\n\
+                     summary: A sleep target\nkeys: sono, sleep, dormir\nbody:\n\
                      Eight hours.\nEND\ntrailing noise\n";
         let got = parse_proposals(reply, "yaron", "inbox/2026-08-20.md");
         assert_eq!(got.len(), 1);

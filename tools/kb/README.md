@@ -7,13 +7,11 @@ of truth and that any index is **derived** from them. This is the first derived 
 store anything, it reads the files and reports what the conventions promise while nothing was
 checking.
 
-It knows the three agents by shape, not by configuration:
-
-| Agent | Map file   | Knowledge folder | Keyword line   |
-|-------|------------|------------------|----------------|
-| Zed   | `MAP.md`   | `knowledge/`     | `Search for:`  |
-| Steve | `MAP.md`   | `knowledge/`     | `Search for:`  |
-| Yaron | `MAP.md`   | `knowledge/`    | `Search for:`  |
+It knows agents by shape, not by configuration: any base under `fleet/` with tracked
+markdown is served, `kb init` generates one, and every file declares its own
+`Search for:` keyword line. The examples below use a three-agent fleet named
+`zed`, `steve` and `yaron`, which is also the worked example the rest of this
+repository uses.
 
 ## Use
 
@@ -24,9 +22,9 @@ kb route <question> [path]... [--top N] [--hybrid] [--db FILE]
 ```
 
 ```
-kb check ../../ ../../../steve ../../../yaron
-kb index ../../ ../../../steve ../../../yaron
-kb route "por que o poke e caro em proteina" ../../ ../../../steve ../../../yaron --hybrid
+kb check fleet/zed fleet/steve fleet/yaron
+kb index fleet/zed fleet/steve fleet/yaron
+kb route "quem decide qual agente responde" fleet/zed fleet/steve fleet/yaron --hybrid
 ```
 
 `check` reports what is broken. `index` emits the derived index as JSON. `route` answers which agent
@@ -124,7 +122,7 @@ routing is the map's whole job and it will be happening outside the model by the
 ### `kb remember`: the write side
 
 ```
-kb remember "the calorie floor for men is 1600 kcal" ../../../yaron
+kb remember "the fts5 tokenizer is unicode61 with remove_diacritics 2" fleet/zed
 ```
 
 Measures a claim against what the base already says and **proposes** one of ADD, UPDATE or NOOP, with
@@ -161,9 +159,9 @@ one place an answer is computed.
 ```rust
 let memory = kb::memory::Memory::open(&[Path::new("../../")], false, Path::new(".kb/index.db"))?;
 
-memory.route("why is poke expensive in protein", 5);     // which files to open
-memory.retrieve("why is poke expensive in protein", 5);  // the passages themselves
-memory.remember("the calorie floor for men is 1600");    // ADD / UPDATE / NOOP, writes nothing
+memory.route("who decides which agent answers", 5);     // which files to open
+memory.retrieve("who decides which agent answers", 5);  // the passages themselves
+memory.remember("the index is rebuilt on demand");      // ADD / UPDATE / NOOP, writes nothing
 ```
 
 The `serve` subcommand wraps it in MCP for other people's runtimes, the Tauri GUI links it and calls it
@@ -184,8 +182,8 @@ A path may be a base, or a **fleet root**: a directory that is not itself a base
 children are. Both work.
 
 ```
-kb serve C:\Users\user\Desktop        # finds steve, yaron and zed
-kb serve C:\Users\user\Desktop\zed    # just the one
+kb serve C:\fleets            # finds every base under it
+kb serve C:\fleets\zed        # just the one
 ```
 
 Requiring an arrangement would be an assumption about the user's filesystem, which ADR-0008 forbids in
@@ -244,8 +242,8 @@ For all three agents at once, user scope, which stays out of git:
 
 ```
 claude mcp add --transport stdio --scope user fleet-memory -- \
-  C:\Users\user\Desktop\zed\tools\kb\target\release\kb.exe serve \
-  C:\Users\user\Desktop\zed C:\Users\user\Desktop\steve C:\Users\user\Desktop\yaron
+  C:\fleets\zed\tools\kb\target\release\kb.exe serve \
+  C:\fleets\zed C:\fleets\steve C:\fleets\yaron
 ```
 
 The `--` is mandatory: everything after it is passed to the server untouched.
@@ -321,8 +319,8 @@ convention writes `[[file-name]]` in backticks and those are examples, not refer
 
 ## What it deliberately does not do
 
-- **It does not check whether a note is any good.** That is [the bar](../../protocols/the-bar.md), and
-  it is not automatable.
+- **It does not check whether a note is any good.** That is the bar, a
+  protocol in the private layer, and it is not automatable.
 - **It does not fix anything.** It reports. Applying the fix is a decision.
 - **It does not index the private layer** unless asked with `--all`.
 - **It has no notion of staleness yet.** `valid_for` is required on sourced notes but nothing compares
@@ -342,7 +340,7 @@ the rustup toolchain by absolute path. A Chocolatey Rust package with an incompl
 was shadowing rustup, so every build compiled and then failed to link. A PATH reorder could not fix it,
 because Windows composes the machine PATH before the user PATH, and cargo resolves `rustc` through
 PATH, so even calling the correct `cargo.exe` directly still picked up the wrong compiler. Removing the
-package fixed it. See F4 in [the fleet backlog](../../fleet/backlog.md).
+package fixed it. Recorded as F4 in the fleet backlog, in the private layer.
 
 ## Design notes
 

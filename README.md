@@ -33,15 +33,15 @@ Vesta takes the other trade. **Retrieval is plain software.** Same question, sam
 answer, forever, and when it is wrong it tells you why in words you can act on.
 
 ```
-$ kb route "quantas calorias posso comer hoje" .
+$ kb route "posso dar git push sozinho ou preciso perguntar" .
 
-question: quantas calorias posso comer hoje
-indexed:  113 entries across 8 agents, 216 aliases
+question: posso dar git push sozinho ou preciso perguntar
+indexed:  120 entries across 10 agents, 216 aliases
 
-   1.  70.55  person/body.md
-      matched: calorias, comer, calories
-   2.  21.93  yaron/templates/diet-plan.md
-      matched: calorias
+   1.  72.62  zed/protocols/limits-and-autonomy.md
+      matched: git push, sozinho
+   2.  47.96  tullius/index.md
+      matched: git push
 ```
 
 That is one scorer, the keyword index built from your own map, which is what `kb route`
@@ -98,16 +98,16 @@ the last stale measurement was caught.
 **And when nothing matches, the base answers with its own vocabulary.**
 
 ```
-$ kb route "come funziona il protocollo" .
+$ kb route "come funziona il registro delle decisioni" .
 
-question: come funziona il protocollo
-indexed:  113 entries across 8 agents, 216 aliases
+question: come funziona il registro delle decisioni
+indexed:  120 entries across 10 agents, 216 aliases
 
   nothing matched. Either the base does not cover it, or the
   Search for lines do not carry the words a real question uses.
 
   the base does know these, and they look like words you used:
-    comer, comer fora, protocolo, protocolo de checkin, protocolo de ingestao, protocols, sair para comer, protocolos
+    apagar registro, registro de decisao, registro de marca, registro de release, registro de sessao, registro de treino, registro imutavel, registro longitudinal
   that is spelling and not meaning, so it finds a typo or a cognate
   and never finds a translation.
 ```
@@ -122,12 +122,15 @@ is the candidate space it works from instead of guessing.
 
 ## Quickstart
 
-Requires Rust. One dependency, no build scripts, no network at runtime.
+Requires Rust. One dependency, no build scripts of our own; the one dependency compiles bundled SQLite, so a fresh clone needs a C toolchain (MSVC Build Tools on Windows) of our own; the one dependency compiles bundled SQLite, so a fresh clone needs a C toolchain (MSVC Build Tools on Windows), no network at runtime.
 
 ```
 git clone <this repo> && cd ulpia
 cargo build --release --manifest-path tools/kb/Cargo.toml
 ```
+
+The binary lands at `tools/kb/target/release/kb` (`kb.exe` on Windows); put it on
+your PATH or call it by that path in everything below.
 
 Create your first agent:
 
@@ -325,7 +328,7 @@ Early, used daily, and honest about which is which.
 | `site` | The page at [ulpia.io](https://ulpia.io). Static front, one Rust binary behind it. |
 | Local model routing | Not built. |
 | Voice | Not built. |
-| Licence | **Not chosen yet.** Until it is, this is source-available rather than open source. |
+| Licence | **Apache 2.0.** Use it, fork it, build on it; keep the notice and the attribution. The private layer under `fleet/` is not part of the repository and is not licensed, because it is not here. |
 
 ---
 

@@ -48,7 +48,7 @@ is the distinction that does most of the work when we cannot measure.
 
 ## Decision
 
-**Option B**, drafted in [`../knowledge/evidence/evidence-tiers.md`](../knowledge/evidence/evidence-tiers.md)
+**Option B**, drafted in `evidence-tiers.md` (in the private layer)
 as v0.1, including one rule that matters more than the tiers themselves: **a language model's output,
 including Zed's own, is tier D until confirmed by something above tier C.** Fluent, confident and
 unverified is exactly what tier D looks like from the inside, and that is the failure mode closest to

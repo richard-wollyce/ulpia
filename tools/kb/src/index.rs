@@ -472,10 +472,10 @@ impl<'a> Prepared<'a> {
         //
         // - A key written as several words that still normalises to several words, such as
         //   `bits per weight`, is a phrase and matches whole. That is where its recall went.
-        // - A key written as several words that normalises to one, such as `nao emagreci`
+        // - A key written as several words that normalises to one, such as `nao funciona`
         //   or `false positive`, is dropped from **both** bags and becomes unroutable by
         //   keyword. That is the intended outcome. The alternative was widening this filter
-        //   to the raw count too, which would have registered `nao emagreci` as a one token
+        //   to the raw count too, which would have registered `nao funciona` as a one token
         //   "phrase" matching the bare word `emagreci` at `W_PHRASE` 10.0 instead of
         //   `W_KEYWORD` 6.0, strengthening the exact inversion this change exists to
         //   remove. Such a key is broken as written; the fix belongs in the map line, and

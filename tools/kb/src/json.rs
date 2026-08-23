@@ -485,8 +485,8 @@ mod tests {
 
     #[test]
     fn a_backslash_before_a_quote_does_not_end_the_string() {
-        let v = parse(r#"{"path":"C:\\Users\\richa\\Desktop"}"#).expect("parse");
-        assert_eq!(v.get("path").unwrap().as_str(), Some(r"C:\Users\user\Desktop"));
+        let v = parse(r#"{"path":"C:\\Users\\alice\\Desktop"}"#).expect("parse");
+        assert_eq!(v.get("path").unwrap().as_str(), Some(r"C:\Users\alice\Desktop"));
     }
 
     #[test]

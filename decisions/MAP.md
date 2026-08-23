@@ -3,8 +3,9 @@
 > The system's architecture decision records: what was decided, when, and the reason it beat the
 > alternatives. They live at the repository root rather than inside any agent because a decision
 > about the software binds every agent, and reaching them through one agent's folder made no sense.
-> Attached to the fleet as a routable base by `attach = decisions` in `fleet.txt`, so a question
-> like "why is it called Vesta" finds its answer here without a model.
+> Read by people, and by an agent that opens them deliberately. Deliberately NOT in the
+> retrieval path: the comment block in `fleet.txt` records why attaching these records to
+> routing was tried and reversed.
 >
 > Numbered, dated, never edited after acceptance: a decision that changes gets a **new** ADR that
 > supersedes the old one. Every ADR carries a revisit trigger.
@@ -324,7 +325,7 @@
   human was recorded twice, in two languages, in two private folders, while two agents had no
   user block at all. The cost was paid in public the same day, when the router woke the marketing
   agent to answer a question about Richard's own site and CV and that agent could not read the
-  file saying personal presence is half his twelve month goal. Richard argued for a global file
+  file recording one of his twelve month goals. Richard argued for a global file
   over per-agent scoping and was right, for a mechanism reason: **N copies of a person drift, and
   the gaps are invisible from inside any one agent.** The correction his version needed is that
   **global is about ownership, not residency**, so the person is one base with a small resident
@@ -419,3 +420,17 @@
   base under 0028's predicate, which is the privacy gate working rather than failing.
   Search for: `profile`, `person`, `perfil`, `pessoa`, `nome da base`, `renomear base`, `colisao de nome`, `fleet/person`, `fleet/profile`, `onde mora o usuario`, `base do humano`.
 
+- **[[0030-two-promoters-and-the-second-is-not-a-second-opinion]]** 🟢 accepted 2026-08-20.
+  **Promotion is two models with different inputs, not one model reviewed by another.** The
+  proposer reads the deposit and never the base; the reviewer reads the proposal plus what the
+  deterministic router says the base already holds, and never the proposer's reasoning, which
+  is a property of the data type rather than of a prompt. Three lenses, unanimity to write,
+  stage `captured`, refusals counted because a repeated refusal is a gap in the base. Exists
+  against the measured failure of automatic extraction elsewhere: 97.8 percent junk.
+
+- **[[0031-three-species-of-evidence]]** 🟢 accepted 2026-08-21.
+  **An agent's evidence has three species, and mass in one cannot outvote purpose in
+  another.** Memory is what it knows, skills are how it works and where it stops, tools are
+  text declarations of what it may use. The fold takes the best file of each species and sums
+  the species, which is the second answer to the volume problem, the first having been
+  measured dead. Ingestion may only ever write memory, as a rule in code.
