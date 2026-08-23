@@ -358,6 +358,52 @@ fn fold(c: char) -> char {
 // Routing
 // ---------------------------------------------------------------------------
 
+/// The species of evidence a file is, read from where it lives. ADR-0031.
+///
+/// Three, because the question "should this agent answer" is really three questions a
+/// reader can tell apart: does it know about the subject (memory), does it know how to do
+/// the thing (skills), does it have the means to do it (tools). A tool is declared in text
+/// precisely so a scorer can find it; a transcript ABOUT the Meta Ads MCP is memory about a
+/// tool and not the tool, which is the confusion this enum exists to keep visible.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+pub enum Kind {
+    Memory,
+    Skills,
+    Tools,
+}
+
+impl Kind {
+    pub fn label(self) -> &'static str {
+        match self {
+            Kind::Memory => "memory",
+            Kind::Skills => "skills",
+            Kind::Tools => "tools",
+        }
+    }
+}
+
+/// The folder declares the species, and this is the whole table.
+///
+/// A folder is a location rather than a copy, so unlike a header field it cannot go stale:
+/// moving a file into another species folder is SUPPOSED to change what it means. The
+/// legacy names map on rather than forcing every file to move on day one; the canonical
+/// three are `memory`, `skills` and `tools`, and the per-base migration is decided with
+/// critique, not mechanically (ADR-0031).
+///
+/// Everything unrecognised is memory, deliberately: the safe misreading of an unknown
+/// folder is "the agent knows something", never "the agent can do something" and never
+/// "the agent is allowed to use something".
+pub fn kind_of(rel: &str) -> Kind {
+    let first = rel.split(['/', '\\']).next().unwrap_or("");
+    match first {
+        "tools" | "ferramentas" => Kind::Tools,
+        "skills" | "habilidades" | "protocols" | "protocolos" | "templates" | "modelos" => {
+            Kind::Skills
+        }
+        _ => Kind::Memory,
+    }
+}
+
 /// Weights, in the order they should matter.
 ///
 /// Keywords are hand written for exactly this purpose, so they carry the most.
@@ -854,6 +900,26 @@ mod tests {
     #[test]
     fn no_keyword_line_gives_no_keywords() {
         assert!(keywords_in("- **[[note]]** just prose.").is_empty());
+    }
+
+    #[test]
+    fn the_folder_declares_the_species() {
+        // The table, pinned. The unknown-folder default is the load bearing row: the safe
+        // misreading of a folder nobody classified is "knows something", never "can do
+        // something" and never "may use something".
+        for (rel, want) in [
+            ("memory/fact.md", Kind::Memory),
+            ("knowledge/agents/x.md", Kind::Memory),
+            ("skills/research.md", Kind::Skills),
+            ("protocols/checkin.md", Kind::Skills),
+            ("templates/adr.md", Kind::Skills),
+            ("tools/meta-ads-mcp.md", Kind::Tools),
+            ("produtos/renda/perfil.md", Kind::Memory),
+            ("calculations/formulas.md", Kind::Memory),
+            ("index.md", Kind::Memory),
+        ] {
+            assert_eq!(kind_of(rel), want, "{rel}");
+        }
     }
 
     fn entry(stem: &str, title: &str, keywords: &[&str]) -> Entry {

@@ -826,6 +826,35 @@ pub fn run(
                     }
                 }
 
+                // **Ingestion writes memory, and this is a rule rather than a lens.**
+                // A conversation can teach the fleet a fact; it cannot grant a competence
+                // or install a ferramenta, because those are written and configured
+                // deliberately (ADR-0031). A promoter proposing into skills or tools is
+                // refused before a single review call is spent, and the refusal is
+                // recorded like any other, because a promoter that keeps trying is a
+                // signal about the promoter.
+                let kind = crate::index::kind_of(&proposal.folder);
+                if kind != crate::index::Kind::Memory {
+                    let decided = Decided {
+                        proposal,
+                        reviews: vec![Review {
+                            lens: Lens::Scope,
+                            accept: false,
+                            reason: format!(
+                                "hard rule, not a judgement: ingestion writes memory only, \
+                                 and the target folder is {}-kind (ADR-0031)",
+                                kind.label()
+                            ),
+                        }],
+                        written: None,
+                    };
+                    if !dry_run {
+                        record_rejection(fleet_root, &decided, today);
+                    }
+                    outcome.decided.push(decided);
+                    continue;
+                }
+
                 // The independent input. Deterministic, no model, our own router.
                 let evidence = evidence_for(memory, &proposal, top);
 
@@ -1105,6 +1134,17 @@ mod tests {
             written: None,
         };
         assert!(!short.accepted(), "a lens that did not answer is not a lens that agreed");
+    }
+
+    #[test]
+    fn ingestion_refuses_to_write_anything_but_memory() {
+        // The hard rule from ADR-0031, checked at the cheapest point: kind_of on the
+        // proposal's folder, before any review call is spent.
+        use crate::index::{kind_of, Kind};
+        assert_eq!(kind_of("knowledge/reference"), Kind::Memory);
+        assert_eq!(kind_of("memory"), Kind::Memory);
+        assert_ne!(kind_of("skills/novas"), Kind::Memory, "a conversation grants no skill");
+        assert_ne!(kind_of("tools"), Kind::Memory, "a conversation installs no tool");
     }
 
     #[test]

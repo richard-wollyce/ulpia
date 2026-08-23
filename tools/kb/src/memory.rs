@@ -173,7 +173,10 @@ pub struct AgentChoice {
     pub agent: String,
     /// Summed fused score of this agent's files in the result set.
     pub score: f64,
-    /// How many of its files are in there, which is the breadth half of the evidence.
+    /// How many contributions are in there. On the fused fold that is files; on the
+    /// keyword fold it is species with evidence (at most three per agent, ADR-0031),
+    /// which is the breadth half of the evidence stated more honestly: fifty nine
+    /// matching files and one matching file are the same one species.
     pub files: usize,
     /// Over the runner-up agent. Infinite when only one agent scored at all, which
     /// unlike the file level case really is maximum confidence: no other base in the
@@ -768,11 +771,11 @@ impl Memory {
             .map(|a| a.name.as_str())
             .collect();
 
-        tally(
+        tally(species_bests(
             hits.iter()
                 .filter(|h| routable.iter().any(|r| r.eq_ignore_ascii_case(&h.entry.base)))
-                .map(|h| (h.entry.base.as_str(), h.score as f64)),
-        )
+                .map(|h| (h.entry.base.as_str(), h.entry.rel.as_str(), h.score as f64)),
+        ))
     }
 
     /// **Corpus share normalisation was built, measured and removed on 2026-08-18.**
@@ -863,15 +866,54 @@ const AGENTS_DIR: &str = "fleet";
 /// The manifest, for what convention cannot express.
 const MANIFEST: &str = "fleet.txt";
 
+/// The best file of each species per agent, which is what the fold counts. ADR-0031.
+///
+/// **This is the second answer to the volume problem the comment above records as open.**
+/// Summing per base let an agent win by mass: Steve holds a dense memory and once took a
+/// question about agent architecture on one file about connecting Claude to Meta Ads,
+/// because fifty nine files each contribute and fifty nine small numbers beat one large
+/// one. The first answer, corpus share normalisation, was measured dead on 2026-08-18.
+///
+/// This one changes what counts as evidence instead of rescaling it: within a species only
+/// the best file speaks, so mass is worth exactly its best member, and across species the
+/// bests sum, so an agent whose memory AND tools both score beats one that only remembers.
+/// The two acceptance cases, from ADR-0031 and pinned by the tests below: dense memory
+/// must not outrank a purpose-built agent whose skills carry the subject, and an agent
+/// with memory plus tools on the subject must beat a deeper memory standing alone.
+///
+/// Rejected shapes, so they are met here rather than rediscovered: sum per species is the
+/// defect itself one level down; max overall throws away the breadth that makes the ads
+/// case right; corpus share is measured above.
+fn species_bests<'a>(
+    weighted: impl Iterator<Item = (&'a str, &'a str, f64)>,
+) -> Vec<(String, f64)> {
+    let mut bests: Vec<(String, crate::index::Kind, f64)> = Vec::new();
+    for (base, rel, score) in weighted {
+        let kind = crate::index::kind_of(rel);
+        match bests.iter_mut().find(|(b, k, _)| b == base && *k == kind) {
+            Some(slot) => {
+                if score > slot.2 {
+                    slot.2 = score;
+                }
+            }
+            None => bests.push((base.to_string(), kind, score)),
+        }
+    }
+    bests.into_iter().map(|(b, _, s)| (b, s)).collect()
+}
+
 /// Sums a weight per base and reports the winner with its margin.
 ///
 /// One function for both scorers so the two agent choices cannot drift apart in the
 /// way the two query expansions once did: whatever aggregation rule is right, both
 /// callers get the same one, and changing it is one edit rather than two that must
 /// be kept in step by memory.
-fn tally<'a>(weighted: impl Iterator<Item = (&'a str, f64)>) -> Option<AgentChoice> {
+fn tally<S: AsRef<str>>(
+    weighted: impl IntoIterator<Item = (S, f64)>,
+) -> Option<AgentChoice> {
     let mut totals: Vec<(String, f64, usize)> = Vec::new();
     for (base, weight) in weighted {
+        let base = base.as_ref();
         match totals.iter_mut().find(|(name, _, _)| name == base) {
             Some(slot) => {
                 slot.1 += weight;
@@ -1086,6 +1128,46 @@ fn manifest_full(path: &Path) -> (Vec<String>, Vec<String>, Option<String>) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// ADR-0031's first acceptance case: dense memory must not outvote purpose.
+    ///
+    /// "pesquisar noticias sobre tech": nobody remembers anything about it, Steve's files
+    /// share incidental words, and the purpose-built agent's skills carry the subject.
+    /// Under the old sum, steve wins 6+5+4+3 = 18 against 12; under best-per-species his
+    /// four memory files are worth their best one.
+    #[test]
+    fn mass_of_memory_is_worth_its_best_file() {
+        let hits = vec![
+            ("steve", "knowledge/research/a.md", 6.0),
+            ("steve", "knowledge/research/b.md", 5.0),
+            ("steve", "knowledge/transcripts/c.md", 4.0),
+            ("steve", "knowledge/transcripts/d.md", 3.0),
+            ("techie", "skills/tech-news-research.md", 12.0),
+        ];
+        let choice = tally(species_bests(hits.into_iter())).expect("someone scored");
+        assert_eq!(choice.agent, "techie", "purpose beats mass");
+        assert_eq!(choice.score, 12.0);
+        let steve = choice.totals.iter().find(|(n, _)| n == "steve").unwrap();
+        assert_eq!(steve.1, 6.0, "many files are worth their best one");
+    }
+
+    /// The second acceptance case: breadth across species is real evidence.
+    ///
+    /// "buscar algo na biblioteca de anuncios": Steve's memory AND his tools declaration
+    /// score, and both pointing the same way is what being prepared looks like. A deeper
+    /// memory standing alone loses.
+    #[test]
+    fn memory_and_tools_together_beat_a_deeper_memory_alone() {
+        let hits = vec![
+            ("steve", "knowledge/research/meta-hardening.md", 8.0),
+            ("steve", "tools/meta-ads-mcp.md", 5.0),
+            ("hoarder", "knowledge/deep/ads-lore.md", 12.0),
+        ];
+        let choice = tally(species_bests(hits.into_iter())).expect("someone scored");
+        assert_eq!(choice.agent, "steve", "two species agreeing beat one deeper");
+        assert_eq!(choice.score, 13.0);
+        assert_eq!(choice.files, 2, "files counts species with evidence now");
+    }
 
     fn scratch(name: &str) -> PathBuf {
         let dir = std::env::temp_dir()

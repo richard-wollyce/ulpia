@@ -231,7 +231,8 @@ fn variable_tail(
     } else {
         for f in found.iter().take(5) {
             out.push_str(&format!(
-                "  {}/{}  score {:.1}  matched: {}\n",
+                "  [{}] {}/{}  score {:.1}  matched: {}\n",
+                crate::index::kind_of(&f.path).label(),
                 f.base,
                 f.path,
                 f.keyword_score,
@@ -264,6 +265,56 @@ fn variable_tail(
     // So the numbers are handed over with their meaning attached and the judgement stays
     // where ADR-0013 put it. Agreement between the two independent scorers is the strongest
     // signal available without a model, and it is exactly what a bare score hides.
+
+    // **The three questions, separated, per agent.** ADR-0031: "knows about it" is memory,
+    // "knows how" is skills, "has the means" is tools, and a list of five files cannot
+    // carry that distinction on its own. This is the same aggregation the fold uses, shown
+    // rather than summed, so the classifier reads the evidence the router acted on instead
+    // of re-deriving a worse version from filenames.
+    {
+        let mut per: Vec<(String, [f32; 3])> = Vec::new();
+        for f in found {
+            if f.keyword_score <= 0.0 {
+                continue;
+            }
+            let k = crate::index::kind_of(&f.path) as usize;
+            match per.iter_mut().find(|(b, _)| *b == f.base) {
+                Some((_, slots)) => {
+                    if f.keyword_score > slots[k] {
+                        slots[k] = f.keyword_score;
+                    }
+                }
+                None => {
+                    let mut slots = [0.0f32; 3];
+                    slots[k] = f.keyword_score;
+                    per.push((f.base.clone(), slots));
+                }
+            }
+        }
+        if !per.is_empty() {
+            per.sort_by(|a, b| {
+                let sa: f32 = a.1.iter().sum();
+                let sb: f32 = b.1.iter().sum();
+                sb.partial_cmp(&sa).unwrap_or(std::cmp::Ordering::Equal)
+            });
+            out.push_str(
+                "\nBEST OF EACH SPECIES, per agent: knows about it (memory), knows how \
+                 (skills), has the means (tools). A dash is no evidence of that species at \
+                 all, which is itself information:\n",
+            );
+            for (base, slots) in per.iter().take(4) {
+                let cell = |v: f32| {
+                    if v > 0.0 { format!("{v:.1}") } else { "-".into() }
+                };
+                out.push_str(&format!(
+                    "  {base}: memory {}, skills {}, tools {}\n",
+                    cell(slots[0]),
+                    cell(slots[1]),
+                    cell(slots[2])
+                ));
+            }
+        }
+    }
     out.push_str(&format!(
         "\nWHAT RETRIEVAL THINKS OF THAT. Top keyword score {:.1}, against a floor of {:.1} \
          below which nothing is worth answering from. {} of the two independent scorers \
