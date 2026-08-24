@@ -92,7 +92,7 @@ $ kb eval fleet/zed/fleet/eval/gold.tsv .
 ```
 
 **`OVERLAPS` is the tool failing its own test in public, and that is why the block is
-still here.** A miss scores 88.51 and a hit scores 28.36, so no single confidence floor
+still here.** A miss reaches 90.86 while a hit starts at 29.11, so no single confidence floor
 separates the two, and the gate flags only 1 of its 13 misses as a guess. What it does
 not do is demote a correct answer, and it declines 4 of the 9 questions the key says to
 decline. An earlier version of this page quoted a run that separated cleanly; that run
@@ -157,7 +157,10 @@ kb eval examples/demo/gold.tsv examples/demo
 That eval is the reproducible half of every number on this page: 13 questions, 10 it
 should answer and 3 it should refuse, graded in front of you. Run today on the demo:
 file 10/10, agent fold 10/10, all 3 refusals refused, and the confidence floor
-separates every hit from every miss on this set. The private-fleet numbers further up
+separates every hit from every miss on this set. Your screen will also show
+`routes 8/10` and two hits demoted to guesses: that is the stricter
+classifier-included layer declining two low scorers, printed so the flattering
+line never travels without the harsher one beside it. The private-fleet numbers further up
 are the same command pointed at a fleet you cannot see, which is the product working.
 
 Then create your own first agent:
@@ -170,14 +173,14 @@ That writes the full agent shape, initialises git inside the agent, and makes th
 first commit, so the agent it creates can be opened by the system that created it.
 One rule to know before it surprises you: **anything git does not track is not
 served**, because unknown is not public. A fresh note becomes findable when it is
-committed in the agent's repository (`kb commit` does it by name), or pass `--all`
+committed in the agent's repository (`kb commit fleet/yaron/knowledge/<note>.md -m "..."`, run from the repo root; it finds the agent's own repository from the path), or pass `--all`
 to any command while you are still drafting. Drop markdown into
 `fleet/yaron/knowledge/` with a `**Search for:**` line at the top of each file, the
 keywords the router matches, then:
 
 ```
 kb index .                      build one index per agent
-kb route "your question" .      which files should this open
+kb route "your question" .      your own fleet; the dot is the repo root, the demo uses examples/demo
 kb check .                      lint every agent, including keys no question can reach
 kb fleet .                      who is in the fleet
 kb eval examples/demo/gold.tsv examples/demo    the graded demo above
@@ -188,7 +191,7 @@ kb ui .                         the reading room: http://127.0.0.1:4114
 
 ## Beside the neighbours
 
-Read from each project's own repository and documentation on 2026-08-24; stars move,
+Read from each project's own repository and documentation on 2026-08-23; stars move,
 mechanisms rarely do.
 
 | | Ulpia | mem0 | Letta | Zep / Graphiti |
@@ -224,7 +227,7 @@ Agents run in parallel, in the same working tree, all day. So committing is a ve
 tool owns:
 
 ```
-kb commit decisions/0021.md tools/kb/src/commit.rs -m "message"
+kb commit decisions/0021-committing-under-concurrency.md tools/kb/src/commit.rs -m "message"
 ```
 
 Name every path. **There is deliberately no flag meaning everything**, because that one
@@ -238,7 +241,7 @@ alone**, which is the step a person skips by hand:
 
 ```
 committed 9fe6c10
-  decisions/0021.md
+  decisions/0021-committing-under-concurrency.md
   tools/kb/src/commit.rs
 
 left untouched, still dirty (1):
