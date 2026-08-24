@@ -7,6 +7,7 @@ the binary small.
 
 Run once: python make-icons.py
 """
+import gzip
 import math
 import struct
 import zlib
@@ -15,6 +16,28 @@ from pathlib import Path
 HERE = Path(__file__).parent
 ICONS = HERE / "src-tauri" / "icons"
 ICONS.mkdir(parents=True, exist_ok=True)
+
+# The letterform. The mark used to be three abstract index bars, which read as an F
+# nobody had chosen; it is now the Ulpia U in the same EB Garamond the site and the
+# reading room set, rasterized ONCE by glyph/render-u.mjs from the same woff2 the kb
+# binary embeds, and baked here as a 512x512 alpha mask so this build still needs no
+# image toolchain and no font engine.
+GLYPH_SIZE = 512
+GLYPH = gzip.decompress((HERE / "glyph" / "u-glyph.alpha.gz").read_bytes())
+assert len(GLYPH) == GLYPH_SIZE * GLYPH_SIZE, "the U mask is not the size this expects"
+
+
+def glyph_alpha(u: float, v: float) -> float:
+    """Bilinear sample of the U mask at unit coordinates, 0..1 each axis."""
+    gx = min(max(u * (GLYPH_SIZE - 1), 0.0), GLYPH_SIZE - 1.001)
+    gy = min(max(v * (GLYPH_SIZE - 1), 0.0), GLYPH_SIZE - 1.001)
+    x0, y0 = int(gx), int(gy)
+    fx, fy = gx - x0, gy - y0
+    def at(xx, yy):
+        return GLYPH[yy * GLYPH_SIZE + xx]
+    top = at(x0, y0) * (1 - fx) + at(x0 + 1, y0) * fx
+    bot = at(x0, y0 + 1) * (1 - fx) + at(x0 + 1, y0 + 1) * fx
+    return (top * (1 - fy) + bot * fy) / 255.0
 
 
 def png(path: Path, size: int, pixels) -> None:
@@ -59,7 +82,6 @@ def mark(size: int, progress: float | None = None):
     template on macOS, which inverts it per theme.
     """
     unit = size / 32.0
-    bars = [(9, 12, 14), (9, 16, 10), (9, 20, 6)]  # x, y, width, in 32px units
 
     def px(x, y):
         cover = rounded(x, y, size, 2 * unit, 7 * unit)
@@ -68,12 +90,12 @@ def mark(size: int, progress: float | None = None):
 
         r, g, b, a = 24, 24, 27, int(235 * cover)
 
-        for bx, by, bw in bars:
-            if (
-                bx * unit <= x < (bx + bw) * unit
-                and by * unit <= y < (by + 2.5) * unit
-            ):
-                r, g, b = 250, 250, 250
+        # The U, sampled from the baked mask over the badge's inner field.
+        ga = glyph_alpha((x + 0.5) / size, (y + 0.5) / size)
+        if ga > 0:
+            r = int(24 + (250 - 24) * ga)
+            g = int(24 + (250 - 24) * ga)
+            b = int(27 + (250 - 27) * ga)
 
         if progress is not None:
             # A filled bar across the bottom, the one shape still legible at 16px.

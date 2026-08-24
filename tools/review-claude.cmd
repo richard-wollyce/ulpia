@@ -18,8 +18,10 @@ REM   of the base would become another model's opinion and the independence that
 REM   makes a second reader worth running would be gone. This flag is not hygiene
 REM   here, it is the mechanism.
 REM
-REM   --max-turns 1. It answers the one question it was given. A reviewer that can
-REM   take a second turn is a reviewer that can be argued around.
-claude -p --model claude-opus-5 --max-turns 1 ^
+REM   --max-turns 2, raised from 1 on 2026-08-23: the overnight run refused a proposal
+REM   with "Reached max turns (1)" because the model spent its only turn thinking. Two
+REM   turns is thought plus answer; nobody is in the loop to argue it around either way,
+REM   and the parser still refuses anything it cannot read.
+claude -p --model claude-opus-5 --max-turns 2 ^
   --strict-mcp-config --mcp-config "{\"mcpServers\":{}}" ^
   --settings "{\"hooks\":{}}"
