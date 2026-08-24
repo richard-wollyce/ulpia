@@ -1,0 +1,15 @@
+# The demo answer key: ten questions the fleet should answer, three it should refuse.
+# Format: question<TAB>path[|path...], agent-relative. "-" means the right move is to refuse.
+quem decide se um deploy pode ir pra producao	zed/knowledge/deploy-checklist.md
+como faco rollback sem downtime	zed/knowledge/deploy-checklist.md
+devo usar sqlite ou postgres no comeco	zed/knowledge/database-choices.md
+what makes a review comment blocking	zed/protocols/code-review.md
+como prender a atencao nos primeiros segundos do video	steve/knowledge/hooks-that-hold.md
+qual a melhor frequencia de postagem	steve/knowledge/posting-cadence.md
+how much protein per meal	yaron/knowledge/protein-basics.md
+quanto tempo um musculo leva pra recuperar	yaron/knowledge/training-recovery.md
+onde consulto a tabela nutricional de um alimento	yaron/tools/food-database.md
+quantos gramas de proteina por quilo	yaron/knowledge/protein-basics.md
+qual acao da bolsa devo comprar	-
+me conta uma piada	-
+qual o sentido da vida	-

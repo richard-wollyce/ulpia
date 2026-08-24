@@ -296,20 +296,6 @@ pub fn keywords_in(body: &str) -> Vec<String> {
         .collect()
 }
 
-/// The entry text without its keyword line, flattened and trimmed to `limit` chars.
-fn summarise(body: &str, limit: usize) -> String {
-    let text: Vec<&str> = body
-        .lines()
-        .take_while(|l| !(l.contains("Search for:") || l.contains("Buscar por:")))
-        .collect();
-    let joined = text.join(" ");
-    let cleaned: String = joined
-        .split_whitespace()
-        .collect::<Vec<&str>>()
-        .join(" ");
-    cleaned.chars().take(limit).collect()
-}
-
 // ---------------------------------------------------------------------------
 // Normalising
 // ---------------------------------------------------------------------------

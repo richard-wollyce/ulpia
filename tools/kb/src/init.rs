@@ -297,7 +297,20 @@ pub fn agent(fleet: &Path, name: &str, at: Option<&Path>) -> Result<Created, Ini
     // happens later is that `git add fleet/<name>` from the fleet records a **gitlink**,
     // a pointer to a commit in a repository nobody pushes and no backup covers, so the
     // fleet looks complete with one agent's contents outside it.
-    let vcs = if inside_work_tree(&root) {
+    // **An enclosing repository that ignores this path is not enclosing it.** The first
+    // cold-clone run of the quickstart found the gap: the Ulpia repo itself gitignores
+    // fleet/, so `kb init` inside a clone detected the enclosing repo, ran an add that
+    // exits 0 while staging nothing (git add skips ignored paths silently), reported
+    // "the files are staged into it", and left the base with no git at all. The privacy
+    // gate then rightly refused to serve it, and `kb index` and `kb route` appeared to
+    // contradict each other for every stranger following the README.
+    //
+    // Ignored is the disowning, and the design already has an answer for a disowned
+    // path: it gets its own repository, which is exactly how the private fleet layer is
+    // meant to live inside the ignored directory. The gitlink concern in the comment
+    // above does not apply, because the enclosing repository ignores the path and will
+    // never `git add` it into a gitlink.
+    let vcs = if inside_work_tree(&root) && !ignored_by_enclosing(&root) {
         // Staging is enough, and committing would be wrong: this command does not own
         // the repository it just landed in, and the person who runs it writes the commit.
         //
@@ -332,6 +345,20 @@ pub fn agent(fleet: &Path, name: &str, at: Option<&Path>) -> Result<Created, Ini
 
 /// Whether `dir` is already inside somebody's work tree.
 ///
+/// Whether the enclosing repository ignores this path entirely.
+///
+/// `git check-ignore -q .` exits 0 exactly when the path is ignored. An error running
+/// git at all reads as not-ignored, so the caller falls back to the enclosing branch,
+/// which was the old behaviour and the safe one when git is broken.
+fn ignored_by_enclosing(root: &Path) -> bool {
+    crate::base::quiet("git")
+        .current_dir(root)
+        .args(["check-ignore", "-q", "."])
+        .status()
+        .map(|s| s.success())
+        .unwrap_or(false)
+}
+
 /// Reads the answer off stdout rather than off the exit status, because `rev-parse`
 /// also succeeds while standing inside a `.git` directory and prints `false` there.
 /// It is captured rather than run through `run_git` for the plainer reason that
@@ -671,6 +698,24 @@ mod tests {
             "and nothing outside it may be staged, or creating an agent sweeps another \
              session's work into the index: {indexed}"
         );
+    }
+
+    /// The cold-clone case: the enclosing repository exists and IGNORES the fleet, so the
+    /// new base must get its own repository or it belongs to no git at all and the
+    /// privacy gate rightly serves nothing from it.
+    #[test]
+    fn an_enclosing_repository_that_ignores_the_path_does_not_capture_the_agent() {
+        let outer = scratch("enclosing-ignored");
+        assert!(run_git(&outer, &["init", "--quiet"]), "the enclosing repository");
+        std::fs::write(outer.join(".gitignore"), "/fleet/\n").expect("ignore rule");
+
+        let made = agent(&outer, "orphan", None).expect("init");
+        assert!(
+            matches!(made.vcs, Vcs::Initialised),
+            "an ignored path is a disowned path, and a disowned agent initialises its own \
+             repository",
+        );
+        assert!(made.path.join(".git").exists(), "the repository is real, not reported");
     }
 
     #[test]

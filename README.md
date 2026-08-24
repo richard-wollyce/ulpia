@@ -1,5 +1,7 @@
 # Ulpia
 
+[![ci](https://github.com/richard-wollyce/ulpia/actions/workflows/ci.yml/badge.svg)](https://github.com/richard-wollyce/ulpia/actions/workflows/ci.yml)
+
 **A fleet of agents, each with its own knowledge base, and one memory layer under all
 of them. Everything on your machine.**
 
@@ -44,6 +46,11 @@ indexed:  120 entries across 10 agents, 216 aliases
       matched: git push
 ```
 
+The question is Portuguese over an English README on purpose: the router matches
+the keys each file declares, in whatever languages they were written, so a fleet
+answers in every language its authors used. The Italian miss further down is the
+same demonstration from the failing side.
+
 That is one scorer, the keyword index built from your own map, which is what `kb route`
 prints by default. There is a second, SQLite full text search over the content, and
 `kb route --hybrid` runs both and fuses the two rankings with Reciprocal Rank Fusion.
@@ -63,11 +70,15 @@ anything. What survives the bias is the direction: the fusion, fed by that same
 flattered scorer, still lands behind it when the job is to name one file.
 
 So **the reading comes from agreement and the verdict comes from intent.** Vesta ranks
-who should answer using the keywords you wrote in your own map, and on the same 24
-questions that deterministic fold names the right agent 19 times. What `kb boot` hands
-over, with the classifier that sits in front of it, gets 18. The best a fixed choice
-could do on this set is 13. It also grades its own confidence, and on this set it fails
-that grade:
+who should answer using the keywords each file declares in its own `Search for:`
+header (a `MAP.md`, when you keep one, is a reading list for people; the router does
+not consult it), and on the same 24
+questions that deterministic fold names the right agent 22 times. What `kb boot`
+actually hands over, with the classifier that sits in front of it, is the number that
+counts and it is 21. The best a fixed choice could do on this set is 13. These figures
+are re-measured before anything quotes them, because they have gone stale on this very
+page twice; the eval takes seconds and there is no excuse. It also grades its own
+confidence, and on this set it fails that grade:
 
 ```
 $ kb eval fleet/zed/fleet/eval/gold.tsv .
@@ -75,8 +86,8 @@ $ kb eval fleet/zed/fleet/eval/gold.tsv .
   GATE   flagged 1/13 of its own misses as a guess
          demoted 0/11 correct answers to a guess
          abstained on 4/9 question(s) the set says to decline
-         hit scores  28.36 to 131.41
-         miss scores 7.53 to 88.51
+         hit scores  28.89 to 134.03
+         miss scores 7.24 to 90.16
          OVERLAPS: no floor tells a hit from a miss on this set.
 ```
 
@@ -122,34 +133,77 @@ is the candidate space it works from instead of guessing.
 
 ## Quickstart
 
-Requires Rust. One dependency, no build scripts of our own; the one dependency compiles bundled SQLite, so a fresh clone needs a C toolchain (MSVC Build Tools on Windows) of our own; the one dependency compiles bundled SQLite, so a fresh clone needs a C toolchain (MSVC Build Tools on Windows), no network at runtime.
+Requires Rust. One dependency, no build scripts of our own; that dependency compiles
+bundled SQLite, so a fresh clone needs a C toolchain (MSVC Build Tools on Windows).
+No network at runtime.
 
 ```
-git clone <this repo> && cd ulpia
+git clone https://github.com/richard-wollyce/ulpia && cd ulpia
 cargo build --release --manifest-path tools/kb/Cargo.toml
 ```
 
 The binary lands at `tools/kb/target/release/kb` (`kb.exe` on Windows); put it on
 your PATH or call it by that path in everything below.
 
-Create your first agent:
+Route your first question against the demo fleet that ships in the repository,
+three tiny agents with an answer key, so the first run works before you have
+written anything:
+
+```
+kb route "quem decide se um deploy pode ir pra producao" examples/demo
+kb eval examples/demo/gold.tsv examples/demo
+```
+
+That eval is the reproducible half of every number on this page: 13 questions, 10 it
+should answer and 3 it should refuse, graded in front of you. Run today on the demo:
+file 10/10, agent fold 10/10, all 3 refusals refused, and the confidence floor
+separates every hit from every miss on this set. The private-fleet numbers further up
+are the same command pointed at a fleet you cannot see, which is the product working.
+
+Then create your own first agent:
 
 ```
 kb init yaron
 ```
 
-That writes the full agent shape, initialises git, and makes the first commit, so the
-agent it creates can be opened by the system that created it. Drop markdown into
-`fleet/yaron/knowledge/`, list it in `MAP.md`, then:
+That writes the full agent shape, initialises git inside the agent, and makes the
+first commit, so the agent it creates can be opened by the system that created it.
+One rule to know before it surprises you: **anything git does not track is not
+served**, because unknown is not public. A fresh note becomes findable when it is
+committed in the agent's repository (`kb commit` does it by name), or pass `--all`
+to any command while you are still drafting. Drop markdown into
+`fleet/yaron/knowledge/` with a `**Search for:**` line at the top of each file, the
+keywords the router matches, then:
 
 ```
 kb index .                      build one index per agent
 kb route "your question" .      which files should this open
-kb check .                      lint every agent
+kb check .                      lint every agent, including keys no question can reach
 kb fleet .                      who is in the fleet
-kb eval gold.tsv .              grade the routing against your own answer key
+kb eval examples/demo/gold.tsv examples/demo    the graded demo above
 kb ui .                         the reading room: http://127.0.0.1:4114
 ```
+
+---
+
+## Beside the neighbours
+
+Read from each project's own repository and documentation on 2026-08-24; stars move,
+mechanisms rarely do.
+
+| | Ulpia | mem0 | Letta | Zep / Graphiti |
+|---|---|---|---|---|
+| Memory lives in | markdown files you edit | vector store + history DB | database rows | temporal knowledge graph |
+| Who writes memory | you, or a gated two-model promotion that may refuse | an LLM, automatically | the agent, through tools | async extraction |
+| Model in the retrieval path | none | embedder required | embedder for archival | embedder + graph |
+| Can answer "nobody covers this" | yes, as a first-class verdict | no, ranking always returns a top hit | no | no |
+| Runs fully offline | yes, retrieval has no network | possible with local stack | self-host possible | self-host of core |
+| Licence | Apache-2.0 | Apache-2.0 | Apache-2.0 | Apache-2.0 |
+
+The honest column note: the neighbours automate ingestion at scales Ulpia refuses on
+purpose, and each of them is a good tool for the job it names. The row that is ours
+alone is the refusal: a librarian who can say "no one here owns this" instead of
+handing you the least wrong book.
 
 ---
 

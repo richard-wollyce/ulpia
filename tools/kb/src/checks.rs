@@ -354,7 +354,9 @@ fn check_reachable(file: &MdFile, findings: &mut Vec<Finding>) {
                 code: "E02",
                 file: file.rel.clone(),
                 line: 0,
-                message: "not indexed: no `Search for:` line in this file, so the router                           builds no entry for it and it scores zero on every question. A                           file nobody can find does not exist"
+                message: "not indexed: no `Search for:` line in this file, so the router \
+                          builds no entry for it and it scores zero on every question. A \
+                          file nobody can find does not exist"
                     .into(),
             });
         } else if keywords.len() < 12 {

@@ -1,0 +1,34 @@
+# The claim "tests are green" becomes externally checkable the day the repo is public.
+# Two platforms because the tool ships on Windows first and strangers clone on Linux.
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  kb:
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: tools/kb
+      - name: Build
+        run: cargo build --release --manifest-path tools/kb/Cargo.toml
+      - name: Test
+        run: cargo test --manifest-path tools/kb/Cargo.toml
+      - name: The demo fleet routes and grades
+        shell: bash
+        run: |
+          KB=tools/kb/target/release/kb
+          [ -f "$KB.exe" ] && KB="$KB.exe"
+          "$KB" check --all examples/demo
+          "$KB" eval examples/demo/gold.tsv examples/demo --all | tee eval.out
+          grep -q "10/10" eval.out
+          grep -q "abstained on 3/3" eval.out
