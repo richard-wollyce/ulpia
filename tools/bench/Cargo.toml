@@ -20,6 +20,8 @@ description = "Measures retrieval candidates against a real fleet, in Rust, so t
 [dependencies]
 kb = { path = "../kb" }
 fastembed = "5"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
 
 [profile.release]
 opt-level = 3

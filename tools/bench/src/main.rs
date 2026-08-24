@@ -23,6 +23,7 @@ use std::process::ExitCode;
 
 mod abstain;
 mod engine;
+mod longmem;
 
 const USAGE: &str = "\
 kb-bench, retrieval measurement against a real fleet
@@ -33,6 +34,8 @@ usage:
     kb-bench fuse   <fleet-root> <questions.txt> [--gold gold.tsv] [--top N]
     kb-bench abstain <fleet-root> <labelled.tsv>
     kb-bench latency <fleet-root> <labelled.tsv> [--host vendor=api.example.com]...
+    kb-bench longmem <dataset.json> --answerer <cmd> [--judge <cmd>] [--limit N]
+                     [--offset N] [--workers N] [--out hyp.jsonl] [--keep]
 
     embed    rank the whole corpus by BGE-M3 similarity, grading the dense head
              and the learned lexical (sparse) head separately from one forward
@@ -67,6 +70,34 @@ fn main() -> ExitCode {
 
     // The two measurement modes read their own labelled file and need no gold, so they
     // dispatch before the shared preread, whose empty-file refusal does not apply.
+    if mode == "longmem" {
+        let dataset = PathBuf::from(&args[1]);
+        let opt = longmem::Options {
+            limit: flag_value(&args, "--limit").and_then(|v| v.parse().ok()).unwrap_or(0),
+            offset: flag_value(&args, "--offset").and_then(|v| v.parse().ok()).unwrap_or(0),
+            workers: flag_value(&args, "--workers").and_then(|v| v.parse().ok()).unwrap_or(6),
+            out: PathBuf::from(
+                flag_value(&args, "--out").unwrap_or_else(|| "hypotheses.jsonl".into()),
+            ),
+            answerer: match flag_value(&args, "--answerer") {
+                Some(a) => a,
+                None => {
+                    eprintln!("kb-bench: longmem needs --answerer <cmd>");
+                    return ExitCode::from(2);
+                }
+            },
+            judge: flag_value(&args, "--judge"),
+            keep: args.iter().any(|a| a == "--keep"),
+        };
+        return match longmem::run(&dataset, &opt) {
+            Ok(()) => ExitCode::SUCCESS,
+            Err(e) => {
+                eprintln!("kb-bench: {e}");
+                ExitCode::from(1)
+            }
+        };
+    }
+
     if mode == "abstain" || mode == "latency" {
         let labelled = PathBuf::from(&args[2]);
         let hosts: Vec<(String, String)> = args

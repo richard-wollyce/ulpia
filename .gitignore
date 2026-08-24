@@ -69,3 +69,7 @@ shots/
 
 # Per-user runtime permissions written by the harness on this machine, never shared.
 .claude/settings.local.json
+
+# LongMemEval datasets: 280MB of third-party benchmark data, fetched by URL in
+# benchmarks/longmemeval/README.md, never vendored.
+benchmarks/longmemeval/data/
