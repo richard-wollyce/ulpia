@@ -21,6 +21,7 @@ use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 
+mod abstain;
 mod engine;
 
 const USAGE: &str = "\
@@ -30,6 +31,8 @@ usage:
     kb-bench embed  <fleet-root> <questions.txt> [--gold gold.tsv] [--entries]
     kb-bench rerank <fleet-root> <questions.txt> [--gold gold.tsv] [--top N] [--model jina]
     kb-bench fuse   <fleet-root> <questions.txt> [--gold gold.tsv] [--top N]
+    kb-bench abstain <fleet-root> <labelled.tsv>
+    kb-bench latency <fleet-root> <labelled.tsv> [--host vendor=api.example.com]...
 
     embed    rank the whole corpus by BGE-M3 similarity, grading the dense head
              and the learned lexical (sparse) head separately from one forward
@@ -39,6 +42,13 @@ usage:
              cross encoder reading question and passage together
     fuse     RRF-fuse kb's keyword ranking with the dense ranking, which is
              the exact experiment ADR-0017 ran in Python
+    abstain  the refusal, measured: decline rate on labelled out-of-scope
+             questions, false declines on in-scope ones, and the same set
+             against a top-k baseline that cannot say no. Deterministic
+             layer only, no model
+    latency  the whole deterministic pipeline timed: cold start, warm p50
+             and p95 in-process, and the TCP connect floor to the hosted
+             competitors' real endpoints (no request sent, distance only)
 
 Models are downloaded once into %LOCALAPPDATA%/kb-bench and read from disk after
 that. Scores print per question; with --gold, a summary states top-1 accuracy and
@@ -54,6 +64,31 @@ fn main() -> ExitCode {
 
     let mode = args[0].as_str();
     let root = PathBuf::from(&args[1]);
+
+    // The two measurement modes read their own labelled file and need no gold, so they
+    // dispatch before the shared preread, whose empty-file refusal does not apply.
+    if mode == "abstain" || mode == "latency" {
+        let labelled = PathBuf::from(&args[2]);
+        let hosts: Vec<(String, String)> = args
+            .iter()
+            .zip(args.iter().skip(1))
+            .filter(|(a, _)| a.as_str() == "--host")
+            .filter_map(|(_, v)| v.split_once('=').map(|(a, b)| (a.to_string(), b.to_string())))
+            .collect();
+        let outcome = if mode == "abstain" {
+            abstain::run(&root, &labelled)
+        } else {
+            abstain::latency(&root, &labelled, &hosts)
+        };
+        return match outcome {
+            Ok(()) => ExitCode::SUCCESS,
+            Err(e) => {
+                eprintln!("kb-bench: {e}");
+                ExitCode::from(1)
+            }
+        };
+    }
+
     let questions = match read_lines(Path::new(&args[2])) {
         Ok(q) => q,
         Err(e) => {

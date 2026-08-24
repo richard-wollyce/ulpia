@@ -1,0 +1,52 @@
+# The abstention benchmark set. Authored blind, adversarially checked (benchmarks/README.md).
+# question<TAB>label; in-scope means the corpus should answer, everything else means refuse.
+What do I need to have checked off before I'm allowed to push a release to prod?	in-scope
+Who actually has to give the final sign-off before something goes live?	in-scope
+When is it fine to just ship SQLite inside the app instead of standing up a Postgres server?	in-scope
+How do I tell if a reviewer's comment means I can't merge, or if it's just a suggestion?	in-scope
+A reviewer left a nitpick on my PR but approved it, do I still have to fix it before merging?	in-scope
+How do I stop people from clicking away in the first few seconds of my videos?	in-scope
+Is posting every single day overkill, or do I lose people if I go quiet for a week?	in-scope
+I lift weights a few times a week. What daily protein target should someone my size aim for?	in-scope
+Is one rest day a week enough, or do sore muscles need longer before I train them again?	in-scope
+Where can I find trustworthy numbers for how much protein or carbs a given food actually has?	in-scope
+O que precisa estar pronto e conferido antes de uma nova versão chegar aos usuários?	in-scope
+Quem dá o aval final antes de colocar o sistema no ar?	in-scope
+Para um app pequeno, compensa mais um banco embutido tipo SQLite ou um servidor de banco separado?	in-scope
+Como decidir se o banco de dados roda dentro da própria aplicação ou como um serviço à parte?	in-scope
+Em que situação um comentário de code review deveria travar o merge?	in-scope
+O comecinho do vídeo importa tanto assim para segurar quem está assistindo?	in-scope
+Com que frequência eu deveria postar para não sumir do feed nem cansar o público?	in-scope
+Faz diferença dividir a proteína do dia entre as refeições ou posso comer quase tudo no jantar?	in-scope
+Quantos dias o músculo precisa para se recuperar entre um treino pesado e outro?	in-scope
+Onde eu consulto quanto de proteína ou de ferro tem cada alimento, tipo uma tabela oficial?	in-scope
+Tomo carbonato de lítio 600mg por dia receitado pelo meu psiquiatra. Posso suplementar creatina 5g junto ou tem interação?	near-oos
+My etcd cluster behind Kubernetes 1.29 keeps losing quorum after node reboots. Which raft election timeout and heartbeat settings should I tune?	near-oos
+Recebo uns R$4 mil por mês de AdSense do meu blog. Posso continuar como MEI ou preciso migrar para o Simples Nacional? Qual anexo?	near-oos
+Can my employer in Germany legally fire me for refusing to join the on-call rotation, or does the Works Council agreement protect me?	near-oos
+I take 12 units of glargine at night. How should I adjust my insulin dose before fasted morning cardio?	near-oos
+Minha mãe tem doença renal crônica estágio 4. Quantos gramas de proteína por quilo ela deve comer por dia?	near-oos
+Our newsletter got a GDPR complaint from a French subscriber over consent. What is our realistic fine exposure and are we required to appoint a DPO?	near-oos
+Terminei um ciclo de oxandrolona de 8 semanas. Qual protocolo de TPC devo fazer e com quais doses?	near-oos
+Why does the G1 collector fragment humongous-allocation regions on our 3TB heap, and which JDK 21 flags mitigate it?	near-oos
+Quantos miligramas de ibuprofeno posso tomar por dia para dor muscular pós-treino sem risco para os rins?	near-oos
+Qual a distância da Terra até a nebulosa de Órion em anos-luz?	far-oos
+How do I get crispy skin on duck confit at home without a sous vide setup?	far-oos
+Escreve um soneto em decassílabos sobre saudade, com rimas ABBA ABBA CDC DCD.	far-oos
+Who won the 2024 Copa America final and what was the final score?	far-oos
+Roteiro de 5 dias na Patagônia em novembro: vale a pena alugar carro em El Calafate ou fechar excursões?	far-oos
+What is the difference between Stratocaster and Telecaster pickup wiring, and can I swap one into the other?	far-oos
+Como faço meu cacto de natal florescer duas vezes por ano dentro de apartamento?	far-oos
+Explain the main causes of the fall of Constantinople in 1453.	far-oos
+Qual tinta devo usar para pintar azulejo de banheiro sem precisar lixar antes?	far-oos
+When is the next total solar eclipse visible from mainland Portugal?	far-oos
+valeu	noise
+ok then	noise
+hmm interessante	noise
+kkkkk	noise
+:)))	noise
+SKU-8842-BR rev C	noise
+asdf jkl;	noise
+tá bom então né	noise
+...	noise
+👀 👍	noise

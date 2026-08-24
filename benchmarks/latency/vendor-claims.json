@@ -1,0 +1,102 @@
+{
+ "claims": [
+  {
+   "vendor": "mem0",
+   "claim": "\"Mem0 attains a 91% lower p95 latency and saves more than 90% token cost\" (abstract; also in body: \"reduce p95 latency by over 91% compared to full\" context)",
+   "url": "https://arxiv.org/abs/2504.19413",
+   "measures": "End-to-end p95 (search plus answer generation) on the LOCOMO benchmark, in the authors' own research harness, relative to a full-context baseline that feeds the whole conversation to the LLM every query. Vendor-reported (their own paper). Quote verified in raw arXiv HTML.",
+   "omits": "It is a relative number against the slowest possible baseline, not an absolute figure for the hosted API. Omits network RTT to api.mem0.ai, auth, TLS, embedding time, and memory-write latency. Harness hardware and network position unstated in the abstract."
+  },
+  {
+   "vendor": "mem0",
+   "claim": "\"approach achieves the lowest search latency among all methods (p50: 0.148s, p95: 0.200s)\"",
+   "url": "https://arxiv.org/html/2504.19413v1",
+   "measures": "The search/retrieval phase alone, on LOCOMO, in the authors' own eval harness. Vendor-reported. Quote verified in raw arXiv HTML.",
+   "omits": "Whether this hits the hosted service or a local deployment is not stated in the quoted passage. Omits client network RTT, auth, embedding of the query as billed to a real API caller, and memory-add (extraction) latency, which the paper elsewhere shows is far larger."
+  },
+  {
+   "vendor": "mem0",
+   "claim": "UNVERIFIED: an automated page summary of mem0.ai/research reported the phrase \"median latency stays flat at +1ms\" (context: memory decay ranking runs fire-and-forget). I could not find this string in the server-rendered HTML (Framer client-side app), so treat as unconfirmed until read in a browser.",
+   "url": "https://mem0.ai/research",
+   "measures": "Claimed added latency of the memory-decay/temporal-reasoning features, i.e. a delta, not a retrieval latency.",
+   "omits": "Everything: no percentile basis for the baseline, no methodology, and the quote itself is unverified against raw HTML. The mem0.ai homepage carries no numeric latency claim at all, only \"cut tokens and latency\" (verified in raw HTML of https://mem0.ai/)."
+  },
+  {
+   "vendor": "Zep",
+   "claim": "\"Sub-200ms retrieval\" and \"Retrieval stays under 200 milliseconds, regardless of graph size or count.\" Homepage figure is labeled (aria-label, verified in raw HTML): \"p50 and p95 stay below a 200ms ceiling as the graph scales\" with x-axis 10K to 100M graphs; a benchmark card states \"Zep on LoCoMo (155 ms, 4,408 tokens) and LongMemEval (162 ms, 5,760 tokens)\".",
+   "url": "https://www.getzep.com/",
+   "measures": "p95 retrieval latency of Zep's service across graph-count scale, and per-benchmark retrieval latency (155/162 ms). Vendor-reported marketing chart; no methodology on the page. Per-scale values (148 to 168 ms) render client-side; I verified the axis labels and ceiling text in raw HTML but not the individual bar values.",
+   "omits": "Measurement point unstated (almost certainly server-side, not what a caller sees). Omits network RTT to api.getzep.com, auth, TLS, and region. No p99. No definition of what \"retrieval\" includes versus full context assembly."
+  },
+  {
+   "vendor": "Zep",
+   "claim": "\"Graph search now returns results in 150ms (P95), down from 600ms. Context retrieval, which is a retrieval pipeline with many search components, dropped to 200ms (P95).\" Also: \"65ms P75 search latency at massive scale\" and the admission \"Context retrieval latency spiked from a P95 of 200ms to over 2 seconds\" during their 30x growth incident.",
+   "url": "https://blog.getzep.com/scaling-agent-memory-zep-30x/",
+   "measures": "Internal production server-side p95/p75, self-measured, post-incident. Usefully distinguishes graph search (150ms p95) from the fuller context-retrieval pipeline (200ms p95). Quotes verified in raw HTML.",
+   "omits": "Client-observed latency: network RTT, auth, TLS to api.getzep.com. The same post documents that p95 degraded 10x under load, so the headline number is a steady-state figure, not a worst-case one."
+  },
+  {
+   "vendor": "Letta",
+   "claim": "FINDING: no numeric latency claim found. Letta publishes no retrieval or API latency number on letta.com (homepage grepped raw, zero latency strings), and its docs discuss latency only as something you tune (\"Low-latency agents\" guide: constrained context windows for voice use cases) or observe in your own dashboard (p50/p95 of your agents' LLM and tool calls). Absence verified by site search plus raw-HTML grep of the homepage; not an exhaustive crawl.",
+   "url": "https://docs.letta.com/guides/legacy/low-latency-agents-legacy/",
+   "measures": "Nothing. Letta's latency story is model-call latency of the agent you configure, not a memory-retrieval SLA of their service.",
+   "omits": "Not applicable; the finding is the absence. For a comparison table this is the honest cell: vendor publishes no number."
+  },
+  {
+   "vendor": "Supermemory",
+   "claim": "\"Hybrid search, reranking, and structured context for documents at sub-300ms latency.\" Stat block: \"<300ms\" labeled \"Recall latency\". Also \"Sub-300ms graph traversal, every request.\" and a chart alt text: \"3D bar chart comparing recall time: Supermemory sub-300ms vs Zep 4s vs Mem0 7-8s\". All verified in raw HTML.",
+   "url": "https://supermemory.ai/",
+   "measures": "\"Recall\" (search/retrieval) latency of their hosted service. No percentile stated anywhere on the page; \"sub-300ms\" with no p50/p95 qualifier is unbounded marketing.",
+   "omits": "Percentile, methodology, measurement point, region, payload size. Omits network RTT to api.supermemory.ai, auth, embedding. The competitor figures (Zep 4s, Mem0 7-8s) are Supermemory-run and contradict those vendors' own sub-200ms/0.2s claims, which means the numbers almost certainly measure different operations; the page does not say which."
+  },
+  {
+   "vendor": "Supermemory",
+   "claim": "\"Supermemory delivers sub-300ms recall with 85.4% accuracy on LongMemEval while processing 100B+ tokens monthly.\" and \"Speed holds up at scale too. Sub-300ms recall while processing 100B+ tokens monthly. Zep clocks around 4 seconds. Mem0 runs 7-8 seconds.\" Verified in raw HTML. Note: some third-party summaries attribute a \"sub-400ms\" figure to Supermemory pages; I could not find that string in any raw HTML I fetched, so the current claim of record is sub-300ms.",
+   "url": "https://supermemory.ai/blog/best-memory-apis-stateful-ai-agents",
+   "measures": "Their own recall latency claim plus self-run competitor measurements. Same blog even concedes the game in an FAQ: \"Claimed latency often measures only the vector lo[okup]...\" when explaining why rivals' sub-200ms claims become 4+ seconds in practice.",
+   "omits": "Percentile, harness, hardware, network position for both their number and the competitor numbers. Vendor-reported comparative marketing throughout."
+  },
+  {
+   "vendor": "Maximem (Synap)",
+   "claim": "\"92% on LongMemEval, 93.2% on LoCoMo, under 15ms P50 recall, across the 22 frameworks you already use.\" (meta description); stat block \"<15ms\" labeled \"P50 recall latency\"; architecture diagram label \"anticipatory · 15ms P50 · nets across all stores\"; comparison table row \"P50 retrieval latency: 15ms\" vs Mem0 180ms and another vendor 220ms. All verified in raw HTML.",
+   "url": "https://www.maximem.ai/",
+   "measures": "P50 of \"anticipatory\" retrieval. The word is load-bearing: the SDK README describes \"sub-15ms anticipatory retrieval\" and the diagram calls retrieval \"anticipatory\", meaning context is prefetched before the query lands. 15ms is therefore plausibly a prefetch/warm-path number, not a cold query.",
+   "omits": "p95/p99 entirely; no tail latency is published anywhere I found. Omits what a cold, non-anticipated retrieval costs, network RTT to the Cloudflare-fronted synap-cloud-prod.maximem.ai, auth, and TLS. Competitor figures (180ms/220ms) are Maximem-run. Their benchmark blog (maximem.ai/blog/synap-benchmark-results) is about accuracy and defers latency methodology to a future ACM-Bench."
+  },
+  {
+   "vendor": "Maximem (Synap)",
+   "claim": "\"sub-15ms anticipatory retrieval\" (SDK README, verified in raw file). Same README states the engine \"runs as a fully managed cloud service operated by Maximem and is not open source\", so the number cannot be independently reproduced against a self-hosted engine.",
+   "url": "https://github.com/maximem-ai/maximem_synap_sdk",
+   "measures": "Same anticipatory-retrieval P50 as the homepage, restated. Their open-source eval harness covers accuracy benchmarks; the latency figure has no published harness.",
+   "omits": "Percentile beyond P50, cold-path latency, client-observed latency, and any reproduction method."
+  }
+ ],
+ "hosts": [
+  {
+   "vendor": "mem0",
+   "host": "api.mem0.ai",
+   "verified": "Resolves via 8.8.8.8 to 32.184.75.118, 34.208.89.235, 32.188.83.128, 34.211.207.68 (not Cloudflare ranges; connect floor may reflect actual origin region). HTTPS GET returned 200, TCP connect 0.298s from this machine. Confirmed as the SDK default host in mem0/client/main.py (github.com/mem0ai/mem0): self.host = host or \"https://api.mem0.ai\". Checked 2026-08-23."
+  },
+  {
+   "vendor": "Zep",
+   "host": "api.getzep.com",
+   "verified": "Resolves via 8.8.8.8 to 172.66.40.150, 172.66.43.106 plus AAAA (Cloudflare-fronted). https://api.getzep.com/healthz returned 200, TCP connect 0.062s. Confirmed as SDK default in zep-python src/zep_cloud/environment.py: DEFAULT = \"https://api.getzep.com/api/v2\". Checked 2026-08-23."
+  },
+  {
+   "vendor": "Letta",
+   "host": "api.letta.com",
+   "verified": "Resolves via 8.8.8.8 to 104.20.46.143, 172.66.146.104 plus AAAA (Cloudflare-fronted). HTTPS GET returned 200, TCP connect 0.060s. Documented as the base URL at docs.letta.com/api-reference/overview (string https://api.letta.com present in page HTML). Checked 2026-08-23."
+  },
+  {
+   "vendor": "Supermemory",
+   "host": "api.supermemory.ai",
+   "verified": "Resolves via 8.8.8.8 to 172.67.153.82, 104.21.72.167 plus AAAA (Cloudflare-fronted). HTTPS GET returned 302, TCP connect 0.082s. Referenced in their docs as api.supermemory.ai/v4/openapi. Checked 2026-08-23."
+  },
+  {
+   "vendor": "Maximem (Synap)",
+   "host": "synap-cloud-prod.maximem.ai",
+   "verified": "This is DEFAULT_BASE_URL in the SDK (packages/sdks/maximem-synap/maximem_synap/transport/http_client.py: DEFAULT_BASE_URL = \"https://synap-cloud-prod.maximem.ai\"). Resolves via 8.8.8.8 to 104.21.29.200, 172.67.149.197 (Cloudflare-fronted). HTTPS GET returned 404 at root but the server answers, TCP connect 0.113s. Important: api.maximem.ai, synap-api.maximem.ai, engine.maximem.ai and api.synap.maximem.ai do NOT resolve (SOA-only answers), so the SDK constant is the only verified production host. The SDK also has a gRPC transport with no baked-in hostname (config comment: \"no deployment hostnames are baked into this open-source source\"), so gRPC traffic may use a different endpoint handed out by the dashboard. Checked 2026-08-23."
+  }
+ ],
+ "method": "Collection ran 2026-08-23 from a Windows machine on a residential connection. Latency claims: located candidate pages by web search, then fetched each page's raw server-rendered HTML with curl and grepped for latency strings, so every quote marked verified was read verbatim from HTML source or raw GitHub files, not from a summarizer. Two exceptions are explicitly marked UNVERIFIED where the text only surfaced via an LLM page summary and was absent from server-rendered HTML (mem0's \\\"+1ms\\\" research claim; the sub-400ms figure sometimes attributed to Supermemory). mem0's paper claims were read from the arXiv abstract and arXiv HTML body directly. Absence findings (Letta publishes no number; mem0's homepage carries no number) come from raw-HTML greps of those pages plus site-scoped search, and are marked as searched-not-exhaustive. Hostnames: taken from vendor docs where the docs render server-side, otherwise from the vendors' own SDK source on GitHub (mem0 client default, zep-python environment default, Maximem transport DEFAULT_BASE_URL), then verified with nslookup/Resolve-DnsName against 8.8.8.8 and probed with curl (HTTP status plus one-shot TCP connect time; connect times are single samples, not a benchmark). Caveat for the TCP-connect-floor benchmark: four of the five hosts (Zep, Letta, Supermemory, Maximem) sit behind Cloudflare, so the connect floor measures distance to the nearest Cloudflare edge, not the vendor origin; observed one-shot connects were 60-113ms for those versus 298ms for mem0, whose IPs are not Cloudflare and likely reflect a real origin region. Every vendor latency number above is vendor-reported; no independent measurement of any vendor's claim was performed here, and cross-vendor numbers on Supermemory's and Maximem's pages are those vendors measuring their competitors, which their competitors' own pages contradict.\""
+}
