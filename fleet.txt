@@ -59,3 +59,9 @@ classifier = tools\classify-claude.cmd
 # extraction, which is the thing it exists to not be.
 promoter = tools\promote-claude.cmd
 reviewer = tools\review-claude.cmd
+
+# The answerer: prose from what retrieval found, for `kb answer`. After the verdict,
+# never inside retrieval (decisions/0018 stands); grounded in the served passages
+# only, refusal carried through. Absent this line, `kb answer` prints the reading
+# list instead. See decisions/0032.
+answerer = tools\answer-claude.cmd

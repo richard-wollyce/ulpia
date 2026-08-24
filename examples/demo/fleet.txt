@@ -1,0 +1,7 @@
+# The demo fleet's manifest. Only what the demo needs: an answerer, so
+# `kb answer "<question>" examples/demo` produces grounded prose with citations.
+# The path is relative to this root; from a clone, copy tools/answer-claude.cmd
+# or point this at any command that reads a prompt on stdin and answers on stdout.
+name = Vesta
+role = The demo librarian
+answerer = ../../tools/answer-claude.cmd

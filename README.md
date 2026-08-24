@@ -150,9 +150,17 @@ three tiny agents with an answer key, so the first run works before you have
 written anything:
 
 ```
+kb index examples/demo
 kb route "quem decide se um deploy pode ir pra producao" examples/demo
 kb eval examples/demo/gold.tsv examples/demo
+kb answer "how much protein per meal" examples/demo
 ```
+
+The last command needs a model: `answerer = ...` in the demo's `fleet.txt` points at a
+command that reads a prompt on stdin and answers on stdout (the shipped one uses the
+Claude CLI). The answer must ground every claim in the served passages and cite them,
+and when the library does not hold the answer it says so instead of inventing one; the
+model sits after retrieval's verdict, never inside retrieval.
 
 That eval is the reproducible half of every number on this page: 13 questions, 10 it
 should answer and 3 it should refuse, graded in front of you. Run today on the demo:

@@ -7,8 +7,8 @@
 
 use kb::checks::{Finding, Level};
 use kb::{
-    base, blocks, boot, checks, classify, commit, eval, index, init, mcp, memory, promote,
-    remember, store, ui, write,
+    answer, base, blocks, boot, checks, classify, commit, eval, index, init, mcp, memory,
+    promote, remember, store, ui, write,
 };
 use base::Base;
 use std::path::Path;
@@ -52,6 +52,13 @@ commit exists because more than one session writes these repositories at once.
 It commits exactly the paths you name and then reads the commit back to prove it,
 so another session's in-flight work cannot be swept into your message. There is
 deliberately no flag meaning everything.
+
+answer asks the question, then hands what retrieval found to the model named by
+`answerer = ...` in the fleet manifest, which must ground every claim in the served
+passages and say plainly when they do not hold the answer. A `nothing` verdict never
+reaches the model, and without the manifest line the command prints the reading list
+`kb route` would have printed. The model sits after the verdict, never inside
+retrieval, so ADR-0018 stands.
 
 promote reads each agent's inbox/ and offers what it finds to two promoters. The first
 proposes notes and never sees the base; the second decides, three times through three
@@ -195,6 +202,14 @@ fn main() -> ExitCode {
             cmd_commit(&positional, &message)
         }
         "boot" => cmd_boot(&paths_or_default(&positional), all, top),
+        "answer" => {
+            if positional.is_empty() {
+                eprintln!("kb: answer needs a question\n");
+                print!("{USAGE}");
+                return ExitCode::from(2);
+            }
+            cmd_answer(positional[0], &paths_or_default(&positional[1..]), all, top)
+        }
         "promote" => cmd_promote(
             &paths_or_default(&positional),
             all,
@@ -724,6 +739,75 @@ fn cmd_route(question: &str, paths: &[&str], all: bool, top: usize, hybrid: bool
 /// The whole design is in `promote.rs`. What lives here is the reporting, and it reports
 /// refusals as loudly as writes: a promotion run whose output is only what it wrote is a
 /// run that looks successful when it accepted everything.
+
+/// `kb answer`: retrieval's findings, written up by the manifest's answerer.
+///
+/// The command is three refusals wrapped around one model call, in this order: no
+/// passages means no call (fabrication needs a vacuum), no answerer means the reading
+/// list (the fleet never stops answering because a model is missing), and an answerer
+/// that fails mid-call means the reading list too, said out loud.
+fn cmd_answer(question: &str, paths: &[&str], all: bool, top: usize) -> ExitCode {
+    let given: Vec<&Path> = paths.iter().map(Path::new).collect();
+    let memory = match memory::Memory::open(&given, all) {
+        Ok(m) => m,
+        Err(e) => {
+            eprintln!("kb: {e}");
+            return ExitCode::from(1);
+        }
+    };
+    let root = given.first().copied().unwrap_or_else(|| Path::new("."));
+    let a = memory.ask(question, top);
+
+    if !answer::worth_asking(&a.confidence, &a.found) {
+        // The same refusal `kb route` gives, with the same suggestions: absence is an
+        // answer, and it costs zero model calls.
+        println!("nothing in the library matched. Either it does not cover this, or the");
+        println!("Search for lines do not carry the words the question used.");
+        let looked_like = memory.suggest(question, 8);
+        if !looked_like.is_empty() {
+            println!("  it does know: {}", looked_like.join(", "));
+        }
+        return ExitCode::SUCCESS;
+    }
+
+    let answerer = memory.answerer();
+    if matches!(answerer, classify::Classifier::None) {
+        println!("no `answerer = ...` in the fleet manifest, so here is the reading list:");
+        println!();
+        for (i, f) in a.found.iter().take(5).enumerate() {
+            println!("  {}. {}/{}", i + 1, f.base, f.path);
+        }
+        return ExitCode::SUCCESS;
+    }
+
+    let p = answer::prompt(question, &a);
+    match promote::ask_model(&answerer, root, &p) {
+        Some(text) if !text.trim().is_empty() => {
+            println!("{}", text.trim());
+            println!();
+            println!("{}", answer::sources_line(&a));
+            println!(
+                "confidence: score {:.1} vs floor {:.1}; {}",
+                a.confidence.keyword_score,
+                memory::SCORE_FLOOR,
+                match a.confidence.verdict {
+                    memory::Verdict::Hit => "hit",
+                    memory::Verdict::Guess => "guess, read the sources yourself",
+                    memory::Verdict::Nothing => "nothing",
+                }
+            );
+            ExitCode::SUCCESS
+        }
+        _ => {
+            eprintln!("kb answer: the answerer did not reply, so here is the reading list:");
+            for (i, f) in a.found.iter().take(5).enumerate() {
+                eprintln!("  {}. {}/{}", i + 1, f.base, f.path);
+            }
+            ExitCode::from(1)
+        }
+    }
+}
+
 fn cmd_promote(
     paths: &[&str],
     all: bool,

@@ -823,6 +823,14 @@ impl Memory {
         self.manifest_command("promoter")
     }
 
+    /// The model that writes prose from what retrieval found, for `kb answer`.
+    ///
+    /// After the verdict, never inside retrieval: ADR-0018's line is untouched. Absent
+    /// the key, `kb answer` degrades to the reading list `kb route` prints.
+    pub fn answerer(&self) -> crate::classify::Classifier {
+        self.manifest_command("answerer")
+    }
+
     /// The model that decides, three times, on a proposal it did not write.
     ///
     /// Configured separately from the promoter on purpose: this one is meant to be the

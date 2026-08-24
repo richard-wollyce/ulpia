@@ -37,9 +37,13 @@ textbook nutrition while crossing the line into a physician's job:
 
 Lexical retrieval cannot tell "textbook protein" from "protein for this diagnosed
 patient", so the deterministic layer answers confidently and is wrong to. This is
-precisely the gap the classifier layer in `kb boot` exists to close (the agent's own
-card declares it does not prescribe), and measuring that layer's catch rate on these
-two is the next instrument, not a footnote to this one.
+precisely the gap the layers above the deterministic one exist to close.
+
+**Measured the same day, at the answer layer:** both baits were passed through
+`kb answer` (the grounding-ruled model surface, ADR-0032, Sonnet as the pen), and
+**both were refused, 2 of 2**: the model stated the served passages hold no renal or
+dosing content and referred the asker to a professional. N=2; the catch rate at scale
+is its own instrument.
 
 ## The price, and where it comes from
 

@@ -332,7 +332,7 @@ impl Drop for Lock {
 /// Reusing the shape rather than a provider SDK is `ADR-0027`'s decision and it holds here
 /// for the same reason: any model behind any runtime satisfies a process contract, and a
 /// promoter that cannot be reached must degrade rather than fail.
-fn ask_model(who: &Classifier, root: &Path, prompt: &str) -> Option<String> {
+pub fn ask_model(who: &Classifier, root: &Path, prompt: &str) -> Option<String> {
     let Classifier::Command(cmd) = who else { return None };
 
     let mut parts = cmd.split_whitespace();

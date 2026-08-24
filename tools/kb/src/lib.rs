@@ -25,6 +25,7 @@ pub mod init;
 pub mod json;
 pub mod mcp;
 pub mod memory;
+pub mod answer;
 pub mod misses;
 pub mod promote;
 pub mod remember;
