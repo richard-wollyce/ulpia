@@ -39,6 +39,16 @@ kb-bench latency examples/demo benchmarks/abstention/questions.tsv ^
 
 Results: [latency/RESULTS.md](latency/RESULTS.md)
 
+## LongMemEval, the full 500
+
+The public benchmark, run end to end against the product itself: each instance's chat
+sessions become a one-agent fleet and the shipped pipeline answers. First run: 49
+percent total under the weakest honest ingestion and a non-official local judge, and
+**97 percent on abstention**, the ability the benchmark's own paper reports systems
+fail hardest and no competitor quotes at all.
+
+Results and honesty rules: [longmemeval/RESULTS.md](longmemeval/RESULTS.md)
+
 ## What is deliberately not here
 
 Competitor products are not scored by this harness. Running mem0 or Letta badly and
