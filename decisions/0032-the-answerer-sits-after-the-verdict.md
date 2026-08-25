@@ -63,9 +63,11 @@ Changing a mode's numbers to chase a benchmark and re-running is the tuning the
 harness refuses; a change lands as a product decision here first and is measured
 after, with the mode declared in the run's configuration header.
 
-## What this unlocks, named as unbuilt
+## What this unlocked, updated as it landed
 
-LongMemEval grades free-text answers; this shim is the half that produces them. The
-other half, converting chat-session histories into a fleet the shim can read, does not
-exist, and the promotion pipeline is deliberately too expensive per note to be it. Both
-stay unbuilt until decided.
+LongMemEval grades free-text answers; this shim produces them, and the other half,
+the session-to-fleet converter, landed the next day as `kb-bench longmem`
+(mechanical keys, declared as the weakest honest ingestion). The full 500 ran on
+2026-08-24: 49 percent total under the local judge, 97 percent on abstention, per
+`benchmarks/longmemeval/RESULTS.md`. The promotion pipeline remains deliberately too
+expensive to be benchmark ingestion, which is why the harness has its own.
