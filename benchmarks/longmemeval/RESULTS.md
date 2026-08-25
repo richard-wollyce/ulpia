@@ -52,5 +52,26 @@ product decisions meeting a benchmark's expectations; changing them to chase the
 score, then re-running, is the tuning this harness exists to refuse, so any change
 lands as a product decision first and gets measured after.
 
+## Addendum 2026-08-25: the mode ladder on multi-session
+
+The 18 percent had a named mechanism (a five-file table starving aggregation), so the
+mechanism was changed as a product decision first (ADR-0032's amendment: three modes,
+caller-chosen) and measured after, with the mode declared here:
+
+| run | mode | multi-session |
+|---|---|---|
+| full 500 | fast (default) | 22/121 (18%) |
+| all 121 of the type | `--expanded` (12 files) | 36/121 (30%) |
+| same first 30 ids, both modes | `--expanded` | 6/30 |
+| same first 30 ids, both modes | `--complete` (whole base, map-reduce) | 9/30 |
+
+On identical questions the complete read buys half again over the expanded table
+(5 flips to correct, 2 away), at roughly seven model calls per question instead of
+one. The residual ceiling is no longer retrieval: the detective read every session
+and still missed 21 of 30, which is composition (counting and assembling across
+extracted facts) plus the official rubric's strictness, which counts a partial
+aggregation as wrong. That residual is the next mechanism to name, not a number to
+massage.
+
 **One instrument was rebuilt mid-run: none.** The run completed on the first attempt,
 500 of 500, roughly one hour, six workers, on the machine above.
