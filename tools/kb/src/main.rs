@@ -53,6 +53,16 @@ It commits exactly the paths you name and then reads the commit back to prove it
 so another session's in-flight work cannot be swept into your message. There is
 deliberately no flag meaning everything.
 
+answer has three table sizes, chosen by the caller and never guessed:
+    (default)    fast search: the top five files, one model call
+    --expanded   the bigger table: up to twelve files, one call, for evidence
+                 spread across several files
+    --complete   the whole base, read in batches and composed: for questions whose
+                 answer is crumbs across many files (how many, which ones, sum it
+                 up). Costs one model call per batch plus one; the estimate prints
+                 before anything runs, and rides the output so a model reading it
+                 through another surface gets the same warning a person does
+
 answer asks the question, then hands what retrieval found to the model named by
 `answerer = ...` in the fleet manifest, which must ground every claim in the served
 passages and say plainly when they do not hold the answer. A `nothing` verdict never
@@ -208,7 +218,14 @@ fn main() -> ExitCode {
                 print!("{USAGE}");
                 return ExitCode::from(2);
             }
-            cmd_answer(positional[0], &paths_or_default(&positional[1..]), all, top)
+            let mode = if args.iter().any(|a| a == "--complete") {
+                answer::Mode::Complete
+            } else if args.iter().any(|a| a == "--expanded") {
+                answer::Mode::Expanded
+            } else {
+                answer::Mode::Fast
+            };
+            cmd_answer(positional[0], &paths_or_default(&positional[1..]), all, top, mode)
         }
         "promote" => cmd_promote(
             &paths_or_default(&positional),
@@ -734,6 +751,124 @@ fn cmd_route(question: &str, paths: &[&str], all: bool, top: usize, hybrid: bool
 /// failed: the message is the user's and it must reach the model whatever the router
 /// thinks. So every failure path here prints nothing and succeeds.
 
+
+/// Complete mode: the estimate first, then the map batches, then the reduce.
+///
+/// The estimate is not a courtesy, it is the mode's contract: "this will read all N
+/// files in M model calls" prints before the first call, and the same line leads the
+/// final output, because on surfaces where no person watches the screen (an agent
+/// calling through a shell or MCP) the model reading the output deserves the warning
+/// a person got. Timing is stated per run rather than promised: the first batch is
+/// timed and the remainder estimated from it.
+fn cmd_answer_complete(question: &str, memory: &memory::Memory, root: &Path) -> ExitCode {
+    let answerer = memory.answerer();
+    if matches!(answerer, classify::Classifier::None) {
+        eprintln!("kb answer --complete: no `answerer = ...` in the fleet manifest, and this");
+        eprintln!("mode is nothing but model calls. Configure one or use the default mode.");
+        return ExitCode::from(2);
+    }
+
+    let plan = answer::complete_plan(memory);
+    if plan.files.is_empty() {
+        println!("the base serves no keyed files, so there is nothing to read.");
+        return ExitCode::SUCCESS;
+    }
+    println!(
+        "complete search: reading all {} files in {} batch(es), {} model call(s) total.",
+        plan.files.len(),
+        plan.batches,
+        plan.batches + 1
+    );
+    println!("This is the slow mode by design; timing follows the first batch.");
+
+    let mut facts = String::new();
+    let mut batch: Vec<(String, String)> = Vec::new();
+    let mut done = 0usize;
+    let started = std::time::Instant::now();
+    let mut first_batch_ms: Option<u128> = None;
+
+    let mut flush = |batch: &mut Vec<(String, String)>, facts: &mut String, done: &mut usize| -> u128 {
+        if batch.is_empty() {
+            return 0;
+        }
+        let t = std::time::Instant::now();
+        let p = answer::map_prompt(question, batch);
+        match promote::ask_model(&answerer, root, &p) {
+            Some(reply) => {
+                for line in reply.lines() {
+                    let l = line.trim();
+                    if !l.is_empty() && !l.eq_ignore_ascii_case("none") {
+                        facts.push_str(l);
+                        facts.push('\n');
+                    }
+                }
+            }
+            None => {
+                eprintln!("kb answer --complete: a map batch got no reply; its files are");
+                eprintln!("missing from the answer, which is now incomplete by that much.");
+            }
+        }
+        *done += 1;
+        t.elapsed().as_millis()
+    };
+
+    let total_batches = plan.batches;
+    for (name, path) in &plan.files {
+        let text = std::fs::read_to_string(path).unwrap_or_default();
+        batch.push((name.clone(), text));
+        if batch.len() >= answer::BATCH {
+            let ms = flush(&mut batch, &mut facts, &mut done);
+            if first_batch_ms.is_none() {
+                first_batch_ms = Some(ms);
+            }
+            if done == 1 {
+                // The estimate, from the one batch actually timed: honest arithmetic,
+                // not a promise, and restated because network and model load move it.
+                if let Some(ms) = first_batch_ms {
+                    eprintln!(
+                        "  batch 1/{} took {:.1}s; at that pace the whole read is ~{:.1} min",
+                        total_batches,
+                        ms as f64 / 1000.0,
+                        (ms as f64 / 1000.0) * (total_batches + 1) as f64 / 60.0
+                    );
+                }
+            } else {
+                eprintln!("  batch {done}/{total_batches} done");
+            }
+            batch.clear();
+        }
+    }
+    let _ = flush(&mut batch, &mut facts, &mut done);
+
+    if facts.trim().is_empty() {
+        println!();
+        println!("complete search read every file and found nothing bearing on the question.");
+        println!("The library does not hold this.");
+        return ExitCode::SUCCESS;
+    }
+
+    let reduce = answer::reduce_prompt(question, &facts);
+    match promote::ask_model(&answerer, root, &reduce) {
+        Some(text) if !text.trim().is_empty() => {
+            println!();
+            println!("{}", text.trim());
+            println!();
+            println!(
+                "mode: complete | read {} files in {} model calls | {:.1}s total",
+                plan.files.len(),
+                done + 1,
+                started.elapsed().as_secs_f64()
+            );
+            ExitCode::SUCCESS
+        }
+        _ => {
+            eprintln!("kb answer --complete: the reduce call failed; the extracted facts:");
+            eprintln!("{facts}");
+            ExitCode::from(1)
+        }
+    }
+}
+
 /// `kb promote`: the deposit becomes knowledge, or it does not and says why.
 ///
 /// The whole design is in `promote.rs`. What lives here is the reporting, and it reports
@@ -746,7 +881,7 @@ fn cmd_route(question: &str, paths: &[&str], all: bool, top: usize, hybrid: bool
 /// passages means no call (fabrication needs a vacuum), no answerer means the reading
 /// list (the fleet never stops answering because a model is missing), and an answerer
 /// that fails mid-call means the reading list too, said out loud.
-fn cmd_answer(question: &str, paths: &[&str], all: bool, top: usize) -> ExitCode {
+fn cmd_answer(question: &str, paths: &[&str], all: bool, top: usize, mode: answer::Mode) -> ExitCode {
     let given: Vec<&Path> = paths.iter().map(Path::new).collect();
     let memory = match memory::Memory::open(&given, all) {
         Ok(m) => m,
@@ -756,7 +891,14 @@ fn cmd_answer(question: &str, paths: &[&str], all: bool, top: usize) -> ExitCode
         }
     };
     let root = given.first().copied().unwrap_or_else(|| Path::new("."));
-    let a = memory.ask(question, top);
+
+    // Complete mode never goes through the top-k table at all: its whole point is
+    // that ranking starves aggregation. It reads the base, warned and estimated.
+    if mode == answer::Mode::Complete {
+        return cmd_answer_complete(question, &memory, root);
+    }
+
+    let a = memory.ask(question, top.max(mode.files()));
 
     if !answer::worth_asking(&a.confidence, &a.found) {
         // The same refusal `kb route` gives, with the same suggestions: absence is an
@@ -780,14 +922,15 @@ fn cmd_answer(question: &str, paths: &[&str], all: bool, top: usize) -> ExitCode
         return ExitCode::SUCCESS;
     }
 
-    let p = answer::prompt(question, &a);
+    let p = answer::prompt(question, &a, mode);
     match promote::ask_model(&answerer, root, &p) {
         Some(text) if !text.trim().is_empty() => {
             println!("{}", text.trim());
             println!();
-            println!("{}", answer::sources_line(&a));
+            println!("{}", answer::sources_line(&a, mode));
             println!(
-                "confidence: score {:.1} vs floor {:.1}; {}",
+                "mode: {} | confidence: score {:.1} vs floor {:.1}; {}",
+                mode.label(),
                 a.confidence.keyword_score,
                 memory::SCORE_FLOOR,
                 match a.confidence.verdict {

@@ -152,7 +152,7 @@ fn sanitize(s: &str) -> String {
 }
 
 /// Index, ask, answer: the shipped pipeline over the generated fleet.
-pub fn answer_one(root: &Path, inst: &Instance, answerer: &Classifier) -> Result<String, String> {
+pub fn answer_one(root: &Path, inst: &Instance, answerer: &Classifier, mode: kb::answer::Mode) -> Result<String, String> {
     // The text store, built the way `kb index` builds it: through the library.
     let agent_dir = root.join("history");
     let base = kb::base::Base::discover(&agent_dir, true).map_err(|e| e.to_string())?;
@@ -163,13 +163,52 @@ pub fn answer_one(root: &Path, inst: &Instance, answerer: &Classifier) -> Result
 
     let memory = kb::memory::Memory::open(&[root], true).map_err(|e| e.to_string())?;
     let question = format!("(today is {}) {}", inst.question_date, inst.question);
-    let a = memory.ask(&question, 5);
+    let a = memory.ask(&question, 5usize.max(mode.files().min(64)));
+
+    if mode == kb::answer::Mode::Complete {
+        // The whole-base read, the harness way: the same map and reduce prompts the
+        // product ships, batched through the same answerer.
+        let plan = kb::answer::complete_plan(&memory);
+        let mut facts = String::new();
+        let mut batch: Vec<(String, String)> = Vec::new();
+        let mut run_batch = |batch: &mut Vec<(String, String)>, facts: &mut String| {
+            if batch.is_empty() {
+                return;
+            }
+            let p = kb::answer::map_prompt(&question, batch);
+            if let Some(reply) = kb::promote::ask_model(answerer, root, &p) {
+                for line in reply.lines() {
+                    let l = line.trim();
+                    if !l.is_empty() && !l.eq_ignore_ascii_case("none") {
+                        facts.push_str(l);
+                        facts.push('\n');
+                    }
+                }
+            }
+        };
+        for (name, path) in &plan.files {
+            batch.push((name.clone(), std::fs::read_to_string(path).unwrap_or_default()));
+            if batch.len() >= kb::answer::BATCH {
+                run_batch(&mut batch, &mut facts);
+                batch.clear();
+            }
+        }
+        run_batch(&mut batch, &mut facts);
+        if facts.trim().is_empty() {
+            return Ok("The history does not hold this; I don't know.".into());
+        }
+        let reduce = kb::answer::reduce_prompt(&question, &facts);
+        return kb::promote::ask_model(answerer, root, &reduce)
+            .map(|t| t.trim().to_string())
+            .filter(|t| !t.is_empty())
+            .ok_or_else(|| "the reduce call got no reply".into());
+    }
 
     if !kb::answer::worth_asking(&a.confidence, &a.found) {
         // The library's honest refusal is also LongMemEval's abstention answer.
         return Ok("The history does not hold this; I don't know.".into());
     }
-    let prompt = kb::answer::prompt(&question, &a);
+    let prompt = kb::answer::prompt(&question, &a, mode);
     kb::promote::ask_model(answerer, root, &prompt)
         .map(|t| t.trim().to_string())
         .filter(|t| !t.is_empty())
@@ -210,6 +249,8 @@ fn judge_one(
 }
 
 pub struct Options {
+    /// fast, expanded or complete: the product mode this run declares in its header.
+    pub mode: kb::answer::Mode,
     pub limit: usize,
     pub offset: usize,
     pub workers: usize,
@@ -217,14 +258,20 @@ pub struct Options {
     pub answerer: String,
     pub judge: Option<String>,
     pub keep: bool,
+    /// Only instances of this question_type, when set: for re-measuring one ability.
+    pub only_type: Option<String>,
 }
 
 pub fn run(dataset: &Path, opt: &Options) -> Result<(), String> {
     let text = std::fs::read_to_string(dataset).map_err(|e| format!("{}: {e}", dataset.display()))?;
     let all: Vec<Instance> = serde_json::from_str(&text).map_err(|e| e.to_string())?;
     let total_available = all.len();
-    let slice: Vec<Instance> =
-        all.into_iter().skip(opt.offset).take(if opt.limit == 0 { usize::MAX } else { opt.limit }).collect();
+    let slice: Vec<Instance> = all
+        .into_iter()
+        .filter(|i| opt.only_type.as_deref().is_none_or(|t| i.question_type == t))
+        .skip(opt.offset)
+        .take(if opt.limit == 0 { usize::MAX } else { opt.limit })
+        .collect();
     println!(
         "longmem: {} instance(s) of {} (offset {}), {} worker(s), answers -> {}",
         slice.len(),
@@ -251,7 +298,7 @@ pub fn run(dataset: &Path, opt: &Options) -> Result<(), String> {
                 let outcome = std::fs::create_dir_all(&root)
                     .map_err(|e| e.to_string())
                     .and_then(|_| build_fleet(&root, inst).map_err(|e| e.to_string()))
-                    .and_then(|_| answer_one(&root, inst, &answerer));
+                    .and_then(|_| answer_one(&root, inst, &answerer, opt.mode));
                 let (hyp, verdict) = match outcome {
                     Ok(h) => {
                         let v = judge.as_ref().and_then(|j| judge_one(j, &root, inst, &h));

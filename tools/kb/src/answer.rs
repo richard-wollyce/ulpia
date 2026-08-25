@@ -25,10 +25,48 @@
 use crate::memory::{Answer, Confidence, Verdict, SCORE_FLOOR};
 use crate::retrieve::Retrieved;
 
-/// How many passages the model reads. Few and whole beats many and clipped: the chunker
-/// already bounds a passage, and five whole ones fit any modern context with room for
-/// the answer.
-const PASSAGES: usize = 5;
+/// The three table sizes, because one default lied by omission on aggregation.
+///
+/// LongMemEval's multi-session split measured it: with the answer surface reading five
+/// files, questions whose answer is crumbs across a dozen sessions scored 18 percent,
+/// not because retrieval ranked wrong files but because most of the right ones never
+/// reached the table. A personal fleet's common question has one owner and wants the
+/// small fast table; an aggregation question wants a bigger one, and an exhaustive one
+/// wants the whole base read. Three modes, chosen by the caller, never guessed.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Mode {
+    /// The default: top files, whole passages, one model call. The librarian's answer.
+    Fast,
+    /// The bigger table: up to twelve files, one call. For questions whose evidence
+    /// spreads across several files but still fits one reading.
+    Expanded,
+    /// Every file in the base, read in batches (map), then composed (reduce). The
+    /// detective's answer, and the caller is warned it costs one model call per batch
+    /// plus one, with the estimate printed before anything runs.
+    Complete,
+}
+
+impl Mode {
+    pub fn files(self) -> usize {
+        match self {
+            Mode::Fast => 5,
+            Mode::Expanded => 12,
+            Mode::Complete => usize::MAX,
+        }
+    }
+    pub fn label(self) -> &'static str {
+        match self {
+            Mode::Fast => "fast",
+            Mode::Expanded => "expanded",
+            Mode::Complete => "complete",
+        }
+    }
+}
+
+/// Files per map batch in complete mode. Sized so a batch of chunked notes stays well
+/// inside any model's context with room to answer; the estimate the caller prints is
+/// derived from this.
+pub const BATCH: usize = 10;
 
 /// The prompt, assembled from retrieval's output and nothing else.
 ///
@@ -36,7 +74,7 @@ const PASSAGES: usize = 5;
 /// and what the pages actually say. It is not given the fleet, the question's history,
 /// or a license to know things; the grounding rule is stated as a hard instruction and
 /// the caller prints the sources itself, so a fabricated citation has nowhere to hide.
-pub fn prompt(question: &str, answer: &Answer) -> String {
+pub fn prompt(question: &str, answer: &Answer, mode: Mode) -> String {
     let mut out = String::new();
     out.push_str(
         "You answer ONE question from a personal knowledge library, using ONLY the \
@@ -64,7 +102,7 @@ pub fn prompt(question: &str, answer: &Answer) -> String {
     ));
 
     out.push_str("THE PASSAGES:\n");
-    for f in answer.found.iter().take(PASSAGES) {
+    for f in answer.found.iter().take(mode.files()) {
         for p in f.passages.iter().take(2) {
             out.push_str(&format!(
                 "\n--- {}/{} ({})\n{}\n",
@@ -91,9 +129,9 @@ pub fn prompt(question: &str, answer: &Answer) -> String {
 
 /// The line every caller prints under a model answer, so the citations can be checked
 /// against what retrieval actually served rather than taken on the model's word.
-pub fn sources_line(answer: &Answer) -> String {
+pub fn sources_line(answer: &Answer, mode: Mode) -> String {
     let mut out = String::from("sources served:");
-    for f in answer.found.iter().take(PASSAGES) {
+    for f in answer.found.iter().take(mode.files()) {
         out.push_str(&format!(" {}/{}", f.base, f.path));
     }
     out
@@ -107,6 +145,75 @@ pub fn sources_line(answer: &Answer) -> String {
 /// calls doing it.
 pub fn worth_asking(confidence: &Confidence, found: &[Retrieved]) -> bool {
     confidence.verdict != Verdict::Nothing && !found.is_empty()
+}
+
+/// Complete mode: the whole base, read for real.
+///
+/// Two stages. **Map**: every markdown file the fleet serves, in batches of [`BATCH`],
+/// each batch handed to the model with one job: list the facts relevant to the
+/// question, one line each, citing the file after each fact, or the word NONE. The
+/// question travels with every batch, so relevance is judged against it, not guessed.
+/// **Reduce**: the surviving fact lines, composed into an answer under the same
+/// grounding rules as every other mode. Facts arrive pre-cited, so the reduce step
+/// inherits its citations instead of inventing them.
+///
+/// This is the aggregation answer the fast table cannot give: "how many times did X
+/// happen" is crumbs across many files, and a top-k table starves it by construction.
+pub struct CompletePlan {
+    pub files: Vec<(String, std::path::PathBuf)>,
+    pub batches: usize,
+}
+
+/// What complete mode is about to cost, computed before anything runs, so every
+/// surface can warn: the UI puts it on screen, and a CLI or MCP caller gets it as the
+/// first line of output, because the model reading that output deserves the same
+/// warning a person gets.
+pub fn complete_plan(memory: &crate::memory::Memory) -> CompletePlan {
+    let mut files = Vec::new();
+    for agent in &memory.agents {
+        if let Ok(base) = crate::base::Base::discover(&agent.root, true) {
+            for f in &base.files {
+                let (keys, _) = crate::index::header_of(&f.text);
+                if !keys.is_empty() {
+                    files.push((format!("{}/{}", agent.name, f.rel), agent.root.join(&f.rel)));
+                }
+            }
+        }
+    }
+    let batches = files.len().div_ceil(BATCH);
+    CompletePlan { files, batches }
+}
+
+/// One map batch's prompt.
+pub fn map_prompt(question: &str, batch: &[(String, String)]) -> String {
+    let mut out = String::from(
+        "Extract facts relevant to ONE question from the files below. Rules:\n\
+         - One fact per line, followed by the file path in parentheses.\n\
+         - Only what the files literally state. No inference across files, no outside \
+           knowledge.\n\
+         - If nothing in these files bears on the question, answer exactly: NONE\n\n",
+    );
+    for (name, text) in batch {
+        out.push_str(&format!("--- {name}\n{text}\n\n"));
+    }
+    out.push_str(&format!("THE QUESTION:\n{question}\n"));
+    out
+}
+
+/// The reduce prompt over the collected fact lines.
+pub fn reduce_prompt(question: &str, facts: &str) -> String {
+    format!(
+        "Answer ONE question using ONLY the fact lines below, which were extracted from \
+         a personal knowledge library and carry their source file in parentheses. Hard \
+         rules:\n\
+         - Every claim cites its file, carried over from the fact line.\n\
+         - Aggregate honestly: if the question asks how many or which ones, count and \
+           list from the facts, and say if the facts look incomplete.\n\
+         - If the facts do not hold the answer, say so plainly. \"The library does not \
+           hold this\" is a correct and complete answer.\n\
+         - Answer in the language of the question, briefly.\n\n\
+         THE FACTS:\n{facts}\n\nTHE QUESTION:\n{question}\n"
+    )
 }
 
 #[cfg(test)]
@@ -144,12 +251,32 @@ mod tests {
         }
     }
 
+
+    #[test]
+    fn the_map_stage_carries_the_question_and_demands_citations() {
+        let p = map_prompt(
+            "quantas vezes fui ao medico",
+            &[("history/memory/001.md".into(), "fui ao medico em marco".into())],
+        );
+        assert!(p.contains("THE QUESTION"));
+        assert!(p.contains("history/memory/001.md"));
+        assert!(p.contains("NONE"), "an empty batch has an explicit empty answer");
+    }
+
+    #[test]
+    fn the_reduce_stage_keeps_the_refusal_and_the_honest_count() {
+        let p = reduce_prompt("how many visits", "visited in march (a.md)");
+        assert!(p.contains("The library does not\n         hold this")
+            || p.contains("The library does not hold this"));
+        assert!(p.contains("say if the facts look incomplete"));
+    }
+
     #[test]
     fn the_refusal_instruction_is_in_every_prompt() {
         // The abstention property must survive the answering surface, and it survives
         // as an instruction the model cannot miss plus a verdict line in front of it.
         let a = answer_with(vec![hit("zed", "knowledge/x.md", "body")], Verdict::Guess, 9.0);
-        let p = prompt("qualquer coisa", &a);
+        let p = prompt("qualquer coisa", &a, Mode::Fast);
         assert!(p.contains("The library does not hold this"));
         assert!(p.contains("a guess; the match may be a coincidence"));
         assert!(p.contains("treat every passage as a lead"));
@@ -168,11 +295,11 @@ mod tests {
             Verdict::Hit,
             60.0,
         );
-        let p = prompt("how much protein", &a);
+        let p = prompt("how much protein", &a, Mode::Fast);
         assert!(p.contains("yaron/knowledge/protein-basics.md"));
         assert!(p.contains("1.6 to 2.2 g per kg"));
         assert!(
-            sources_line(&a).contains("yaron/knowledge/protein-basics.md"),
+            sources_line(&a, Mode::Fast).contains("yaron/knowledge/protein-basics.md"),
             "the caller can check citations against what was served"
         );
     }

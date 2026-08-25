@@ -41,6 +41,28 @@ end-to-end abstention story is now: the deterministic layer silences 28 of 30, a
 grounding rules caught the two that leaked. N=2 and the pen was Sonnet; the catch rate
 at scale is its own instrument, not this record's claim.
 
+## Amended 2026-08-25: three table sizes, because one default lied on aggregation
+
+LongMemEval's multi-session split measured the lie: with the answer surface reading
+five files, questions whose answer is crumbs across a dozen sessions scored 18
+percent, not because retrieval ranked wrong but because most right files never
+reached the table. Richard's ruling: three modes, chosen by the caller, never guessed.
+
+- **fast** (default): the librarian's answer. Top five files, one call.
+- **`--expanded`**: the bigger table, up to twelve files, one call.
+- **`--complete`**: the detective's answer. Every keyed file the fleet serves, read in
+  batches (map: extract facts, each cited to its file, or NONE) and composed (reduce,
+  under the same grounding rules). Costs one call per batch plus one, and **the
+  estimate is the mode's contract**: it prints before the first call, restates after
+  the first timed batch, and leads the final output, because on surfaces where no
+  person watches a screen the model reading the output deserves the warning a person
+  got. The UI shows it on screen when it grows the control; until then that is a
+  backlog item, not a claim.
+
+Changing a mode's numbers to chase a benchmark and re-running is the tuning the
+harness refuses; a change lands as a product decision here first and is measured
+after, with the mode declared in the run's configuration header.
+
 ## What this unlocks, named as unbuilt
 
 LongMemEval grades free-text answers; this shim is the half that produces them. The

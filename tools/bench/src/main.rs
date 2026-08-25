@@ -35,7 +35,7 @@ usage:
     kb-bench abstain <fleet-root> <labelled.tsv>
     kb-bench latency <fleet-root> <labelled.tsv> [--host vendor=api.example.com]...
     kb-bench longmem <dataset.json> --answerer <cmd> [--judge <cmd>] [--limit N]
-                     [--offset N] [--workers N] [--out hyp.jsonl] [--keep]
+                     [--offset N] [--workers N] [--out hyp.jsonl] [--keep] [--mode fast|expanded|complete]
 
     embed    rank the whole corpus by BGE-M3 similarity, grading the dense head
              and the learned lexical (sparse) head separately from one forward
@@ -88,6 +88,12 @@ fn main() -> ExitCode {
             },
             judge: flag_value(&args, "--judge"),
             keep: args.iter().any(|a| a == "--keep"),
+            only_type: flag_value(&args, "--type"),
+            mode: match flag_value(&args, "--mode").as_deref() {
+                Some("expanded") => kb::answer::Mode::Expanded,
+                Some("complete") => kb::answer::Mode::Complete,
+                _ => kb::answer::Mode::Fast,
+            },
         };
         return match longmem::run(&dataset, &opt) {
             Ok(()) => ExitCode::SUCCESS,
