@@ -1,3 +1,6 @@
 data/
 harness/
 runs/
+*_workspace/
+workspace_*/
+*.log
