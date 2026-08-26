@@ -162,6 +162,14 @@ Claude CLI). The answer must ground every claim in the served passages and cite 
 and when the library does not hold the answer it says so instead of inventing one; the
 model sits after retrieval's verdict, never inside retrieval.
 
+`kb answer` reads five files by default, a table sized for a personal question. Two
+more modes exist and are the caller's choice, never an automatic switch: `--expanded`
+reads twelve files, and `--complete` reads every keyed file in the base in batches of
+ten and composes the answer from what each batch extracted. Complete mode prints a
+time estimate before the first model call and restates it after the first batch
+lands, because a whole-base read costs minutes, and a caller on any surface deserves
+that number before paying it.
+
 That eval is the reproducible half of every number on this page: 13 questions, 10 it
 should answer and 3 it should refuse, graded in front of you. Run today on the demo:
 file 10/10, agent fold 10/10, all 3 refusals refused, and the confidence floor
@@ -215,6 +223,30 @@ The honest column note: the neighbours automate ingestion at scales Ulpia refuse
 purpose, and each of them is a good tool for the job it names. The row that is ours
 alone is the refusal: a librarian who can say "no one here owns this" instead of
 handing you the least wrong book.
+
+---
+
+## Benchmarks a clone can re-run
+
+Three instruments live in [`benchmarks/`](benchmarks/), each `RESULTS.md` carrying
+the exact command, commit, machine and date, because a number that cannot say where
+it came from is marketing. The harness is `tools/bench`, a second crate in this
+repository; its `--trace` flag writes every intermediate of a complete-mode run to
+disk, which is what made the autopsy below possible at all.
+
+| instrument | headline | the footnote that keeps it honest |
+|---|---|---|
+| [abstention](benchmarks/abstention/RESULTS.md) | 28 of 30 out-of-scope questions not answered confidently, deterministic layer alone | the 50 questions were authored blind and adversarially checked; the two misses are named medical baits, and the answer layer above caught both |
+| [latency](benchmarks/latency/RESULTS.md) | warm route p50 0.68 ms, p95 1.16 ms, the whole deterministic pipeline in process | the vendors' own published figures (0.148 to 0.3 s) measure their servers under their harnesses; the table quotes each claim with its URL and compares mechanisms, not machines |
+| [LongMemEval-S](benchmarks/longmemeval/RESULTS.md) | 500 questions: 49 percent total and 29 of 30 abstentions correct, under the weakest honest ingestion | judged locally by claude-haiku, which is not the official protocol; the hypotheses file ships for official GPT-4o re-judging, and every number is a floor and labelled as one |
+
+The multi-session story inside the third file is the method on display: 18 percent
+under the five-file default, a traced autopsy that overturned the working theory
+(91 percent of the failures were extraction, not composition), three fixes shipped
+as product decisions in ADR-0032, and a re-measure on the identical questions from
+8/30 to 17/30. Changing the product to chase a benchmark is the tuning these
+instruments exist to refuse, so every change lands as a product decision first and
+gets measured after.
 
 ---
 
