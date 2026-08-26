@@ -60,10 +60,10 @@ questions only:
 
 | reading | enterprise (141 q) | web (154 q) |
 |---|---|---|
-| full gold evidence in served context | 123 (87%) | 124 (81%) |
-| partial evidence | 2 | 11 |
-| no evidence | 16 | 19 |
-| query latency p50 / p95 | 775 ms / 1.8 s | 787 ms / 2.7 s |
+| full gold evidence in served context | 124 (88%) | 124 (81%) |
+| partial evidence | 2 | 10 |
+| no evidence | 15 | 20 |
+| query latency p50 / p95 | 745 ms / 1.9 s | 773 ms / 2.9 s |
 
 A ceiling, not a score: it measures whether the served context holds the gold
 phrases verbatim, which bounds what any reader can compose from it. The
@@ -72,9 +72,16 @@ gold for 94 percent (enterprise) and 90 percent (web) of questions, and the gap
 between router and served decomposes, measured by `analyze_misses.py`, into
 slice misses (11 and 15), route misses (6 and 9, the real routing gap), and
 questions whose gold appears verbatim nowhere in the corpus (1 and 6), which is
-the instrument's floor and not the system's. The adapter took four instrumented
+the instrument's floor and not the system's. The adapter took five instrumented
 rounds to get here (web went 51 to 81 percent); every fix is named in
-`ulpia_memory.py`'s comments, none reads the gold, and the reference baselines
+`ulpia_memory.py`'s comments, none reads the gold. The adapter holds one
+`kb serve` child open and speaks MCP to it, so `Memory::open` is paid once per
+build; at this corpus scale (about 200 MB per haystack) the remaining query
+cost splits into the Rust search itself (150 to 250 ms typical) and the Python
+slice assembly (260 to 950 ms), both measured, both improvable, neither above
+the LAFS frontier's first budget point of one second. The sub-millisecond
+routing figure in `benchmarks/latency/` is a personal-fleet-scale number and is
+not this regime, and the reference baselines
 for context are the harness's own: simple RAG 51 percent at 0.2 s,
 AgentRunbook-R 58.6 percent at 26.9 s, AgentRunbook-C 74.9 percent at 108 s,
 each an official accuracy with a reader, which these numbers are not yet.

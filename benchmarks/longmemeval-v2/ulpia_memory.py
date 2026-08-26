@@ -22,6 +22,7 @@ base class and the standard library.
 
 from __future__ import annotations
 
+import json
 import re
 import subprocess
 import threading
@@ -70,10 +71,6 @@ def mechanical_keys(text: str, cap: int) -> list[str]:
     return keys
 
 
-# One `--hybrid` result line: fused score, agent name, path inside the agent,
-# then provenance ("keywords #1 + text #1"). Verified against live output; the
-# numbered format in the README is the keyword-only scorer's, not this one.
-ROUTE_LINE = re.compile(r"^\s{2}([\d.]+)\s+(\S+)\s+(\S+)\s+")
 
 
 @register_memory
@@ -105,6 +102,13 @@ class UlpiaMemory(Memory):
         (self.agent / "memory").mkdir(parents=True, exist_ok=True)
         self._index_lock = threading.Lock()
         self._dirty = True
+        # One `kb serve` child lives across queries and speaks MCP over stdio.
+        # `Memory::open` runs once at its startup, so the per-query cost a fresh
+        # `kb route` subprocess paid every time (process spawn plus index open,
+        # ~330ms of the measured p50) is paid once per build instead. The child
+        # is killed on insert because its open Memory would go stale.
+        self._serve: subprocess.Popen | None = None
+        self._mcp_id = 0
         self._write_agent_shape()
 
     def _write_agent_shape(self) -> None:
@@ -153,6 +157,7 @@ class UlpiaMemory(Memory):
         out.write_text(text, encoding="utf-8", errors="replace")
         self._dirty = True
         self._file_cache.clear()
+        self._stop_serve()
 
     def _save_backend(self, output_dir: Path) -> None:
         # The markdown is the memory; the `.kb` index is derived and disposable,
@@ -171,6 +176,8 @@ class UlpiaMemory(Memory):
         )
 
     def _load_backend(self, input_dir: Path) -> None:
+        self._stop_serve()
+        self._file_cache.clear()
         self.workspace = (Path(input_dir) / "ulpia_workspace").resolve()
         self.agent = self.workspace / "trajectories"
         require(
@@ -178,6 +185,52 @@ class UlpiaMemory(Memory):
             f"saved ulpia workspace missing at {self.workspace}",
         )
         self._dirty = True
+
+    def _stop_serve(self) -> None:
+        if self._serve is not None:
+            try:
+                self._serve.kill()
+            except OSError:
+                pass
+            self._serve = None
+
+    def _mcp(self, name: str, arguments: dict[str, object]) -> str:
+        """One tools/call against the persistent serve child. The server is
+        stateless and answers initialize without requiring it, so the first
+        call can be a tools/call directly."""
+        with self._index_lock:
+            if self._serve is None or self._serve.poll() is not None:
+                self._serve = subprocess.Popen(
+                    [self.kb_bin, "serve", str(self.workspace), "--all"],
+                    stdin=subprocess.PIPE,
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.DEVNULL,
+                    text=True,
+                    encoding="utf-8",
+                    errors="replace",
+                    bufsize=1,
+                )
+            self._mcp_id += 1
+            req = {
+                "jsonrpc": "2.0",
+                "id": self._mcp_id,
+                "method": "tools/call",
+                "params": {"name": name, "arguments": arguments},
+            }
+            assert self._serve.stdin and self._serve.stdout
+            self._serve.stdin.write(json.dumps(req) + "\n")
+            self._serve.stdin.flush()
+            while True:
+                line = self._serve.stdout.readline()
+                require(bool(line), "kb serve closed its stdout mid-call")
+                try:
+                    resp = json.loads(line)
+                except json.JSONDecodeError:
+                    continue
+                if resp.get("id") == self._mcp_id:
+                    require("error" not in resp, f"kb serve error: {resp.get('error')}")
+                    content = resp["result"]["content"]
+                    return "".join(c.get("text", "") for c in content)
 
     def _kb(self, *args: str) -> str:
         proc = subprocess.run(
@@ -208,22 +261,22 @@ class UlpiaMemory(Memory):
         # A question image is a modality this backend does not read; the text of
         # the question still routes. Stated, not hidden.
         self._ensure_index()
-        out = self._kb("route", query, "--hybrid", "--top", str(self.top_files))
+        out = self._mcp("kb_retrieve", {"question": query, "top": self.top_files})
 
-        # Each ranked line is followed by a preview whose breadcrumb names the
-        # section the scorer actually hit ("Trajectory X > state 6 >
-        # observation"). That anchor is the product's own signal about where in
-        # the book the match lives, so the slice opens there first. The first
+        # `kb_retrieve` names each file (`## agent/path`) and each matched
+        # passage's heading path (`### Trajectory X > state 6 > observation`).
+        # That breadcrumb is the product's own signal about where in the book
+        # the match lives, so the slice opens there first. The first
         # instrumented run served slices around question words alone and lost
         # 78 percent of its evidence misses to exactly this: right file, wrong
         # lines.
         ranked: list[tuple[str, str, set[str]]] = []
         for line in out.splitlines():
-            m = ROUTE_LINE.match(line)
+            m = re.match(r"^## ([^/\s]+)/(\S+)", line)
             if m:
-                ranked.append((m.group(2), m.group(3), set()))
+                ranked.append((m.group(1), m.group(2), set()))
                 continue
-            if ranked:
+            if ranked and line.startswith("### "):
                 for st in re.findall(r">\s*state (\d+)", line):
                     ranked[-1][2].add(st)
 
