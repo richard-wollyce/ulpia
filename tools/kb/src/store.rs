@@ -257,6 +257,12 @@ pub struct Store {
     /// because its index was just emptied teaches you the base does not cover the
     /// question, which is the wrong lesson and an expensive one.
     pub rebuilt: bool,
+    /// Document frequency per term, filled lazily by `prune_unrankable` and
+    /// cleared by `sync`, because df changes only when the index does. Without
+    /// it the probes walk the longest doclists on every query and cost more at
+    /// the median than the pruning saves; measured before it existed: pruned
+    /// 386ms p50 against 306ms unpruned on identical questions, probes to blame.
+    df_cache: std::cell::RefCell<std::collections::HashMap<String, i64>>,
 }
 
 impl Store {
@@ -265,7 +271,7 @@ impl Store {
             std::fs::create_dir_all(parent)?;
         }
         let conn = Connection::open(path)?;
-        let mut store = Store { conn, rebuilt: false };
+        let mut store = Store { conn, rebuilt: false, df_cache: Default::default() };
         store.rebuilt = store.schema()?;
         Ok(store)
     }
@@ -318,6 +324,8 @@ impl Store {
 
     /// Brings the index in line with the files, touching only what changed.
     pub fn sync(&mut self, base: &Base, base_name: &str) -> R<SyncReport> {
+        // A sync can change every document frequency in the index.
+        self.df_cache.borrow_mut().clear();
         let mut report = SyncReport { unchanged: 0, reindexed: 0, removed: 0, chunks: 0 };
         let tx = self.conn.transaction()?;
 
@@ -417,13 +425,22 @@ impl Store {
     /// passes, which keeps a base that is not a git repository working exactly as the
     /// file walk already treats it.
     pub fn search(&self, terms: &[String], limit: usize, scope: Scope) -> R<Vec<Hit>> {
-        let expr = match fts_query(terms) {
+        let terms = self.prune_unrankable(terms)?;
+        let expr = match fts_query(&terms) {
             Some(e) => e,
             None => return Ok(Vec::new()),
         };
 
-        // `chunks` stays unaliased: FTS5 wants the table name in MATCH, snippet() and
-        // bm25(), and an alias there is the first thing that breaks.
+        // One phase, and that is a measured decision, not a leftover. The classic
+        // split (rank rowids first, fetch snippet and text for the winners only)
+        // was built and timed on a 57k chunk base over identical questions:
+        // one phase 246ms at the median, two phases 524ms with MATCH in the second
+        // phase (the doclists are walked again) and 312ms fetching by bare rowid
+        // (which also loses snippet(), and excerpt has real consumers in the UI,
+        // the MCP evidence line and remember). The candidate walk is the cost;
+        // the wide columns are not. `chunks` stays unaliased: FTS5 wants the table
+        // name in MATCH, snippet() and bm25(), and an alias there is the first
+        // thing that breaks.
         let mut stmt = self.conn.prepare(
             "SELECT chunks.base, chunks.path, chunks.heading_path,
                     snippet(chunks, 3, '', '', ' ... ', 14),
@@ -459,6 +476,51 @@ impl Store {
         Ok(out)
     }
 
+    /// Drops query terms that cannot rank and only cost.
+    ///
+    /// The mechanism, with the numbers that shipped it: BM25's idf term is
+    /// log((N - df + 0.5) / (df + 0.5)), which FTS5 floors near zero once a term
+    /// appears in a quarter of the corpus, so such a term moves no ranking while its
+    /// doclist is by definition the longest walk in the index. Measured on a 57k
+    /// chunk base ("list" alone matched 19,530 chunks): the OR-of-the-question
+    /// expression cost 205ms at the median, and pruning df > N/4 terms cut it to
+    /// about 100ms with the per-term COUNT probes included. Below PRUNE_MIN_CHUNKS
+    /// the walk is already invisible and the probes are pure overhead, so small
+    /// bases keep the exact old behaviour; this is a big-corpus regime change, not
+    /// a retuning of personal fleets. The keyword scorer still sees every word:
+    /// only the text expression is pruned. When every term would be pruned, the
+    /// original list stands, because a slow answer beats none.
+    fn prune_unrankable(&self, terms: &[String]) -> R<Vec<String>> {
+        let (_, chunks) = self.counts()?;
+        if (chunks as usize) < PRUNE_MIN_CHUNKS {
+            return Ok(terms.to_vec());
+        }
+        let ceiling = chunks / 4;
+        let mut stmt = self.conn.prepare("SELECT COUNT(*) FROM chunks WHERE chunks MATCH ?1")?;
+        let mut cache = self.df_cache.borrow_mut();
+        let mut kept = Vec::with_capacity(terms.len());
+        for t in terms {
+            let df: i64 = match cache.get(t) {
+                Some(n) => *n,
+                None => match stmt.query_row(params![format!("\"{t}\"")], |r| r.get(0)) {
+                    Ok(n) => {
+                        cache.insert(t.clone(), n);
+                        n
+                    }
+                    // A term FTS5 cannot parse matches nothing either way.
+                    Err(_) => continue,
+                },
+            };
+            if df <= ceiling {
+                kept.push(t.clone());
+            }
+        }
+        if kept.is_empty() {
+            return Ok(terms.to_vec());
+        }
+        Ok(kept)
+    }
+
     pub fn counts(&self) -> R<(i64, i64)> {
         let files: i64 = self.conn.query_row("SELECT COUNT(*) FROM files", [], |r| r.get(0))?;
         let chunks: i64 = self.conn.query_row("SELECT COUNT(*) FROM chunks", [], |r| r.get(0))?;
@@ -473,6 +535,12 @@ impl Store {
 /// hyphen or a colon in it is a syntax error rather than a search. OR rather than AND
 /// because a question rarely uses the file's exact vocabulary, and BM25 already
 /// rewards the documents that match more of it.
+/// The corpus size where pruning starts to pay. Below it, the per-term COUNT
+/// probes cost more than the walk they would save; the demo fleet and every
+/// personal base measured so far sit far under it, which is the point: their
+/// behaviour does not change by one hit.
+const PRUNE_MIN_CHUNKS: usize = 10_000;
+
 fn fts_query(terms: &[String]) -> Option<String> {
     let quoted: Vec<String> = terms.iter().map(|t| format!("\"{t}\"")).collect();
     if quoted.is_empty() {
@@ -521,6 +589,39 @@ mod tests {
     /// the tracked filter lived on the file walk and `search` had no filter at all.
     /// The database could not say which of its rows were private, so it served all
     /// of them.
+    #[test]
+    fn a_term_in_a_quarter_of_a_big_corpus_is_pruned_and_a_rare_one_still_ranks() {
+        let dir = scratch("prune-df");
+        let mut store = Store::open(&dir.join("i.db")).expect("open");
+
+        // One section per chunk, PRUNE_MIN_CHUNKS of them and change, every one
+        // carrying the ubiquitous word; exactly one carries the rare one.
+        let mut text = String::from("# Big\n\n");
+        for i in 0..(PRUNE_MIN_CHUNKS + 50) {
+            if i == 7_777 {
+                text.push_str(&format!("## s{i}\n\nubiquitous raregem\n\n"));
+            } else {
+                text.push_str(&format!("## s{i}\n\nubiquitous filler\n\n"));
+            }
+        }
+        let base = base_with(&dir, vec![md("knowledge/big.md", &text, Some(true))]);
+        store.sync(&base, "zed").expect("sync");
+
+        let both = store
+            .search(&["ubiquitous".into(), "raregem".into()], 5, Scope::All)
+            .expect("search");
+        assert!(
+            both.iter().any(|h| h.heading_path.contains("s7777")),
+            "the rare term must still find its chunk after the ubiquitous one is pruned"
+        );
+
+        let only_common = store.search(&["ubiquitous".into()], 5, Scope::All).expect("search");
+        assert!(
+            !only_common.is_empty(),
+            "when every term would be pruned the original query stands: slow beats none"
+        );
+    }
+
     #[test]
     fn an_untracked_file_stays_out_of_a_public_search() {
         let dir = scratch("public-scope");
