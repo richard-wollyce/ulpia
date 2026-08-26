@@ -186,12 +186,23 @@ pub fn complete_plan(memory: &crate::memory::Memory) -> CompletePlan {
 
 /// One map batch's prompt.
 pub fn map_prompt(question: &str, batch: &[(String, String)]) -> String {
+    // **A batch-level NONE is no longer a legal answer, and that rule bought 91
+    // percent of the diagnosed failures.** The traced autopsy of 2026-08-25 found
+    // twenty of twenty-two multi-session misses were a map batch replying NONE while
+    // one of its files plainly held the evidence: the model skimmed the batch and
+    // answered for it as a whole. Forcing a verdict per file makes skipping a file a
+    // visible act instead of a silent one. The relevance criterion stays generic,
+    // "relevant to the question as asked", never a benchmark's category list.
     let mut out = String::from(
-        "Extract facts relevant to ONE question from the files below. Rules:\n\
-         - One fact per line, followed by the file path in parentheses.\n\
+        "Extract facts relevant to ONE question from the files below. Hard rules:\n\
+         - For EVERY file listed, output a verdict line: `FILE <path>: facts below` or \
+           `FILE <path>: no relevant mention`. Every file, no exceptions; answering for \
+           the batch as a whole is not a legal output.\n\
+         - Under a `facts below` verdict, one fact per line, as a bullet starting with \
+           `- `, and after each fact, in parentheses: the file path and the session \
+           date, like `- fact (history/memory/003-2023-05-20.md, 2023-05-20)`.\n\
          - Only what the files literally state. No inference across files, no outside \
-           knowledge.\n\
-         - If nothing in these files bears on the question, answer exactly: NONE\n\n",
+           knowledge.\n\n",
     );
     for (name, text) in batch {
         out.push_str(&format!("--- {name}\n{text}\n\n"));
@@ -202,16 +213,23 @@ pub fn map_prompt(question: &str, batch: &[(String, String)]) -> String {
 
 /// The reduce prompt over the collected fact lines.
 pub fn reduce_prompt(question: &str, facts: &str) -> String {
+    // **Enumerate, then commit.** The autopsy's one true composition failure computed
+    // the right answer and then declined to state it; the scaffold makes the committed
+    // line mandatory and pushes hedging after it. Refusal stays a legal commitment:
+    // "the library does not hold this" fixes refusing-despite-having, never
+    // refusing-for-lack.
     format!(
-        "Answer ONE question using ONLY the fact lines below, which were extracted from \
-         a personal knowledge library and carry their source file in parentheses. Hard \
-         rules:\n\
-         - Every claim cites its file, carried over from the fact line.\n\
-         - Aggregate honestly: if the question asks how many or which ones, count and \
-           list from the facts, and say if the facts look incomplete.\n\
-         - If the facts do not hold the answer, say so plainly. \"The library does not \
-           hold this\" is a correct and complete answer.\n\
-         - Answer in the language of the question, briefly.\n\n\
+        "Answer ONE question using ONLY the fact lines below, each carrying its source \
+         file and session date in parentheses. Work in this exact order:\n\
+         1. CANDIDATES: list every fact that bears on the question, one per line, with \
+            its source and date, marked `counted` or `excluded (reason)`.\n\
+         2. ANSWER: one line starting with `ANSWER:` containing your committed answer. \
+            When the question asks for a number, the line contains the number. When the \
+            facts do not hold the answer, the line is `ANSWER: the library does not \
+            hold this`. This line is mandatory and comes before any caveat.\n\
+         3. After the ANSWER line only: any caveat worth stating, briefly.\n\
+         Aggregate honestly: count and list from the facts, and say if the facts look \
+         incomplete. Answer in the language of the question.\n\n\
          THE FACTS:\n{facts}\n\nTHE QUESTION:\n{question}\n"
     )
 }
@@ -253,21 +271,27 @@ mod tests {
 
 
     #[test]
-    fn the_map_stage_carries_the_question_and_demands_citations() {
+    fn the_map_stage_demands_a_verdict_per_file_and_dated_facts() {
+        // The 2026-08-25 autopsy: 20 of 22 failures were a batch-level NONE swallowing
+        // a file that held the evidence. The contract now forbids that shape.
         let p = map_prompt(
             "quantas vezes fui ao medico",
             &[("history/memory/001.md".into(), "fui ao medico em marco".into())],
         );
         assert!(p.contains("THE QUESTION"));
         assert!(p.contains("history/memory/001.md"));
-        assert!(p.contains("NONE"), "an empty batch has an explicit empty answer");
+        assert!(p.contains("For EVERY file listed"), "the per-file verdict is the rule");
+        assert!(p.contains("no relevant mention"), "skipping a file is a visible act");
+        assert!(p.contains("the session \\\n           date") || p.contains("session date") || p.contains("session \
+           date"), "dates survive into fact lines");
     }
 
     #[test]
-    fn the_reduce_stage_keeps_the_refusal_and_the_honest_count() {
-        let p = reduce_prompt("how many visits", "visited in march (a.md)");
-        assert!(p.contains("The library does not\n         hold this")
-            || p.contains("The library does not hold this"));
+    fn the_reduce_stage_commits_before_it_hedges() {
+        let p = reduce_prompt("how many visits", "- visited in march (a.md, 2023-03-01)");
+        assert!(p.contains("ANSWER:"), "the committed line is mandatory");
+        assert!(p.contains("before any caveat"), "hedging comes after the commitment");
+        assert!(p.contains("the library does not"), "refusal stays a legal commitment");
         assert!(p.contains("say if the facts look incomplete"));
     }
 

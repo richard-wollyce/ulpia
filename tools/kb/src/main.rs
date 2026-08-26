@@ -797,7 +797,9 @@ fn cmd_answer_complete(question: &str, memory: &memory::Memory, root: &Path) -> 
             Some(reply) => {
                 for line in reply.lines() {
                     let l = line.trim();
-                    if !l.is_empty() && !l.eq_ignore_ascii_case("none") {
+                    // Only the dated fact bullets survive; verdict lines (`FILE ...:
+                    // no relevant mention`) are the map being visible, not evidence.
+                    if l.starts_with("- ") {
                         facts.push_str(l);
                         facts.push('\n');
                     }

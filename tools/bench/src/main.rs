@@ -89,6 +89,7 @@ fn main() -> ExitCode {
             judge: flag_value(&args, "--judge"),
             keep: args.iter().any(|a| a == "--keep"),
             only_type: flag_value(&args, "--type"),
+            trace: flag_value(&args, "--trace").map(PathBuf::from),
             mode: match flag_value(&args, "--mode").as_deref() {
                 Some("expanded") => kb::answer::Mode::Expanded,
                 Some("complete") => kb::answer::Mode::Complete,

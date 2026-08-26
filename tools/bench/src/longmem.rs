@@ -152,7 +152,13 @@ fn sanitize(s: &str) -> String {
 }
 
 /// Index, ask, answer: the shipped pipeline over the generated fleet.
-pub fn answer_one(root: &Path, inst: &Instance, answerer: &Classifier, mode: kb::answer::Mode) -> Result<String, String> {
+pub fn answer_one(
+    root: &Path,
+    inst: &Instance,
+    answerer: &Classifier,
+    mode: kb::answer::Mode,
+    trace: Option<&Path>,
+) -> Result<String, String> {
     // The text store, built the way `kb index` builds it: through the library.
     let agent_dir = root.join("history");
     let base = kb::base::Base::discover(&agent_dir, true).map_err(|e| e.to_string())?;
@@ -171,15 +177,39 @@ pub fn answer_one(root: &Path, inst: &Instance, answerer: &Classifier, mode: kb:
         let plan = kb::answer::complete_plan(&memory);
         let mut facts = String::new();
         let mut batch: Vec<(String, String)> = Vec::new();
+        let tdir = trace.map(|t| t.join(&inst.question_id));
+        if let Some(d) = &tdir {
+            let _ = std::fs::create_dir_all(d);
+            let _ = std::fs::write(
+                d.join("question.txt"),
+                format!("{question}\ngold: {}\n", inst.answer),
+            );
+        }
+        let mut batch_no = 0usize;
         let mut run_batch = |batch: &mut Vec<(String, String)>, facts: &mut String| {
             if batch.is_empty() {
                 return;
             }
+            batch_no += 1;
             let p = kb::answer::map_prompt(&question, batch);
-            if let Some(reply) = kb::promote::ask_model(answerer, root, &p) {
+            let reply = kb::promote::ask_model(answerer, root, &p);
+            if let Some(d) = &tdir {
+                let files: Vec<&str> = batch.iter().map(|(n, _)| n.as_str()).collect();
+                let _ = std::fs::write(
+                    d.join(format!("map-{batch_no:02}.txt")),
+                    format!(
+                        "FILES:\n{}\n\nREPLY:\n{}\n",
+                        files.join("\n"),
+                        reply.as_deref().unwrap_or("(no reply)")
+                    ),
+                );
+            }
+            if let Some(reply) = reply {
                 for line in reply.lines() {
                     let l = line.trim();
-                    if !l.is_empty() && !l.eq_ignore_ascii_case("none") {
+                    // Only the dated fact bullets survive; verdict lines (`FILE ...:
+                    // no relevant mention`) are the map being visible, not evidence.
+                    if l.starts_with("- ") {
                         facts.push_str(l);
                         facts.push('\n');
                     }
@@ -197,11 +227,18 @@ pub fn answer_one(root: &Path, inst: &Instance, answerer: &Classifier, mode: kb:
         if facts.trim().is_empty() {
             return Ok("The history does not hold this; I don't know.".into());
         }
+        if let Some(d) = &tdir {
+            let _ = std::fs::write(d.join("facts.txt"), &facts);
+        }
         let reduce = kb::answer::reduce_prompt(&question, &facts);
-        return kb::promote::ask_model(answerer, root, &reduce)
+        let out = kb::promote::ask_model(answerer, root, &reduce)
             .map(|t| t.trim().to_string())
             .filter(|t| !t.is_empty())
-            .ok_or_else(|| "the reduce call got no reply".into());
+            .ok_or_else(|| "the reduce call got no reply".to_string());
+        if let (Some(d), Ok(ans)) = (&tdir, &out) {
+            let _ = std::fs::write(d.join("answer.txt"), ans);
+        }
+        return out;
     }
 
     if !kb::answer::worth_asking(&a.confidence, &a.found) {
@@ -260,6 +297,10 @@ pub struct Options {
     pub keep: bool,
     /// Only instances of this question_type, when set: for re-measuring one ability.
     pub only_type: Option<String>,
+    /// When set, complete mode writes its intermediates here, one dir per question:
+    /// the per-batch map replies, the fact sheet the reduce saw, and the final
+    /// answer. An autopsy without intermediates is guesswork with a straight face.
+    pub trace: Option<PathBuf>,
 }
 
 pub fn run(dataset: &Path, opt: &Options) -> Result<(), String> {
@@ -298,7 +339,7 @@ pub fn run(dataset: &Path, opt: &Options) -> Result<(), String> {
                 let outcome = std::fs::create_dir_all(&root)
                     .map_err(|e| e.to_string())
                     .and_then(|_| build_fleet(&root, inst).map_err(|e| e.to_string()))
-                    .and_then(|_| answer_one(&root, inst, &answerer, opt.mode));
+                    .and_then(|_| answer_one(&root, inst, &answerer, opt.mode, opt.trace.as_deref()));
                 let (hyp, verdict) = match outcome {
                     Ok(h) => {
                         let v = judge.as_ref().and_then(|j| judge_one(j, &root, inst, &h));

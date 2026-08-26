@@ -73,5 +73,33 @@ extracted facts) plus the official rubric's strictness, which counts a partial
 aggregation as wrong. That residual is the next mechanism to name, not a number to
 massage.
 
+## Addendum 2026-08-25, later: the autopsy, the fixes, and the re-measure
+
+A traced re-run of the same 30 questions wrote every intermediate to disk (per-batch
+map replies, the fact sheet the reduce saw, the final answer), and a five-agent
+autopsy classified all 30 against the dataset's own answer_session_ids. The verdict
+overturned the working theory: **91 percent of failures were extraction, not
+composition**. A map batch containing a gold file replied NONE while the file plainly
+held the evidence; the arithmetic over what arrived was almost always right.
+
+Three fixes shipped as product decisions (ADR-0032), none tuned to this benchmark:
+a per-file verdict rule in the map (a batch-level NONE is no longer a legal output),
+the session date on every extracted fact line, and an enumerate-then-commit scaffold
+in the reduce (the ANSWER line is mandatory and precedes any caveat; refusal remains
+a legal answer). Re-measured on the identical 30 questions, same judge, same seed
+material:
+
+| | before | after |
+|---|---|---|
+| extraction recall of gold files into the fact sheet | 60/100 (60%) | **91/100 (91%)** |
+| multi-session, complete mode, same 30 ids | 8/30 (27%) | **17/30 (57%)** |
+| flips | | 11 to correct, 2 away |
+
+One of the two regressions is the autopsy's named lucky hit (right number from wrong
+evidence), which the do-not-fix section ordered left unprotected; losing it is the
+fix being honest. The residual 13 misses now sit above a 91 percent extraction floor,
+which puts the next mechanism genuinely in composition and rubric territory for the
+first time.
+
 **One instrument was rebuilt mid-run: none.** The run completed on the first attempt,
 500 of 500, roughly one hour, six workers, on the machine above.

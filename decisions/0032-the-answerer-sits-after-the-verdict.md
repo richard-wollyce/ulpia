@@ -63,6 +63,19 @@ Changing a mode's numbers to chase a benchmark and re-running is the tuning the
 harness refuses; a change lands as a product decision here first and is measured
 after, with the mode declared in the run's configuration header.
 
+## Amended 2026-08-25, later: the map answers per file, and the reduce commits
+
+The traced autopsy of the multi-session failures found 91 percent were a map batch
+answering NONE for a batch containing the evidence: skimming made silent. Three
+changes, approved as product decisions and measured on the identical 30 questions:
+the map must emit a verdict per file (batch-level NONE stopped being a legal output),
+every fact line carries its session date, and the reduce enumerates candidates then
+emits a mandatory committed ANSWER line before any caveat, with refusal still legal.
+Extraction recall of gold evidence went 60 to 91 percent and the score 27 to 57
+percent, with the one preserved failure mode being the lucky hit the autopsy ordered
+unprotected. The relevance criterion stays generic by rule; nothing in the prompts
+names a benchmark's categories.
+
 ## What this unlocked, updated as it landed
 
 LongMemEval grades free-text answers; this shim produces them, and the other half,
