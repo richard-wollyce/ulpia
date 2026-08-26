@@ -297,6 +297,10 @@ pub struct Options {
     pub keep: bool,
     /// Only instances of this question_type, when set: for re-measuring one ability.
     pub only_type: Option<String>,
+    /// The complement of only_type, for a declared-modes run split by question
+    /// nature: aggregation questions run one mode, everything else another, and
+    /// the two halves are two runs whose headers each declare their mode.
+    pub skip_type: Option<String>,
     /// When set, complete mode writes its intermediates here, one dir per question:
     /// the per-batch map replies, the fact sheet the reduce saw, and the final
     /// answer. An autopsy without intermediates is guesswork with a straight face.
@@ -310,6 +314,7 @@ pub fn run(dataset: &Path, opt: &Options) -> Result<(), String> {
     let slice: Vec<Instance> = all
         .into_iter()
         .filter(|i| opt.only_type.as_deref().is_none_or(|t| i.question_type == t))
+        .filter(|i| opt.skip_type.as_deref().is_none_or(|t| i.question_type != t))
         .skip(opt.offset)
         .take(if opt.limit == 0 { usize::MAX } else { opt.limit })
         .collect();
