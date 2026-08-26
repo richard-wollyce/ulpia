@@ -63,6 +63,7 @@ export default defineConfig({
         404: resolve(__dirname, "404.html"),
         privacy: resolve(__dirname, "privacy/index.html"),
         terms: resolve(__dirname, "terms/index.html"),
+        benchmarks: resolve(__dirname, "benchmarks/index.html"),
         ...blogInputs(),
       },
     },

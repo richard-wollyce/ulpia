@@ -1637,3 +1637,57 @@ input[type="email"]:focus-visible {
     transition: none;
   }
 }
+
+/* ---- benchmark tables (the benchmarks page). Data set in the book's own
+ * material: hairline rules, no fill, headers in the 600 weight the page
+ * already owns. The figure breaks out to the wide measure the terminal plate
+ * already uses, and the inner wrapper scrolls, so a wide table can never make
+ * the page itself scroll sideways. ---- */
+
+.doc .bench {
+  max-width: min(var(--measure-wide), 100%);
+  margin-block: 1.5rem;
+}
+
+.bench-scroll {
+  overflow-x: auto;
+}
+
+.bench table {
+  border-collapse: collapse;
+  width: 100%;
+  /* Below this the columns crush into single-word verticals; the wrapper
+   * above trades that for a horizontal scroll confined to the table. */
+  min-width: 38rem;
+  font-size: var(--size-small);
+  line-height: 1.5;
+}
+
+.bench th,
+.bench td {
+  text-align: left;
+  vertical-align: top;
+  padding: 0.5rem 1.25rem 0.5rem 0;
+  border-bottom: 1px solid var(--rule);
+}
+
+.bench th:last-child,
+.bench td:last-child {
+  padding-right: 0;
+}
+
+.bench thead th {
+  font-weight: 600;
+  color: var(--ink-2);
+}
+
+.bench tbody th {
+  font-weight: 600;
+}
+
+.bench figcaption {
+  font-size: var(--size-small);
+  font-style: italic;
+  color: var(--ink-2);
+  margin-top: 0.75rem;
+}

@@ -1,0 +1,304 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Benchmarks · Ulpia</title>
+    <meta
+      name="description"
+      content="Ulpia's measured latency, abstention and LongMemEval results, each with its command, commit, machine and date, beside the competition's own published claims."
+    />
+    <meta name="color-scheme" content="light dark" />
+    <meta name="theme-color" media="(prefers-color-scheme: light)" content="#F6F1E7" />
+    <meta name="theme-color" media="(prefers-color-scheme: dark)" content="#12100D" />
+    <link rel="canonical" href="https://ulpia.io/benchmarks/" />
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <meta property="og:title" content="Benchmarks · Ulpia" />
+    <meta
+      property="og:description"
+      content="Every Ulpia number reruns from a clone of a public repository. Every competitor number is their own published claim, quoted with a link."
+    />
+    <meta property="og:url" content="https://ulpia.io/benchmarks/" />
+    <meta property="og:type" content="website" />
+    <script src="/theme.js"></script>
+    <link rel="stylesheet" href="/src/styles.css" />
+  </head>
+  <body>
+    <header class="band">
+      <div class="band-inner">
+        <p class="wordmark"><a href="/">Ulpia</a></p>
+        <nav class="nav" aria-label="Sections">
+          <ul>
+            <li><a href="/blog/">Writing</a></li>
+          </ul>
+        </nav>
+        <button type="button" class="lamp-toggle" aria-label="Color scheme: light, press to change">
+          <svg viewBox="0 0 28 28" width="28" height="28" aria-hidden="true" focusable="false">
+            <g class="glow">
+              <path class="ray ray-c" d="M 14 1.2 L 14 3.6" />
+              <path class="ray ray-l" d="M 8.6 2.6 L 10.1 4.3" />
+              <path class="ray ray-r" d="M 19.4 2.6 L 17.9 4.3" />
+              <path class="shade-fill" d="M 6 13.5 L 10.5 5.5 L 17.5 5.5 L 22 13.5 Z" />
+            </g>
+            <g class="lamp">
+              <path class="shade-line" d="M 6 13.5 L 10.5 5.5 L 17.5 5.5 L 22 13.5 Z" />
+              <path class="stem" d="M 12.6 13.5 C 11.9 14.3, 11.1 15.0, 11.1 16.1 C 11.1 17.6, 12.9 18.2, 12.9 19.5 C 12.9 20.6, 10.6 20.9, 10.6 22.2 L 17.4 22.2 C 17.4 20.9, 15.1 20.6, 15.1 19.5 C 15.1 18.2, 16.9 17.6, 16.9 16.1 C 16.9 15.0, 16.1 14.3, 15.4 13.5 Z" />
+              <path class="base" d="M 9 24.25 L 19 24.25" />
+              <g class="chain-group">
+                <path class="chain" d="M 19 14.35 L 19 16.35" />
+                <circle class="chain-pull" cx="19" cy="17.15" r="1.05" />
+              </g>
+            </g>
+          </svg>
+        </button>
+      </div>
+    </header>
+
+    <main class="doc">
+      <h1>Benchmarks</h1>
+      <p class="doc-date">Last measured: 23 to 25 August 2026</p>
+
+      <p>
+        Every Ulpia number on this page comes from a RESULTS file in the
+        <a href="https://github.com/richard-wollyce/ulpia/tree/main/benchmarks">open repository</a>,
+        with the exact command, commit, machine and date beside it, so a clone
+        reruns it. Every competitor number is that vendor's own published
+        claim, quoted with a link, measured by them under their own harness.
+        The two kinds are labelled apart on this page because they are not the
+        same kind of number.
+      </p>
+
+      <h2>Latency</h2>
+      <p>
+        The warm retrieval path answers in 0.68 ms at the median and 1.16 ms at
+        the 95th percentile, over 1000 samples across 50 questions. That is the
+        whole deterministic pipeline per question: both scorers, fusion, the
+        species fold and the confidence gate, in process, no model, no network.
+        A cold start, opening the fleet and answering the first question, costs
+        136.4 ms, once. Measured 2026-08-23 at commit 35322d2, on an 11th Gen
+        Intel i5-1135G7 laptop with 16 GB of RAM, release build; the command
+        and corpus are in
+        <a href="https://github.com/richard-wollyce/ulpia/blob/main/benchmarks/latency/RESULTS.md">benchmarks/latency/RESULTS.md</a>.
+      </p>
+      <figure class="bench">
+        <div class="bench-scroll">
+          <table>
+            <thead>
+              <tr>
+                <th scope="col">System</th>
+                <th scope="col">Published figure</th>
+                <th scope="col">What it measures</th>
+                <th scope="col">Source</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <th scope="row">Ulpia</th>
+                <td>p50 0.68 ms, p95 1.16 ms</td>
+                <td>the whole deterministic pipeline, in process, on the machine above</td>
+                <td><a href="https://github.com/richard-wollyce/ulpia/blob/main/benchmarks/latency/RESULTS.md">latency/RESULTS.md</a></td>
+              </tr>
+              <tr>
+                <th scope="row">mem0</th>
+                <td>search p50 148 ms, p95 200 ms</td>
+                <td>their search phase alone, their harness, LOCOMO</td>
+                <td><a href="https://arxiv.org/abs/2504.19413">arxiv.org/abs/2504.19413</a></td>
+              </tr>
+              <tr>
+                <th scope="row">Zep</th>
+                <td>graph search 150 ms at P95, context retrieval 200 ms at P95</td>
+                <td>server-side, self-measured</td>
+                <td><a href="https://blog.getzep.com/scaling-agent-memory-zep-30x">blog.getzep.com</a></td>
+              </tr>
+              <tr>
+                <th scope="row">Supermemory</th>
+                <td>recall under 300 ms, no percentile stated</td>
+                <td>their hosted recall</td>
+                <td><a href="https://supermemory.ai">supermemory.ai</a></td>
+              </tr>
+              <tr>
+                <th scope="row">Letta</th>
+                <td>no published figure</td>
+                <td>the honest cell is the absence</td>
+                <td><a href="https://docs.letta.com">docs.letta.com</a></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <figcaption>
+          Retrieval latency, as each project states it about itself. None of
+          the vendor rows are our measurements.
+        </figcaption>
+      </figure>
+      <p>
+        The caveat runs in both directions and stays attached to the table.
+        Their figures are server-side, self-measured under their own harnesses,
+        and a caller adds the network beneath them. Our figure is a local
+        process with no network to add, measured by us, on one laptop. So the
+        comparison is of mechanisms, not machines: their pipelines embed,
+        traverse and rank on a server across a network, ours reads an index
+        that lives beside the files it indexes.
+      </p>
+      <p>
+        Read with that caveat, the gap is still the point. Zep's fastest
+        self-reported retrieval, 150 ms at P95 before any network, is roughly
+        130 times our measured warm p95. mem0's own paper's search p50 is
+        roughly 220 times our p50. The asymmetry is structural, not an
+        optimization, and what they buy for that price is a capability this
+        system deliberately does not have: automatic ingestion at scale.
+      </p>
+
+      <h2>Abstention</h2>
+      <p>
+        Abstention is declining to answer what the library does not hold, and
+        it is the row this system exists for. No competitor's published
+        results quote an abstention split at all, so this section has our
+        numbers and an empty field beside them.
+      </p>
+      <p>
+        The instrument: 50 questions, authored blind. The in-scope author saw
+        a topics list and never the corpus; the out-of-scope author saw a
+        one-line domain description and nothing else. 30 of the 50 are out of
+        scope, split across near-domain, far-domain and noise. Against the
+        deterministic layer alone, keyword scorer plus score floor, no model,
+        no network: <strong>28 of the 30 out-of-scope questions were not
+        answered confidently</strong>. Every far-domain question and every
+        noise fragment produced silence, not a least-wrong document. Full
+        matrix and provenance in
+        <a href="https://github.com/richard-wollyce/ulpia/blob/main/benchmarks/abstention/RESULTS.md">benchmarks/abstention/RESULTS.md</a>,
+        commit 35322d2, 2026-08-23.
+      </p>
+      <p>
+        The two misses are named, not averaged away. Both are the question
+        set's deliberate medical baits, built to share vocabulary with
+        textbook nutrition while crossing into a physician's job, and lexical
+        retrieval cannot tell textbook protein from protein for this diagnosed
+        patient. The answer layer above exists to close exactly that gap, and
+        it did: both baits were passed through the grounding-ruled answer
+        surface and both were refused, 2 of 2, with the asker referred to a
+        professional. Two is a small sample and the RESULTS file says so; the
+        catch rate at scale is its own instrument.
+      </p>
+      <p>
+        The same gate holds on somebody else's questions. On LongMemEval-S,
+        28 of 30 abstention questions were answered correctly under the
+        declared-modes run, the one where multi-session questions read the
+        whole base; the single abstention lost against the first run is the
+        cost of reading everything, because more material is more temptation.
+        The benchmark's
+        <a href="https://arxiv.org/abs/2410.10813">own paper</a> reports
+        abstention as the ability long-memory systems fail hardest.
+      </p>
+
+      <h2>LongMemEval-S</h2>
+      <p>
+        LongMemEval-S asks 500 questions against long chat histories. Ulpia
+        scores <strong>61 percent</strong>, 305 of 500, with the reading mode
+        declared per question nature: multi-session questions run the
+        whole-base reading mode, because aggregation is what that mode exists
+        for, and everything else runs the factory default. The first run,
+        everything on defaults, scored 49 percent and stays published, because
+        a floor that was published stays published.
+      </p>
+      <p>
+        Three labels before the table. The judge is claude-haiku, run locally,
+        which is not the official protocol; the official protocol judges with
+        GPT-4o, and the hypotheses files ship in the repository for official
+        re-judging. Ingestion is mechanical keys generated from each session's
+        own vocabulary, the weakest honest ingestion, where a real fleet's
+        keys are authored, so the number is a floor. Command, commit, machine
+        and the per-ability breakdown are in
+        <a href="https://github.com/richard-wollyce/ulpia/blob/main/benchmarks/longmemeval/RESULTS.md">benchmarks/longmemeval/RESULTS.md</a>.
+      </p>
+      <figure class="bench">
+        <div class="bench-scroll">
+          <table>
+            <thead>
+              <tr>
+                <th scope="col">System</th>
+                <th scope="col">Claimed score</th>
+                <th scope="col">As configured</th>
+                <th scope="col">Source</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <th scope="row">Full-context GPT-4o</th>
+                <td>about 60 percent</td>
+                <td>the whole history in the context window, no memory system</td>
+                <td><a href="https://arxiv.org/pdf/2410.10813">the benchmark's paper</a></td>
+              </tr>
+              <tr>
+                <th scope="row">Ulpia</th>
+                <td>61 percent</td>
+                <td>local claude-haiku judge, not the official protocol; mechanical-keys ingestion, a floor</td>
+                <td><a href="https://github.com/richard-wollyce/ulpia/blob/main/benchmarks/longmemeval/RESULTS.md">longmemeval/RESULTS.md</a></td>
+              </tr>
+              <tr>
+                <th scope="row">Zep</th>
+                <td>71.2 percent</td>
+                <td>with GPT-4o, self-judged</td>
+                <td><a href="https://blog.getzep.com/state-of-the-art-agent-memory/">blog.getzep.com</a></td>
+              </tr>
+              <tr>
+                <th scope="row">Mem0</th>
+                <td>94.4 percent</td>
+                <td>configuration not stated on the page</td>
+                <td><a href="https://mem0.ai/research">mem0.ai/research</a></td>
+              </tr>
+              <tr>
+                <th scope="row">Mastra</th>
+                <td>94.87 percent</td>
+                <td>with gpt-5-mini, self-judged</td>
+                <td><a href="https://mastra.ai/research/observational-memory">mastra.ai/research</a></td>
+              </tr>
+              <tr>
+                <th scope="row">Supermemory</th>
+                <td>95 percent</td>
+                <td>with GPT-4o, recall at 15 with aggregation, self-judged</td>
+                <td><a href="https://supermemory.ai/research/longmembench/">supermemory.ai/research</a></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <figcaption>
+          Self-published claims, fetched from the linked pages on 2026-08-25.
+        </figcaption>
+      </figure>
+      <p>
+        One sentence about that table, stated as fact. Each vendor number is
+        self-judged under its own configuration with its own answering model,
+        several of the vendors dispute each other's methodology in public, and
+        none of the numbers is comparable to the others or to ours. Ours is
+        the only one in the table reproducible from a clone of a public
+        repository.
+      </p>
+
+      <h2>What this page refuses</h2>
+      <p>
+        Two advantages this page could take and does not. The ingestion is not
+        tuned to the benchmark: keys stay mechanical for the published runs,
+        and a change that would raise a score lands as a product decision
+        first and gets measured after, never the other way around. And there
+        is no private harness: every Ulpia number above reruns from a clone
+        with the command printed beside it, and a number we cannot hand you
+        the command for does not appear here.
+      </p>
+      <p>
+        LongMemEval-V2 scores accuracy against latency as one frontier, and a
+        retrieval path that answers in about a millisecond without a model is
+        built for exactly that terrain. We have not measured it, so this page
+        carries no number for it. When we have, the number will arrive the way
+        the others did: with the command, the commit and the caveat beside it.
+      </p>
+
+      <p class="doc-back"><a href="/">Back to the library</a></p>
+    </main>
+
+    <footer>
+      <p class="address-line">
+        <a href="mailto:hello@ulpia.io">hello@ulpia.io</a>
+      </p>
+    </footer>
+  </body>
+</html>
