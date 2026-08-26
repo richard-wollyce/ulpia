@@ -59,25 +59,19 @@
       <p class="doc-date">Last measured: 23 to 25 August 2026</p>
 
       <p>
-        Every Ulpia number on this page comes from a RESULTS file in the
+        Every Ulpia number here comes from a RESULTS file in the
         <a href="https://github.com/richard-wollyce/ulpia/tree/main/benchmarks">open repository</a>,
-        with the exact command, commit, machine and date beside it, so a clone
+        with the command, commit, machine and date beside it, so a clone
         reruns it. Every competitor number is that vendor's own published
-        claim, quoted with a link, measured by them under their own harness.
-        The two kinds are labelled apart on this page because they are not the
-        same kind of number.
+        claim, linked at its source.
       </p>
 
       <h2>Latency</h2>
       <p>
-        The warm retrieval path answers in 0.68 ms at the median and 1.16 ms at
-        the 95th percentile, over 1000 samples across 50 questions. That is the
-        whole deterministic pipeline per question: both scorers, fusion, the
-        species fold and the confidence gate, in process, no model, no network.
-        A cold start, opening the fleet and answering the first question, costs
-        136.4 ms, once. Measured 2026-08-23 at commit 35322d2, on an 11th Gen
-        Intel i5-1135G7 laptop with 16 GB of RAM, release build; the command
-        and corpus are in
+        Warm route, 1000 samples over 50 questions: p50 0.68 ms, p95 1.16 ms,
+        the whole deterministic pipeline in process, no model, no network.
+        Cold start, opening the fleet plus the first question: 136.4 ms.
+        Commit 35322d2, 2026-08-23, machine and command in
         <a href="https://github.com/richard-wollyce/ulpia/blob/main/benchmarks/latency/RESULTS.md">benchmarks/latency/RESULTS.md</a>.
       </p>
       <figure class="bench">
@@ -126,88 +120,46 @@
           </table>
         </div>
         <figcaption>
-          Retrieval latency, as each project states it about itself. None of
-          the vendor rows are our measurements.
+          Each project about itself; no vendor row is our measurement.
         </figcaption>
       </figure>
       <p>
-        The caveat runs in both directions and stays attached to the table.
-        Their figures are server-side, self-measured under their own harnesses,
-        and a caller adds the network beneath them. Our figure is a local
-        process with no network to add, measured by us, on one laptop. So the
-        comparison is of mechanisms, not machines: their pipelines embed,
-        traverse and rank on a server across a network, ours reads an index
-        that lives beside the files it indexes.
-      </p>
-      <p>
-        Read with that caveat, the gap is still the point. Zep's fastest
-        self-reported retrieval, 150 ms at P95 before any network, is roughly
-        130 times our measured warm p95. mem0's own paper's search p50 is
-        roughly 220 times our p50. The asymmetry is structural, not an
-        optimization, and what they buy for that price is a capability this
-        system deliberately does not have: automatic ingestion at scale.
+        Their figures are server-side under their own harnesses, and a caller
+        adds the network; ours is a local process with none to add. The
+        comparison is of mechanisms, not machines: Zep's fastest self-reported
+        retrieval is roughly 130 times our warm p95, and mem0's published
+        search p50 is roughly 220 times our p50. What their price buys is
+        automatic ingestion at scale, which Ulpia deliberately lacks.
       </p>
 
       <h2>Abstention</h2>
       <p>
-        Abstention is declining to answer what the library does not hold, and
-        it is the row this system exists for. No competitor's published
-        results quote an abstention split at all, so this section has our
-        numbers and an empty field beside them.
-      </p>
-      <p>
-        The instrument: 50 questions, authored blind. The in-scope author saw
-        a topics list and never the corpus; the out-of-scope author saw a
-        one-line domain description and nothing else. 30 of the 50 are out of
-        scope, split across near-domain, far-domain and noise. Against the
-        deterministic layer alone, keyword scorer plus score floor, no model,
-        no network: <strong>28 of the 30 out-of-scope questions were not
-        answered confidently</strong>. Every far-domain question and every
-        noise fragment produced silence, not a least-wrong document. Full
-        matrix and provenance in
+        50 questions authored blind, 30 of them out of scope. The
+        deterministic layer alone, no model, no network, left
+        <strong>28 of the 30 unanswered</strong>: silence, not a least-wrong
+        document. The two misses are the set's named medical baits, and the
+        answer layer above refused both, 2 of 2, a sample of two and labelled
+        so. Matrix and provenance in
         <a href="https://github.com/richard-wollyce/ulpia/blob/main/benchmarks/abstention/RESULTS.md">benchmarks/abstention/RESULTS.md</a>,
         commit 35322d2, 2026-08-23.
       </p>
       <p>
-        The two misses are named, not averaged away. Both are the question
-        set's deliberate medical baits, built to share vocabulary with
-        textbook nutrition while crossing into a physician's job, and lexical
-        retrieval cannot tell textbook protein from protein for this diagnosed
-        patient. The answer layer above exists to close exactly that gap, and
-        it did: both baits were passed through the grounding-ruled answer
-        surface and both were refused, 2 of 2, with the asker referred to a
-        professional. Two is a small sample and the RESULTS file says so; the
-        catch rate at scale is its own instrument.
-      </p>
-      <p>
-        The same gate holds on somebody else's questions. On LongMemEval-S,
-        28 of 30 abstention questions were answered correctly under the
-        declared-modes run, the one where multi-session questions read the
-        whole base; the single abstention lost against the first run is the
-        cost of reading everything, because more material is more temptation.
-        The benchmark's
+        On LongMemEval-S, 28 of 30 abstention questions were correct under the
+        hardest reading mode. The benchmark's
         <a href="https://arxiv.org/abs/2410.10813">own paper</a> reports
-        abstention as the ability long-memory systems fail hardest.
+        abstention as the ability long-memory systems fail hardest; no
+        competitor's published results quote an abstention split at all.
       </p>
 
       <h2>LongMemEval-S</h2>
       <p>
-        LongMemEval-S asks 500 questions against long chat histories. Ulpia
-        scores <strong>61 percent</strong>, 305 of 500, with the reading mode
-        declared per question nature: multi-session questions run the
-        whole-base reading mode, because aggregation is what that mode exists
-        for, and everything else runs the factory default. The first run,
-        everything on defaults, scored 49 percent and stays published, because
-        a floor that was published stays published.
-      </p>
-      <p>
-        Three labels before the table. The judge is claude-haiku, run locally,
-        which is not the official protocol; the official protocol judges with
-        GPT-4o, and the hypotheses files ship in the repository for official
-        re-judging. Ingestion is mechanical keys generated from each session's
-        own vocabulary, the weakest honest ingestion, where a real fleet's
-        keys are authored, so the number is a floor. Command, commit, machine
-        and the per-ability breakdown are in
+        500 questions against long chat histories. Ulpia scores
+        <strong>61 percent</strong>, 305 of 500, with the reading mode
+        declared per question nature; the all-default first run scored 49
+        percent and stays published. Judged locally by claude-haiku, not the
+        official protocol, official re-judging pending; ingestion is
+        mechanical keys, the weakest honest kind, so the number is a floor.
+        Per-ability breakdown in
         <a href="https://github.com/richard-wollyce/ulpia/blob/main/benchmarks/longmemeval/RESULTS.md">benchmarks/longmemeval/RESULTS.md</a>.
       </p>
       <figure class="bench">
@@ -266,30 +218,19 @@
         </figcaption>
       </figure>
       <p>
-        One sentence about that table, stated as fact. Each vendor number is
-        self-judged under its own configuration with its own answering model,
-        several of the vendors dispute each other's methodology in public, and
-        none of the numbers is comparable to the others or to ours. Ours is
-        the only one in the table reproducible from a clone of a public
-        repository.
+        Each vendor number is self-judged under its own configuration with its
+        own answering model, several of them dispute each other's methodology
+        in public, and none is comparable to the others or to ours. Ours is
+        the only one reproducible from a clone of a public repository.
       </p>
 
       <h2>What this page refuses</h2>
       <p>
-        Two advantages this page could take and does not. The ingestion is not
-        tuned to the benchmark: keys stay mechanical for the published runs,
-        and a change that would raise a score lands as a product decision
-        first and gets measured after, never the other way around. And there
-        is no private harness: every Ulpia number above reruns from a clone
-        with the command printed beside it, and a number we cannot hand you
-        the command for does not appear here.
-      </p>
-      <p>
-        LongMemEval-V2 scores accuracy against latency as one frontier, and a
-        retrieval path that answers in about a millisecond without a model is
-        built for exactly that terrain. We have not measured it, so this page
-        carries no number for it. When we have, the number will arrive the way
-        the others did: with the command, the commit and the caveat beside it.
+        Ingestion tuned to the benchmark, and private harnesses: a number we
+        cannot hand you the command for does not appear here. LongMemEval-V2
+        scores accuracy against latency as one frontier, the terrain a
+        millisecond retrieval path is built for; not measured yet, so no
+        number.
       </p>
 
       <p class="doc-back"><a href="/">Back to the library</a></p>
