@@ -5,7 +5,7 @@
 | Date | 2026-08-23 |
 | Commit | 35322d2 |
 | Machine | 11th Gen Intel i5-1135G7, 16 GB, Windows 11, release build, home connection in Brazil |
-| Command | `kb-bench latency examples/demo benchmarks/abstention/questions.tsv --host ...` |
+| Command | `kb-bench latency examples/demo benchmarks/abstention/questions.tsv --host mem0=api.mem0.ai --host zep=api.getzep.com --host letta=api.letta.com --host supermemory=api.supermemory.ai --host synap=synap-cloud-prod.maximem.ai`, from the repo root |
 | Corpus | `examples/demo`, 15 files |
 
 ## Measured here
@@ -47,6 +47,10 @@ letta        api.letta.com                 30.0 ms
 supermemory  api.supermemory.ai            29.7 ms
 synap        synap-cloud-prod.maximem.ai   24.2 ms
 ```
+
+synap appears in this table and not in the claims table above it, because synap
+publishes no comparable latency figure; the connect floor is our measurement and
+stands on its own.
 
 **Read this table carefully, because it can mislead in both directions.** Four of the
 five hosts resolve to CDN edges (Cloudflare ranges), so the connect lands on a server

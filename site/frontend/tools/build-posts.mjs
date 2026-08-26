@@ -60,8 +60,11 @@ const FOOTER = `    <footer>
       </p>
     </footer>`;
 
-const page = ({ title, description, canonical, body, ogType = "article", current = "true" }) => `<!doctype html>
-<html lang="en">
+// `lang` comes from the post's front matter, because a Portuguese post served
+// under lang="en" mishyphenates and misreads aloud; "en" stays the default so
+// the hand-written pages and old posts change nothing.
+const page = ({ title, description, canonical, body, ogType = "article", current = "true", lang = "en" }) => `<!doctype html>
+<html lang="${lang}">
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
@@ -126,6 +129,7 @@ const posts = files
       date: meta.date,
       description: meta.description || "",
       author: meta.author || "Richard Wollyce",
+      lang: meta.lang,
       html: marked.parse(body),
     };
   })
@@ -141,6 +145,7 @@ for (const p of posts) {
       title: `${p.title} · Ulpia`,
       description: p.description,
       canonical: `${SITE}/blog/${p.slug}/`,
+      lang: p.lang,
       body: `    <main class="doc">
       <article>
         <h1>${esc(p.title)}</h1>

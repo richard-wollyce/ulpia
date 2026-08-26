@@ -1,12 +1,21 @@
-# 0033: The text scorer prunes what cannot rank
+---
+provenance: agent
+stage: derived
+---
 
-Date: 2026-08-26. Status: accepted. Owner: Zed.
+# ADR-0033: the text scorer prunes what cannot rank
+
+**Search for:** `poda de termos`, `term pruning`, `df pruning`, `document frequency`, `fts lento`, `slow fts`, `busca lenta`, `slow search`, `corpus grande`, `big corpus`, `latencia do retrieve`, `retrieve latency`, `bm25 idf`, `stopword dinamico`, `PRUNE_MIN_CHUNKS`, `cauda de latencia`, `tail latency`, `ADR-0033`
+
+Date: 2026-08-26. Status: accepted.
 
 ## The problem, measured before theorized
 
 `Memory::ask` over a 57,486-chunk base (the LongMemEval-V2 enterprise haystack,
 221 MB of accessibility trees) costs 150 to 750ms per question, against
-sub-millisecond over a 113-entry personal fleet. Profiled with the query
+sub-millisecond in the latency instrument's regime, a 15-file demo corpus; a
+personal fleet's own eval, which pays expansion and both scorers per question,
+sits in the tens of milliseconds. Profiled with the query
 replayed at the SQL level and with instrumented binaries over identical
 question sets, the cost decomposes:
 

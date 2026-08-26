@@ -1,6 +1,7 @@
 # Benchmarks
 
-Two measurements, both runnable from a clone, because a number a stranger cannot
+Four instruments, each runnable from a clone as far as a clone can go, because a
+number a stranger cannot
 reproduce is a claim. Every result file states its machine, its commit, its command
 and its date; the configuration moves a score as much as the system does, so the
 configuration travels with the score.

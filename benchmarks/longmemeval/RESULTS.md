@@ -6,7 +6,7 @@
 | Commit | c6ba44e |
 | Machine | 11th Gen Intel i5-1135G7, 16 GB, Windows 11, release build |
 | Dataset | `longmemeval_s_cleaned.json`, 500 instances, huggingface.co/datasets/xiaowu0162/longmemeval-cleaned |
-| Command | `kb-bench longmem data/longmemeval_s_cleaned.json --answerer tools/answer-claude.cmd --judge judge-claude.cmd --workers 6` |
+| Command | `kb-bench longmem data/longmemeval_s_cleaned.json --answerer ../../tools/answer-claude.cmd --judge judge-claude.cmd --workers 6`, from `benchmarks/longmemeval/` |
 | Answerer | claude-sonnet-5, the shipped `answer-claude.cmd`, grounding rules unmodified |
 | Judge | claude-haiku-4-5, **not the official protocol** (official judges with GPT-4o); `hypotheses-s.jsonl` ships for official re-judging |
 | Ingestion | mechanical keys, the weakest honest ingestion; every number below is a floor |
@@ -75,7 +75,9 @@ massage.
 
 ## Addendum 2026-08-25, later: the autopsy, the fixes, and the re-measure
 
-A traced re-run of the same 30 questions wrote every intermediate to disk (per-batch
+A traced re-run of the same 30 questions (scoring 8/30 where the untraced ladder
+run above scored 9/30: one question of run-to-run model variance, and the autopsy
+uses the run whose intermediates exist) wrote every intermediate to disk (per-batch
 map replies, the fact sheet the reduce saw, the final answer), and a five-agent
 autopsy classified all 30 against the dataset's own answer_session_ids. The verdict
 overturned the working theory: **91 percent of failures were extraction, not

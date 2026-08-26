@@ -71,5 +71,6 @@ question in the guess column.
 The in-scope author saw a topics list and never the corpus; the out-of-scope author
 saw a one-line domain description and nothing else; an adversarial pass then read the
 corpus and reworded three in-scope questions whose natural idiom had converged on
-distinctive key strings, and confirmed every label by reading the files. Full sets and
-methods in the workflow records of 2026-08-23.
+distinctive key strings, and confirmed every label by reading the files. The full
+question set ships beside this file as `questions.tsv`; the authoring session's
+working notes are private, and the method is the paragraph you just read.
