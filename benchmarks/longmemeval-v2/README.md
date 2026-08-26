@@ -68,18 +68,20 @@ questions only:
 A ceiling, not a score: it measures whether the served context holds the gold
 phrases verbatim, which bounds what any reader can compose from it. The
 router's own ceiling sits higher: the ranked top-12 files hold the complete
-gold for 94 percent (enterprise) and 90 percent (web) of questions, and the gap
-between router and served decomposes, measured by `analyze_misses.py`, into
-slice misses (11 and 15), route misses (6 and 9, the real routing gap), and
-questions whose gold appears verbatim nowhere in the corpus (1 and 6), which is
-the instrument's floor and not the system's. The adapter took five instrumented
+gold for 95 percent (enterprise) and 90 percent (web) of questions, and the gap
+between router and served decomposes, measured by `analyze_misses.py` on the
+same run the table above reports, into slice misses (10 and 15), route misses
+(6 and 9, the real routing gap), and questions whose gold appears verbatim
+nowhere in the corpus (1 and 6), which is the instrument's floor and not the
+system's; each column sums back to its 141 and 154. The adapter took five instrumented
 rounds to get here (web went 51 to 81 percent); every fix is named in
 `ulpia_memory.py`'s comments, none reads the gold. The adapter holds one
 `kb serve` child open and speaks MCP to it, so `Memory::open` is paid once per
 build; at this corpus scale (about 200 MB per haystack) the remaining query
-cost splits into the Rust search itself (150 to 250 ms typical) and the Python
-slice assembly (260 to 950 ms), both measured, both improvable, neither above
-the LAFS frontier's first budget point of one second. The sub-millisecond
+cost splits roughly evenly between the Rust search and the Python slice
+assembly, each in the 250 to 400 ms band at the median; decision 0033 records
+the full profile and the pruning trade behind the Rust half. Neither half sits
+above the LAFS frontier's first budget point of one second. The sub-millisecond
 routing figure in `benchmarks/latency/` is a personal-fleet-scale number and is
 not this regime, and the reference baselines
 for context are the harness's own: simple RAG 51 percent at 0.2 s,

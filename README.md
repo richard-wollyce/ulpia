@@ -13,7 +13,8 @@ building, and that pair is exactly what this software is.
 Vesta answers *which of your files a question should open*, across every agent you
 have, in a few tens of milliseconds, without sending anything anywhere and without a
 model in the loop. Five runs of `kb eval` on an
-otherwise idle machine, over a base of 113 entries, put both scorers together between 22
+otherwise idle machine, over a base of 113 entries (the fleet had grown to the 120
+the transcripts below print by the time they were captured), put both scorers together between 22
 and 33 ms per question, and the keyword scorer alone between 16 and 24. Runs taken while a
 build shared the machine roughly doubled that, which is the whole reason this gives a
 range and no headline figure: a single number here measures how busy the laptop was, and
@@ -81,18 +82,18 @@ page twice; the eval takes seconds and there is no excuse. It also grades its ow
 confidence, and on this set it fails that grade:
 
 ```
-$ kb eval fleet/zed/fleet/eval/gold.tsv .
+$ kb eval fleet/zed/fleet/eval/gold.tsv .   # the doubled fleet/ is real: Zed keeps his eval set in a nested fleet
 
   GATE   flagged 1/13 of its own misses as a guess
          demoted 0/11 correct answers to a guess
          abstained on 4/9 question(s) the set says to decline
-         hit scores  28.89 to 134.03
-         miss scores 7.24 to 90.16
+         hit scores  29.43 to 129.87
+         miss scores 7.45 to 91.86
          OVERLAPS: no floor tells a hit from a miss on this set.
 ```
 
 **`OVERLAPS` is the tool failing its own test in public, and that is why the block is
-still here.** A miss reaches 90.86 while a hit starts at 29.11, so no single confidence floor
+still here.** A miss reaches 91.86 while a hit starts at 29.43, so no single confidence floor
 separates the two, and the gate flags only 1 of its 13 misses as a guess. What it does
 not do is demote a correct answer, and it declines 4 of the 9 questions the key says to
 decline. An earlier version of this page quoted a run that separated cleanly; that run
@@ -164,7 +165,7 @@ model sits after retrieval's verdict, never inside retrieval.
 
 `kb answer` reads five files by default, a table sized for a personal question. Two
 more modes exist and are the caller's choice, never an automatic switch: `--expanded`
-reads twelve files, and `--complete` reads every keyed file in the base in batches of
+reads up to twelve files, and `--complete` reads every keyed file in the base in batches of
 ten and composes the answer from what each batch extracted. Complete mode prints a
 time estimate before the first model call and restates it after the first batch
 lands, because a whole-base read costs minutes, and a caller on any surface deserves
@@ -228,7 +229,7 @@ handing you the least wrong book.
 
 ## Benchmarks a clone can re-run
 
-Three instruments live in [`benchmarks/`](benchmarks/), each `RESULTS.md` carrying
+Four instruments live in [`benchmarks/`](benchmarks/), each results file carrying
 the exact command, commit, machine and date, because a number that cannot say where
 it came from is marketing. The harness is `tools/bench`, a second crate in this
 repository; its `--trace` flag writes every intermediate of a complete-mode run to
@@ -238,7 +239,8 @@ disk, which is what made the autopsy below possible at all.
 |---|---|---|
 | [abstention](benchmarks/abstention/RESULTS.md) | 28 of 30 out-of-scope questions not answered confidently, deterministic layer alone | the 50 questions were authored blind and adversarially checked; the two misses are named medical baits, and the answer layer above caught both |
 | [latency](benchmarks/latency/RESULTS.md) | warm route p50 0.68 ms, p95 1.16 ms, the whole deterministic pipeline in process | the vendors' own published figures (0.148 to 0.3 s) measure their servers under their harnesses; the table quotes each claim with its URL and compares mechanisms, not machines |
-| [LongMemEval-S](benchmarks/longmemeval/RESULTS.md) | 500 questions: 61 percent with the reading mode declared per question nature, 28 of 30 abstentions correct, under the weakest honest ingestion; 49 percent under the all-default first run, kept published | judged locally by claude-haiku, which is not the official protocol; the hypotheses file ships for official GPT-4o re-judging, and every number is a floor and labelled as one |
+| [LongMemEval-S](benchmarks/longmemeval/RESULTS.md) | 500 questions: 61 percent with the reading mode declared per question nature, 28 of 30 abstentions correct, under the weakest honest ingestion; 49 percent under the all-default first run, kept published |
+| [LongMemEval-V2](benchmarks/longmemeval-v2/README.md) | pre-reader so far: the served context holds the full gold evidence for 88 percent (enterprise) and 81 percent (web) of deterministic questions at under a second per query | not a score: the official run needs the protocol's fixed reader and judge, and neither key lives in the repository | judged locally by claude-haiku, which is not the official protocol; the hypotheses file ships for official GPT-4o re-judging, and every number is a floor and labelled as one |
 
 The multi-session story inside the third file is the method on display: 18 percent
 under the five-file default, a traced autopsy that overturned the working theory
@@ -267,7 +269,7 @@ Agents run in parallel, in the same working tree, all day. So committing is a ve
 tool owns:
 
 ```
-kb commit decisions/0021-committing-under-concurrency.md tools/kb/src/commit.rs -m "message"
+kb commit benchmarks/README.md decisions/0033-the-text-scorer-prunes-what-cannot-rank.md -m "message"
 ```
 
 Name every path. **There is deliberately no flag meaning everything**, because that one
@@ -277,15 +279,24 @@ message. The damage there is not lost work, it is an audit trail that lies.
 The mechanism: `git commit -- <paths>` builds the commit from only those paths and ignores
 the rest of the index, so whatever another session staged a second ago cannot land in
 yours. `kb commit` does that, then **reads the commit back off git and prints what it left
-alone**, which is the step a person skips by hand:
+alone**, which is the step a person skips by hand. This output is a real commit,
+made the day this page was last reviewed, and the hash is in this repository's
+history:
 
 ```
-committed 9fe6c10
-  decisions/0021-committing-under-concurrency.md
-  tools/kb/src/commit.rs
+committed 88622d0
+  benchmarks/README.md
+  benchmarks/abstention/RESULTS.md
+  benchmarks/latency/RESULTS.md
+  benchmarks/longmemeval/RESULTS.md
+  decisions/0033-the-text-scorer-prunes-what-cannot-rank.md
+  site/frontend/privacy/index.html
+  site/frontend/terms/index.html
+  site/frontend/tools/build-posts.mjs
 
-left untouched, still dirty (1):
-  site/
+left untouched, still dirty (2):
+  README.md
+  .claude/launch.json
 ```
 
 A tracked `pre-commit` hook refuses raw `git commit` so the safe path is the default one.
