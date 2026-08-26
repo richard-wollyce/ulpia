@@ -90,7 +90,17 @@ class UlpiaMemory(Memory):
         ).resolve()
         self.top_files = int(memory_params.get("top_files", 12))
         self.slice_radius = int(memory_params.get("slice_radius", 40))
-        self.max_chars_per_file = int(memory_params.get("max_chars_per_file", 16000))
+        # The reader's context budget is 200k tokens; serving ~40k chars per
+        # file across 12 files stays under half of it and the harness truncates
+        # by its own count anyway, so a generous slice costs nothing.
+        self.max_chars_per_file = int(memory_params.get("max_chars_per_file", 60000))
+        # Per file: its lines, the lowercased whole body, and each line's
+        # character offset into that body. Term hits come from `str.find` over
+        # the joined body (C speed) mapped back to lines by bisect; the first
+        # assembly scanned line by line in Python and paid 700ms per query for
+        # it, which the LAFS frontier's first budget point (one second) would
+        # have noticed.
+        self._file_cache: dict[str, tuple[list[str], str, list[int]]] = {}
         self.agent = self.workspace / "trajectories"
         (self.agent / "memory").mkdir(parents=True, exist_ok=True)
         self._index_lock = threading.Lock()
@@ -142,6 +152,7 @@ class UlpiaMemory(Memory):
         out = self.agent / "memory" / f"{traj_id}.md"
         out.write_text(text, encoding="utf-8", errors="replace")
         self._dirty = True
+        self._file_cache.clear()
 
     def _save_backend(self, output_dir: Path) -> None:
         # The markdown is the memory; the `.kb` index is derived and disposable,
@@ -199,48 +210,105 @@ class UlpiaMemory(Memory):
         self._ensure_index()
         out = self._kb("route", query, "--hybrid", "--top", str(self.top_files))
 
-        ranked: list[tuple[str, str]] = []
+        # Each ranked line is followed by a preview whose breadcrumb names the
+        # section the scorer actually hit ("Trajectory X > state 6 >
+        # observation"). That anchor is the product's own signal about where in
+        # the book the match lives, so the slice opens there first. The first
+        # instrumented run served slices around question words alone and lost
+        # 78 percent of its evidence misses to exactly this: right file, wrong
+        # lines.
+        ranked: list[tuple[str, str, set[str]]] = []
         for line in out.splitlines():
             m = ROUTE_LINE.match(line)
             if m:
-                ranked.append((m.group(2), m.group(3)))
+                ranked.append((m.group(2), m.group(3), set()))
+                continue
+            if ranked:
+                for st in re.findall(r">\s*state (\d+)", line):
+                    ranked[-1][2].add(st)
 
-        # Slice around the question's own content words: the router named the
-        # book, the question names the lines worth opening it at.
+        # The question's own content words name further lines worth opening at.
         terms = [w for w in re.split(r"[^0-9a-zA-Z]+", query) if len(w) >= 4 and w.lower() not in STOP]
 
         items: list[MemoryContextItem] = []
-        for agent, rel_path, in ranked[: self.top_files]:
+        for agent, rel_path, states in ranked[: self.top_files]:
             path = self.workspace / agent / rel_path
-            if not path.is_file():
-                continue
-            body = path.read_text(encoding="utf-8", errors="replace")
+            key = str(path)
+            cached = self._file_cache.get(key)
+            if cached is None:
+                if not path.is_file():
+                    continue
+                lines = path.read_text(encoding="utf-8", errors="replace").splitlines()
+                joined = "\n".join(lines).lower()
+                offsets = [0]
+                for l in lines:
+                    offsets.append(offsets[-1] + len(l) + 1)
+                cached = (lines, joined, offsets)
+                self._file_cache[key] = cached
             items.append(
                 {
                     "type": "text",
-                    "value": f"[{agent}/{rel_path}]\n{self._slice(body, terms)}",
+                    "value": f"[{agent}/{rel_path}]\n{self._slice(cached, terms, states)}",
                 }
             )
         return items
 
-    def _slice(self, body: str, terms: list[str]) -> str:
-        """Serve windows around the lines the router's terms actually hit, the
-        same shape as the harness's own raw-state slicing. When no term lands
-        (an FTS-only hit), serve the head: goal and first states."""
-        lines = body.splitlines()
-        lowers = [l.lower() for l in lines]
-        hits = [
-            i
-            for i, l in enumerate(lowers)
-            if any(t and t.lower() in l for t in terms)
-        ]
-        if not hits:
+    def _slice(
+        self,
+        cached: tuple[list[str], str, list[int]],
+        terms: list[str],
+        states: set[str],
+    ) -> str:
+        """Serve the sections the scorer hit, whole and first, then windows
+        around the lines the question's own words hit with whatever budget
+        remains. Priority matters: the first assembly spent its budget in line
+        order, so hundreds of cheap word hits near the top of a file starved
+        the anchored section further down, and the instrument caught it as a
+        recovered-then-stuck slice-miss class. When nothing lands (a thin
+        FTS-only hit), serve the head: goal and first states."""
+        lines, joined, offsets = cached
+        anchored: set[int] = set()
+        if states:
+            starts: dict[str, int] = {}
+            bounds: list[int] = []
+            for i, l in enumerate(lines):
+                m = re.match(r"## state (\d+)$", l)
+                if m:
+                    starts[m.group(1)] = i
+                    bounds.append(i)
+            bounds.append(len(lines))
+            for st in states:
+                if st in starts:
+                    a = starts[st]
+                    b = next(x for x in bounds if x > a)
+                    anchored.update(range(a, b))
+
+        import bisect
+
+        windows: set[int] = set()
+        for t in {t.lower() for t in terms if t}:
+            pos = joined.find(t)
+            while pos != -1:
+                i = bisect.bisect_right(offsets, pos) - 1
+                windows.update(
+                    range(max(0, i - self.slice_radius), min(len(lines), i + self.slice_radius + 1))
+                )
+                pos = joined.find(t, offsets[min(i + 1, len(offsets) - 1)])
+
+        if not anchored and not windows:
             head = "\n".join(lines[: self.slice_radius * 2])
             return head[: self.max_chars_per_file]
 
         keep: set[int] = set()
-        for i in hits:
-            keep.update(range(max(0, i - self.slice_radius), min(len(lines), i + self.slice_radius + 1)))
+        size = 0
+        for group in (anchored, windows - anchored):
+            for i in sorted(group):
+                size += len(lines[i]) + 1
+                if size > self.max_chars_per_file:
+                    break
+                keep.add(i)
+            if size > self.max_chars_per_file:
+                break
 
         out: list[str] = []
         prev = -2
@@ -249,6 +317,4 @@ class UlpiaMemory(Memory):
                 out.append("[...]")
             out.append(lines[i])
             prev = i
-            if sum(len(l) + 1 for l in out) > self.max_chars_per_file:
-                break
         return "\n".join(out)
