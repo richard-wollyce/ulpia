@@ -103,3 +103,36 @@ first time.
 
 **One instrument was rebuilt mid-run: none.** The run completed on the first attempt,
 500 of 500, roughly one hour, six workers, on the machine above.
+
+## Addendum 2026-08-25, evening: the declared-modes run
+
+The mode is the caller's choice, so the honest full-500 run declares a mode per
+question nature and says so here: multi-session ran `--complete`, because
+aggregation is what the whole-base read exists for and what a real caller would
+buy for it, and everything else ran the factory default. Two runs, one harness
+flag apiece (`--type multi-session` / `--skip-type multi-session`), same judge,
+same mechanical-keys ingestion floor as the first run.
+
+| ability | mode | first run, all fast | declared modes |
+|---|---|---|---|
+| abstention | mixed | 29/30 (97%) | 28/30 (93%) |
+| multi-session | complete | 22/121 (18%) | **81/121 (67%)** |
+| temporal-reasoning | fast | 66/127 (52%) | 66/127 (52%) |
+| knowledge-update | fast | 35/72 (49%) | 36/72 (50%) |
+| single-session-assistant | fast | 51/56 (91%) | 52/56 (93%) |
+| single-session-user | fast | 40/64 (63%) | 40/64 (63%) |
+| single-session-preference | fast | 3/30 (10%) | 2/30 (7%) |
+| **TOTAL** | | **246/500 (49%)** | **305/500 (61%)** |
+
+Read the flat rows as the control they are: every fast-mode ability moved within
+noise, which is what should happen when the fixes live entirely inside complete
+mode's map and reduce. The one abstention lost (a multi-session trap answered
+instead of refused) is the cost of reading everything: more material is more
+temptation, and 11/12 under the detective read is the gate holding at 93 percent
+instead of 97. The multi-session jump from 18 to 67 percent is the mode plus the
+extraction fix measured on the full population, and it confirms the 30-question
+sample (57 percent) instead of flattering it.
+
+`hypotheses-s-declared.jsonl` is this run's file and the one worth judging
+officially. `hypotheses-s.jsonl` stays as the first run's, because a floor that
+was published stays published.

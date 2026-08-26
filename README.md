@@ -238,13 +238,13 @@ disk, which is what made the autopsy below possible at all.
 |---|---|---|
 | [abstention](benchmarks/abstention/RESULTS.md) | 28 of 30 out-of-scope questions not answered confidently, deterministic layer alone | the 50 questions were authored blind and adversarially checked; the two misses are named medical baits, and the answer layer above caught both |
 | [latency](benchmarks/latency/RESULTS.md) | warm route p50 0.68 ms, p95 1.16 ms, the whole deterministic pipeline in process | the vendors' own published figures (0.148 to 0.3 s) measure their servers under their harnesses; the table quotes each claim with its URL and compares mechanisms, not machines |
-| [LongMemEval-S](benchmarks/longmemeval/RESULTS.md) | 500 questions: 49 percent total and 29 of 30 abstentions correct, under the weakest honest ingestion | judged locally by claude-haiku, which is not the official protocol; the hypotheses file ships for official GPT-4o re-judging, and every number is a floor and labelled as one |
+| [LongMemEval-S](benchmarks/longmemeval/RESULTS.md) | 500 questions: 61 percent with the reading mode declared per question nature, 28 of 30 abstentions correct, under the weakest honest ingestion; 49 percent under the all-default first run, kept published | judged locally by claude-haiku, which is not the official protocol; the hypotheses file ships for official GPT-4o re-judging, and every number is a floor and labelled as one |
 
 The multi-session story inside the third file is the method on display: 18 percent
 under the five-file default, a traced autopsy that overturned the working theory
 (91 percent of the failures were extraction, not composition), three fixes shipped
-as product decisions in ADR-0032, and a re-measure on the identical questions from
-8/30 to 17/30. Changing the product to chase a benchmark is the tuning these
+as product decisions in ADR-0032, a re-measure on the identical questions from
+8/30 to 17/30, and the full 121 confirming it at 81/121 (67 percent). Changing the product to chase a benchmark is the tuning these
 instruments exist to refuse, so every change lands as a product decision first and
 gets measured after.
 
