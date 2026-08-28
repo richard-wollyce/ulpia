@@ -146,6 +146,20 @@ cargo build --release --manifest-path tools/kb/Cargo.toml
 The binary lands at `tools/kb/target/release/kb` (`kb.exe` on Windows); put it on
 your PATH or call it by that path in everything below.
 
+Building it yourself is the honest default for a tool that reads your notes, and it is not
+the only way. Tagged releases carry a prebuilt `kb-linux-x64` and `kb-windows-x64.exe`,
+each with a `.sha256` beside it:
+
+```
+gh release download kb-v0.1.0 -R richard-wollyce/ulpia -p "kb-linux-x64*"
+sha256sum -c kb-linux-x64.sha256
+```
+
+The Linux one is `x86_64-unknown-linux-musl`, statically linked, so it depends on nothing
+outside the file and runs on Alpine, Debian and the Amazon Linux images serverless
+functions use. That claim is not taken on trust: the release workflow executes the
+artifact inside `amazonlinux:2023` and `alpine:3` before publishing anything.
+
 Route your first question against the demo fleet that ships in the repository,
 three tiny agents with an answer key, so the first run works before you have
 written anything:
@@ -188,21 +202,97 @@ kb init yaron
 
 That writes the full agent shape, initialises git inside the agent, and makes the
 first commit, so the agent it creates can be opened by the system that created it.
-One rule to know before it surprises you: **anything git does not track is not
-served**, because unknown is not public. A fresh note becomes findable when it is
-committed in the agent's repository (`kb commit fleet/yaron/knowledge/<note>.md -m "..."`, run from the repo root; it finds the agent's own repository from the path), or pass `--all`
-to any command while you are still drafting. Drop markdown into
-`fleet/yaron/knowledge/` with a `**Search for:**` line at the top of each file, the
-keywords the router matches, then:
+When a git repository already covers that path and does not ignore it, no repository is
+created: the files are staged into the one that is there and the first commit is yours to
+write. The tool says which of the two happened.
+
+Now write a note. **The order of the next four steps is the order, and getting it wrong
+fails silently**, which is the one thing worth reading twice on this page:
+
+```
+1. write   fleet/yaron/knowledge/creatina.md, with a **Search for:** line at the top
+2. commit  kb commit fleet/yaron/knowledge/creatina.md -m "the dose"
+3. index   kb index .
+4. ask     kb route "quanto de creatina por dia" .
+```
+
+**Anything git does not track is not served**, because unknown is not public. That rule is
+load bearing and it has no exception, so a note written and not committed is a note the
+router will not open. Here is what skipping step 2 actually looks like, run in a fresh
+clone:
+
+```
+$ kb index .
+  yaron      2 reindexed, 0 unchanged, 0 removed, 5 chunks
+  total: 3 files, 5 chunks, 1 indexes
+
+$ kb route "quanto de creatina por dia" .
+indexed:  1 entries across 1 agents, 0 aliases
+
+  nothing matched. Either the base does not cover it, or the
+  Search for lines do not carry the words a real question uses.
+```
+
+**The index reports success and the miss blames your keywords, and neither is what
+happened.** The file is uncommitted, so it was never eligible. The tell is `1 entries`
+where you expected 2. Commit it and the same question scores 17.97 and lands first.
+
+Step 3 has to come after step 2 for the same reason, and this half is quieter still: the
+keyword scorer re-reads your files on every run, so committing alone brings it back
+immediately. **The full text index does not**, because whether a file was public is
+recorded in it at index time. Commit after indexing and `--hybrid` silently drops to one
+scorer and reports the result as a weak guess with no passage attached. Re-run `kb index`
+and both scorers agree again.
+
+While you are still drafting and nothing is committed yet, `--all` on any command includes
+what git does not track. It is the right tool for a draft and the wrong one for a habit:
+it turns the privacy filter off.
 
 ```
 kb index .                      build one index per agent
 kb route "your question" .      your own fleet; the dot is the repo root, the demo uses examples/demo
+kb route "your question" . --hybrid   fuse the keyword scorer with full text search
+kb route "your question" . --json     the same answer as one line of JSON, for a program
 kb check .                      lint every agent, including keys no question can reach
 kb fleet .                      who is in the fleet
 kb eval examples/demo/gold.tsv examples/demo    the graded demo above
 kb ui .                         the reading room: http://127.0.0.1:4114
 ```
+
+### Write the keys as questions, not as subjects
+
+The `Search for:` line is the whole ranking, and the single most common way to end up with
+a base that holds the answer and cannot find it is to fill that line with topic words.
+Query words are weighted by inverse document frequency, and **a multi word key found whole
+inside the question scores far above the same words counted separately.** Three questions
+against one five file base, confidence floor 17.5:
+
+```
+"quanto custa o frete"                             hit     20.68   matched: quanto custa o frete, frete
+"o frete e gratis a partir de quanto"              hit     19.24   matched: frete gratis, frete, gratis
+"quanto tempo demora pra cair o estorno no cartao" guess    6.19   matched: tempo, estorno
+```
+
+The third note is not worse written. Its keys are `reembolso, estorno, devolucao do
+dinheiro`, which name the subject correctly and match no phrase anybody types.
+
+`kb check` grades that line for you, and two of its warnings are the ones worth acting on
+before anything else:
+
+- **W06, thin keyword line.** Fires under twelve terms and asks for thirty, in both
+  languages, including the words somebody types from inside the problem. The number comes
+  from a real miss: a file keyed `eating out, restaurant, poke, salmon` scored zero on
+  "hoje vou sair com meus amigos, to com azia, o que vou comer", and widened to thirty
+  terms it answers at 130.21.
+- **W07, unsearchable key.** Fires when a written key collapses to one word after
+  stopwords, so it reaches neither index. The example in the message is the one that
+  earned the check: `nao contestar` indexed as `contestar`, its own opposite, until
+  somebody rewrote it as `proibido contestar`.
+
+`kb write` builds the note and its map entry in one move and refuses to skip the keys. It
+resolves an agent as `<fleet-root>/fleet/<name>` and fails outside that shape, which is
+worth knowing before you tidy the directory: routing accepts a base at any path, writing
+does not.
 
 ---
 
@@ -315,14 +405,29 @@ anything.
 
 ## Privacy is a property of the layout, not a promise
 
-Vesta reads git to know what is private. **A file git does not track is a file Vesta
-will not serve** unless you ask for it explicitly, and if git cannot be consulted at all
-it refuses to open the base rather than guessing:
+Vesta reads git to know what is private. **A file git does not track is a file Vesta will
+not serve** unless you ask for it explicitly, and where git cannot be consulted at all,
+unknown is not public: that base is left out and none of its files are served.
 
 ```
-refusing to open <path>: git could not be consulted, so there is no way to tell
-which files are private.
+$ kb route "how do I roll back" /somewhere/outside/any/repo
+
+kb: left out /somewhere/outside/any/repo/zed: git could not be consulted there, so its
+files could be private and none are being served. A husk left by a rename in progress
+looks exactly like this, and so does a base nobody has committed yet.
 ```
+
+**It leaves that base out and keeps the rest of the fleet open**, rather than failing the
+whole open, and that is a deliberate change from an earlier version of this page: one
+directory whose git could not be read used to close every base beside it, which happened
+twice in one day for the ordinary reason that a rename in progress leaves a husk behind
+and a husk looks exactly like a base. The guarantee is per base and skipping keeps it.
+
+The cost of that choice is that **the reply is an empty result set and the exit code is
+zero**, which reads exactly like a library that does not cover your question. The notice
+goes to stderr, and `kb route --json` names the left out bases in a `skipped` array for
+callers that only read stdout. If you are automating anything against this, check that
+field before you conclude the base is thin.
 
 `fleet/` is a separate repository and is gitignored by this one, so `git add -A` here
 cannot descend into it. Publishing a note is not a mistake you are able to make.
@@ -421,6 +526,32 @@ base already says and proposes ADD, UPDATE or NOOP with its evidence. It writes 
 and decides nothing. A write tool reachable by a model is a different security surface
 and gets built deliberately, not as an afterthought while the retrieval side is still
 warm.
+
+---
+
+## Running it somewhere that is not your machine
+
+Local first is a design position, not a limitation waiting to be lifted: the index lives
+beside the files, nothing talks to a server, and there is no hosted instance to point at.
+The base has to be on the same filesystem as the binary. That works on a server as well as
+on a laptop, and four things about it surprise people. The full version, with what each one
+is measured on, is in [`tools/kb/README.md`](tools/kb/README.md). The short version:
+
+- **A deployment bundle has no `.git`, so by default nothing is served.** This is the
+  failure above wearing different clothes, and it fails only in production: the same
+  command works on your machine, where git answers. Pass `--all` over a base you built to
+  be entirely publishable, and read `skipped` in the JSON.
+- **A read-only filesystem is survivable.** The index is built before the deploy and only
+  read at runtime. The one file a query writes is the miss log, and failing to write it
+  prints on stderr without failing the query.
+- **Every process start pays the cold open**: 136 ms to open the fleet and answer the
+  first question, then a warm p50 of 0.68 ms, measured on one laptop. Spawning the binary
+  per request pays it every time; a long lived `kb serve` pays it once.
+- **The libc has to match, or there has to be none.** Use the musl build above.
+
+`kb route --json` is the surface for all of this. One line on stdout carrying the verdict,
+the owner, the ranked files and the passages, from the same call `kb serve` makes, so no
+two machine surfaces can drift into different opinions about one question.
 
 ---
 
