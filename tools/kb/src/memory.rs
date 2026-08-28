@@ -114,6 +114,23 @@ pub enum Verdict {
     Nothing,
 }
 
+impl Verdict {
+    /// The wire name, for surfaces a program reads rather than a person.
+    ///
+    /// Separate from the sentences the terminal prints on purpose. Those are worded
+    /// for whoever is looking at them (`kb answer` says "guess, read the sources
+    /// yourself", `kb eval` says "none") and are free to change with the surface. This
+    /// one is a contract: a caller branching on it breaks the day it is reworded, so
+    /// it lives on the type and has exactly one home.
+    pub fn label(&self) -> &'static str {
+        match self {
+            Verdict::Hit => "hit",
+            Verdict::Guess => "guess",
+            Verdict::Nothing => "nothing",
+        }
+    }
+}
+
 /// The evidence behind a verdict, so a caller can disagree with it.
 ///
 /// All three numbers travel with the verdict deliberately. A gate that reports only

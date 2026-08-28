@@ -7,7 +7,7 @@
 
 use kb::checks::{Finding, Level};
 use kb::{
-    answer, base, blocks, boot, checks, classify, commit, eval, index, init, mcp, memory,
+    answer, base, blocks, boot, checks, classify, commit, eval, index, init, json, mcp, memory,
     promote, remember, store, ui, write,
 };
 use base::Base;
@@ -20,7 +20,7 @@ kb, a linter and router for file based knowledge bases
 usage:
     kb check [path]... [--strict] [--all]
     kb index [path]... [--json] [--all]
-    kb route <question> [path]... [--top N] [--hybrid] [--all]
+    kb route <question> [path]... [--top N] [--hybrid] [--json] [--all]
     kb remember <claim> [path]... [--all]
     kb init <name> [fleet-root]
     kb init --person [fleet-root]
@@ -96,7 +96,14 @@ half behind.
 Each agent keeps its own index at <agent>/.kb/index.db. There is no shared index
 and no --db flag: which database you get used to depend on where you were standing,
 and that cost three separate incidents.
-    --json      index: print the index entries as JSON instead of building the index
+    --json      index: print the index entries as JSON instead of building the index.
+                route: print the whole answer as one line of JSON on stdout, which is
+                what a program calls instead of parsing prose meant for a terminal. It
+                always fuses both scorers, because the verdict is agreement between
+                them, so --hybrid adds nothing on top of it. Diagnostics stay on
+                stderr, and a base that was left out is named in `skipped` rather than
+                only on stderr, because a caller that reads stdout alone must not read
+                an empty result set as a base that does not cover the question
     --hybrid    route: fuse the keyword scorer with full text search over chunks
 
 serve speaks MCP over stdio, so Claude Code, Claude Desktop or any other MCP client
@@ -162,7 +169,7 @@ fn main() -> ExitCode {
             }
             let question = positional[0];
             let paths = paths_or_default(&positional[1..]);
-            cmd_route(question, &paths, all, top, hybrid)
+            cmd_route(question, &paths, all, top, hybrid, json)
         }
         "init" if args.iter().any(|a| a == "--person") => {
             let fleet = positional.first().copied().unwrap_or(".");
@@ -659,17 +666,38 @@ fn print_if_nothing_to_search(memory: &memory::Memory) -> bool {
     true
 }
 
-fn cmd_route(question: &str, paths: &[&str], all: bool, top: usize, hybrid: bool) -> ExitCode {
+fn cmd_route(
+    question: &str,
+    paths: &[&str],
+    all: bool,
+    top: usize,
+    hybrid: bool,
+    as_json: bool,
+) -> ExitCode {
     let given: Vec<&Path> = paths.iter().map(Path::new).collect();
     let memory = match memory::Memory::open(&given, all) {
         Ok(m) => m,
         Err(e) => {
             eprintln!("kb: {e}");
+            // stdout is the contract in --json mode, the same rule `mcp.rs` follows,
+            // and a caller that gets exit 1 with nothing on stdout has to guess what
+            // went wrong from an exit code. The human line above stays: it costs
+            // nothing and it is what shows up in a deployment's logs.
+            if as_json {
+                let mut out = json::Value::obj();
+                out.set("question", question.into());
+                out.set("error", e.to_string().into());
+                println!("{}", out.to_string());
+            }
             return ExitCode::from(1);
         }
     };
     if memory.index_was_rebuilt {
         eprintln!("kb: an index predated the tracked column and was emptied. Run `kb index`.");
+    }
+
+    if as_json {
+        return route_as_json(question, &memory, top);
     }
 
     println!("question: {question}");
@@ -736,6 +764,187 @@ fn cmd_route(question: &str, paths: &[&str], all: bool, top: usize, hybrid: bool
     }
 
     ExitCode::SUCCESS
+}
+
+/// `kb route --json`: the whole answer as one line on stdout.
+///
+/// **Not a serialisation of the terminal output, and the difference is the design.**
+/// The terminal has two modes because a person reading a ranked list and a person
+/// reading passages want different things. A program wants both plus the verdict, in
+/// one call, and that is exactly what [`memory::Memory::ask`] computes in one pass:
+/// the owner and the verdict from the keyword ranking, the reading from fusion, over
+/// one expansion. So `--json` always fuses and `--hybrid` adds nothing on top of it.
+///
+/// Calling `ask` rather than assembling the pieces here is the rule `lib.rs` states:
+/// every machine surface answers from the contract, so `kb serve`, `kb boot` and this
+/// cannot drift into three different opinions about one question.
+///
+/// Three fields exist for callers that are not sitting at a terminal, and each one is
+/// a failure that has already happened somewhere:
+///
+/// - `skipped` names bases left out because git could not be consulted. A caller
+///   reading stdout alone would otherwise see `results: []` and conclude the base does
+///   not cover the question, when in fact nothing was searched. That is the exact
+///   shape a deployment hits: no `.git` in the bundle means no base is served.
+/// - `suggestions` carries what the miss path prints, so a caller can offer the words
+///   the base does know instead of a dead end.
+/// - `agent.margin` is `null` when only one agent scored. That is JSON's encoding of
+///   infinity, and it means maximum confidence, not missing data.
+fn route_as_json(question: &str, memory: &memory::Memory, top: usize) -> ExitCode {
+    let answer = memory.ask(question, top);
+
+    let suggestions = if answer.found.is_empty() && !memory.is_empty() {
+        let words = memory.suggest(question, 8);
+        memory.record_miss(question, &words);
+        words
+    } else {
+        Vec::new()
+    };
+
+    let mut out = json::Value::obj();
+    out.set("question", question.into());
+    out.set("verdict", answer.confidence.verdict.label().into());
+
+    let mut confidence = json::Value::obj();
+    confidence.set("agreement", answer.confidence.agreement.into());
+    confidence.set("keyword_score", score(answer.confidence.keyword_score as f64));
+    confidence.set("margin", score(answer.confidence.margin as f64));
+    out.set("confidence", confidence);
+
+    out.set(
+        "agent",
+        match &answer.agent {
+            Some(a) => {
+                let mut agent = json::Value::obj();
+                agent.set("name", a.agent.as_str().into());
+                agent.set("score", score(a.score));
+                agent.set("files", a.files.into());
+                agent.set("margin", score(a.margin));
+                agent.set("contenders", a.contenders.into());
+                agent.set(
+                    "totals",
+                    json::Value::Arr(
+                        a.totals
+                            .iter()
+                            .map(|(name, total)| {
+                                let mut t = json::Value::obj();
+                                t.set("agent", name.as_str().into());
+                                t.set("score", score(*total));
+                                t
+                            })
+                            .collect(),
+                    ),
+                );
+                agent
+            }
+            None => json::Value::Null,
+        },
+    );
+
+    out.set(
+        "keyword_top",
+        match &answer.keyword_top {
+            Some(t) => t.as_str().into(),
+            None => json::Value::Null,
+        },
+    );
+
+    let mut indexed = json::Value::obj();
+    indexed.set("entries", memory.entry_count().into());
+    indexed.set("agents", memory.agents.len().into());
+    indexed.set("aliases", memory.alias_count().into());
+    out.set("indexed", indexed);
+
+    out.set(
+        "skipped",
+        json::Value::Arr(
+            memory
+                .skipped
+                .iter()
+                .map(|p| p.display().to_string().into())
+                .collect(),
+        ),
+    );
+    out.set("index_was_rebuilt", memory.index_was_rebuilt.into());
+    out.set(
+        "suggestions",
+        json::Value::Arr(suggestions.into_iter().map(Into::into).collect()),
+    );
+    out.set(
+        "results",
+        json::Value::Arr(answer.found.iter().map(retrieved_as_json).collect()),
+    );
+
+    println!("{}", out.to_string());
+    ExitCode::SUCCESS
+}
+
+/// Every score in the JSON goes through here, rounded to six decimals.
+///
+/// **Not cosmetic.** The keyword score is an `f32` and widening it to `f64` prints
+/// seventeen digits, so 11.23 leaves as 11.229999542236328: precision the number never
+/// had, in an output a program reads and a person debugs. Six decimals is chosen
+/// against the thing that needs the resolution, which is fusion, not the floor: RRF
+/// scores are sums of `1 / (60 + rank)`, and adjacent ranks differ by around 1e-4, so
+/// 1e-6 keeps two files that really are ordered from collapsing into a tie.
+///
+/// Infinity survives it and still encodes as `null`, which is what `agent.margin` needs.
+fn score(n: f64) -> json::Value {
+    json::Value::Num((n * 1e6).round() / 1e6)
+}
+
+/// One ranked file and the passages that matched inside it.
+///
+/// `score` is the fused score and `keyword_score` is the raw keyword sum, and both
+/// travel because they answer different questions: fusion says which file to read
+/// first, and the keyword score is the number the verdict is measured against. A
+/// caller handed only one of them cannot check the other.
+fn retrieved_as_json(f: &kb::retrieve::Retrieved) -> json::Value {
+    let mut out = json::Value::obj();
+    out.set("base", f.base.as_str().into());
+    out.set("path", f.path.as_str().into());
+    out.set("title", f.title.as_str().into());
+    out.set("purpose", f.purpose.as_str().into());
+    out.set("score", score(f.score));
+    out.set("keyword_score", score(f.keyword_score as f64));
+    out.set(
+        "why",
+        json::Value::Arr(f.why.iter().map(|w| w.as_str().into()).collect()),
+    );
+    out.set(
+        "matched",
+        json::Value::Arr(f.matched.iter().map(|m| m.as_str().into()).collect()),
+    );
+    out.set(
+        "passages",
+        json::Value::Arr(
+            f.passages
+                .iter()
+                .map(|p| {
+                    let mut v = json::Value::obj();
+                    v.set("heading_path", p.heading_path.as_str().into());
+                    v.set("text", p.text.as_str().into());
+                    v.set("excerpt", p.excerpt.as_str().into());
+                    v.set(
+                        "provenance",
+                        match &p.provenance {
+                            Some(s) => s.as_str().into(),
+                            None => json::Value::Null,
+                        },
+                    );
+                    v.set(
+                        "stage",
+                        match &p.stage {
+                            Some(s) => s.as_str().into(),
+                            None => json::Value::Null,
+                        },
+                    );
+                    v
+                })
+                .collect(),
+        ),
+    );
+    out
 }
 
 
@@ -1626,5 +1835,49 @@ with a body"];
     fn several_value_flags_in_a_row_are_all_consumed() {
         let args = ["write", "zed", "note", "--keys", "a, b", "--summary", "one line", "."];
         assert_eq!(positionals(&args[1..]), vec!["zed", "note", "."]);
+    }
+
+    /// The trap in the JSON contract, written down as a test because a reader of the
+    /// output cannot see it: `AgentChoice::margin` is infinite when only one agent
+    /// scored, JSON has no infinity, and `null` is the only legal encoding. It means
+    /// maximum confidence and it looks exactly like a missing field.
+    #[test]
+    fn an_infinite_margin_encodes_as_null_rather_than_as_a_broken_number() {
+        let mut v = json::Value::obj();
+        v.set("margin", f64::INFINITY.into());
+        assert_eq!(v.to_string(), "{\"margin\":null}");
+    }
+
+    /// Both scores travel, and they are different numbers: `score` is fused and orders
+    /// the reading list, `keyword_score` is the raw sum the verdict is measured
+    /// against. A caller given one of them cannot check the other.
+    #[test]
+    fn a_result_carries_the_fused_score_and_the_keyword_score_separately() {
+        let f = kb::retrieve::Retrieved {
+            base: "zed".into(),
+            path: "knowledge/deploy.md".into(),
+            title: "Deploys".into(),
+            purpose: "what a deploy needs".into(),
+            score: 0.032,
+            keyword_score: 11.23,
+            why: vec!["keywords #1".into(), "text #1".into()],
+            matched: vec!["rollback".into()],
+            passages: vec![kb::retrieve::Passage {
+                heading_path: "Deploys > Rollback".into(),
+                text: "write the rollback down first".into(),
+                excerpt: " ... rollback ... ".into(),
+                provenance: Some("human".into()),
+                stage: None,
+            }],
+        };
+
+        let out = retrieved_as_json(&f).to_string();
+        assert!(out.contains("\"score\":0.032"), "{out}");
+        assert!(out.contains("\"keyword_score\":11.23"), "{out}");
+        assert!(out.contains("\"heading_path\":\"Deploys > Rollback\""), "{out}");
+        assert!(out.contains("\"provenance\":\"human\""), "{out}");
+        // Absent, not omitted. A caller reading the key gets null and knows the note
+        // declares no stage, which is a different fact from a key that is not there.
+        assert!(out.contains("\"stage\":null"), "{out}");
     }
 }

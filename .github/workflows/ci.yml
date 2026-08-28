@@ -32,3 +32,23 @@ jobs:
           "$KB" eval examples/demo/gold.tsv examples/demo --all | tee eval.out
           grep -q "10/10" eval.out
           grep -q "abstained on 3/3" eval.out
+
+      # The JSON contract is what a program calls, so it is checked by parsing rather
+      # than by reading. A shape nothing parses is a string that happens to have braces
+      # in it, and the day a field is renamed the terminal output looks identical.
+      # Linux only because the parser, not the shape, is what varies here: `jq` is on
+      # the Ubuntu image and the Windows image is not worth assuming about. The JSON is
+      # built by the same code on both.
+      - name: route --json parses and carries the verdict
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          KB=tools/kb/target/release/kb
+          [ -f "$KB.exe" ] && KB="$KB.exe"
+          "$KB" index examples/demo --all
+          "$KB" route "como faco rollback sem downtime" examples/demo --all --json > route.json
+          jq -e '.verdict and (.results | length > 0) and (.results[0].passages | length > 0)' route.json
+          # A miss is a shape too, and the one a caller is most likely to get wrong: it
+          # must be a verdict of nothing with an empty result set, never an error.
+          "$KB" route "quanto custa um satelite geoestacionario" examples/demo --all --json > miss.json
+          jq -e '.verdict == "nothing" and (.results | length == 0)' miss.json

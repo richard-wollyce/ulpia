@@ -1,0 +1,145 @@
+# Binaries, because the machine that runs kb is not always the machine that built it.
+#
+# ci.yml already builds on Ubuntu and Windows and throws the result away. This keeps it,
+# and two things in here are not defaults. Both are load bearing.
+#
+# 1. **musl, not glibc.** A binary linked against the runner's glibc carries versioned
+#    symbol references, so one built on Ubuntu 24.04 (glibc 2.39) refuses to start on any
+#    host with an older one, and the hosts that matter are older: Amazon Linux 2 is 2.26
+#    and AL2023 is 2.34, which is what serverless functions run on. Linking musl
+#    statically leaves a file that depends on nothing outside itself, which is why one
+#    artifact runs on Alpine, on Debian and inside a Lambda.
+# 2. **musl-tools.** `rusqlite`'s `bundled` feature compiles the SQLite amalgamation with
+#    a C compiler, so adding the Rust target is not enough. Without `musl-gcc` the build
+#    fails inside `libsqlite3-sys` and the error names SQLite rather than this decision.
+#
+# The claim in point 1 is checked rather than asserted: the artifact is executed inside
+# amazonlinux:2023 and inside alpine before it is published. A portability claim that
+# nothing runs is a rumour, and this one is the whole reason the file exists.
+#
+# workflow_dispatch builds and uploads without publishing anything, so the binary can be
+# tested before a tag exists. A tag is what publishes.
+name: release
+
+on:
+  push:
+    tags: ["kb-v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  linux:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-unknown-linux-musl
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: tools/kb
+      - name: Install the musl C toolchain
+        run: sudo apt-get update && sudo apt-get install -y musl-tools
+
+      - name: Build
+        run: |
+          cargo build --release --locked \
+            --manifest-path tools/kb/Cargo.toml \
+            --target x86_64-unknown-linux-musl
+
+      - name: It is actually static
+        run: |
+          KB=tools/kb/target/x86_64-unknown-linux-musl/release/kb
+          file "$KB"
+          # `ldd` on a static binary says so instead of listing libraries. Grepping for
+          # the absence is the check: a dynamically linked build would list libc here and
+          # would then fail only on the deployment host, which is the expensive place to
+          # find out.
+          ldd "$KB" 2>&1 | grep -qi "not a dynamic executable\|statically linked"
+
+      - name: It runs where the glibc is older, and where there is none
+        run: |
+          KB=tools/kb/target/x86_64-unknown-linux-musl/release/kb
+          chmod +x "$KB"
+          docker run --rm -v "$PWD:/w" -w /w amazonlinux:2023 "./$KB" check --all examples/demo
+          docker run --rm -v "$PWD:/w" -w /w alpine:3 "./$KB" check --all examples/demo
+
+      - name: The demo fleet routes, and route --json is parseable
+        run: |
+          KB=tools/kb/target/x86_64-unknown-linux-musl/release/kb
+          "$KB" index examples/demo --all
+          "$KB" route "como faco rollback sem downtime" examples/demo --all --json \
+            | tee route.json
+          # jq is on the runner. Parsing it is the test: a JSON contract nothing parses
+          # is a string that happens to have braces in it.
+          jq -e '.verdict and (.results | length > 0)' route.json
+
+      - name: Name it and hash it
+        run: |
+          mkdir -p dist
+          cp tools/kb/target/x86_64-unknown-linux-musl/release/kb dist/kb-linux-x64
+          cd dist && sha256sum kb-linux-x64 > kb-linux-x64.sha256
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: kb-linux-x64
+          path: dist/*
+
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: tools/kb
+      - name: Build
+        run: cargo build --release --locked --manifest-path tools/kb/Cargo.toml
+      - name: The demo fleet routes
+        shell: bash
+        run: |
+          KB=tools/kb/target/release/kb.exe
+          "$KB" check --all examples/demo
+      - name: Name it and hash it
+        shell: bash
+        run: |
+          mkdir -p dist
+          cp tools/kb/target/release/kb.exe dist/kb-windows-x64.exe
+          cd dist && sha256sum kb-windows-x64.exe > kb-windows-x64.exe.sha256
+      - uses: actions/upload-artifact@v4
+        with:
+          name: kb-windows-x64
+          path: dist/*
+
+  publish:
+    # Only a tag publishes. A manual run stops at the artifacts above, which is what
+    # makes it safe to build one and try it before deciding it is a release.
+    if: startsWith(github.ref, 'refs/tags/')
+    needs: [linux, windows]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+      - name: Publish the release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/*
+          fail_on_unmatched_files: true
+          body: |
+            Built from ${{ github.sha }}.
+
+            `kb-linux-x64` is statically linked against musl and depends on nothing
+            outside the file, so it runs on Alpine, on Debian and on the Amazon Linux
+            images serverless functions use. Both binaries ship with a `.sha256` beside
+            them: check it after vendoring, because a binary committed into another
+            repository is a binary nobody can tell apart from a different one.
+
+            `kb` reads the markdown on every run and shells out to `git` to decide which
+            files are private. Where git cannot be consulted, and a deployment bundle
+            without `.git` is exactly that, every base is left out and the answer is
+            empty. See "Running it somewhere that is not your machine" in
+            `tools/kb/README.md`.

@@ -17,8 +17,8 @@ repository uses.
 
 ```
 kb check [path]... [--strict] [--all]
-kb index [path]... [--db FILE] [--json] [--all]
-kb route <question> [path]... [--top N] [--hybrid] [--db FILE]
+kb index [path]... [--json] [--all]
+kb route <question> [path]... [--top N] [--hybrid] [--json]
 ```
 
 ```
@@ -33,11 +33,67 @@ involved**: instant, free, explainable, and incapable of inventing a file that d
 prints which words matched, so a bad ranking can be diagnosed instead of guessed at, and it says
 plainly when nothing matched rather than returning a confident guess.
 
+### `kb route --json`: the same answer, for a program
+
+```
+kb route "how do I roll back" fleet/zed --json
+```
+
+One line of JSON on stdout, and it is **not a serialisation of the terminal output**. The terminal has
+two modes because a person reading a ranked list and a person reading passages want different things.
+A program wants both plus the verdict, in one call, which is what the contract computes in one pass
+anyway: the owner and the verdict from the keyword ranking, the reading from fusion. So `--json`
+always fuses and `--hybrid` adds nothing on top of it.
+
+```json
+{
+  "question": "how do I roll back",
+  "verdict": "hit",
+  "confidence": { "agreement": 2, "keyword_score": 24.7, "margin": 2.13 },
+  "agent": { "name": "zed", "score": 0.0328, "files": 1, "margin": null,
+             "contenders": 1, "totals": [{ "agent": "zed", "score": 0.0328 }] },
+  "keyword_top": "zed/knowledge/deploy-checklist.md",
+  "indexed": { "entries": 11, "agents": 3, "aliases": 0 },
+  "skipped": [],
+  "index_was_rebuilt": false,
+  "suggestions": [],
+  "results": [{ "base": "zed", "path": "knowledge/deploy-checklist.md",
+                "title": "...", "purpose": "...", "score": 0.032787,
+                "keyword_score": 24.7, "why": ["keywords #1", "text #1"],
+                "matched": ["rollback"],
+                "passages": [{ "heading_path": "...", "text": "...", "excerpt": "...",
+                               "provenance": "human", "stage": null }] }]
+}
+```
+
+Four things in there will bite a caller that assumes otherwise, so they are stated rather than
+discovered:
+
+- **`verdict` is `hit`, `guess` or `nothing`**, measured against a keyword floor of 17.5 that is
+  calibrated in the open (see `SCORE_FLOOR` in `memory.rs`). A small base produces `guess` often, and
+  `guess` means show it and say it is weak, not hide it.
+- **`skipped` names bases that were left out** because git could not be consulted there. A caller
+  reading stdout alone would otherwise see an empty `results` and conclude the base does not cover the
+  question, when in fact nothing was searched. See the deployment section below, where this is the
+  default outcome rather than an edge case.
+- **`agent.margin` is `null` when only one agent scored.** That is JSON's encoding of infinity, and it
+  means maximum confidence, not a missing field.
+- **Scores are rounded to six decimals.** The keyword score is an `f32`, so widening it to `f64` would
+  print seventeen digits of precision it never had.
+
+Errors go to stdout as `{"question": ..., "error": ...}` with exit code 1, and to stderr as the same
+sentence a person would read.
+
 ### The index
 
-`kb index` builds a SQLite file, `.kb/index.db` by default. **It holds nothing that cannot be
-recomputed from the markdown**, which is what keeps ADR-0003 literally true: delete it and the next
-`kb index` rebuilds it.
+`kb index` builds a SQLite file at `<base>/.kb/index.db`, **one per base, and there is no flag to
+point it anywhere else**. That is a decision rather than an omission: a shared index defaulting to the
+working directory meant which database you got depended on where you were standing, and it cost three
+separate incidents in one week. To index a different base, name that base. To try a different index
+over the same content, copy the content, which is exactly as annoying as it should be.
+
+**It holds nothing that cannot be recomputed from the markdown**, which is what keeps ADR-0003
+literally true: delete it and the next `kb index` rebuilds it.
 
 Two objects, and you can open both with any `sqlite3` binary:
 
@@ -196,7 +252,7 @@ expanding it would silently drop the parent's own notes.
 ### `kb serve`: the base as an MCP server
 
 ```
-kb serve [path]... [--db FILE] [--top N] [--all]
+kb serve [path]... [--top N] [--all]
 ```
 
 Speaks the Model Context Protocol over stdio, so any MCP client can search the base: Claude Code,
@@ -277,6 +333,55 @@ applied to search terms after parsing and never to text on its way to disk.
 Two bounds exist because the input arrives from another process: nesting is capped, so `[[[[[...` is an
 error rather than a stack overflow, and output is always one line, so a passage containing a newline
 cannot split one message into two and desync the stream for good.
+
+### Running it somewhere that is not your machine
+
+`kb` is local first and that is a design position, not a limitation waiting to be lifted. It reads the
+markdown on every run and the index lives beside the files. Nothing here talks to a server, and there
+is no hosted instance to point at: the base has to be on the same filesystem as the binary.
+
+That works on a server as well as on a laptop, and four things about it will surprise anyone who
+deploys it without reading this. Each one says what it stands on, because three of the four are cheap
+to assume and expensive to be wrong about.
+
+**1. Git decides what is public, so a deployment without git serves nothing.** *Run.*
+
+The privacy filter asks `git ls-files` from inside each base. No `.git` in the bundle, or no `git` on
+the host, and the answer is "unknown", which is not "public": every base is left out with a notice on
+stderr, and the reply is an empty result set. Reproduced by copying `examples/demo` outside any
+repository and routing against it. Two ways through, and they are not equal:
+
+- **Deploy a base that is entirely publishable and pass `--all`.** The privacy boundary moves from
+  "git says tracked" to "this bundle contains nothing private", which is a real guarantee only if you
+  built the bundle that way. Recommended, because it is checkable at build time.
+- **Ship `.git` and the git binary.** Keeps the original guarantee and pays for it in bundle size and
+  in a runtime dependency most serverless images do not have. Unverified here.
+
+Either way, read `skipped` in `kb route --json`. It is the field that separates "the base does not
+cover this" from "no base was searched".
+
+**2. The filesystem is usually read only, and that is survivable.** *Read the source. Not run against a
+read-only filesystem.*
+
+The index is built before the deploy, by `kb index`, and only read at runtime. The one file written on
+a query is `kb-misses.txt`, the recall loss log, and a failed write there prints on stderr and does
+not fail the query. So a read-only deployment answers correctly and loses the miss log. Writes to the
+base itself, `kb write` and `kb promote`, do not belong on that machine at all.
+
+**3. Every process start pays the cold open.** *Measured on a laptop, not on a deployment.*
+
+From `benchmarks/latency`: 136.4 ms to open the fleet and answer the first question, then p50 0.68 ms
+warm over 1000 samples. Spawning `kb route --json` per request pays the 136 ms every time. Keeping one
+`kb serve` process alive and speaking MCP to it pays it once per process. Start with the spawn,
+because it is four lines of code, and move to the long-lived process when the number starts mattering.
+
+**4. Match the libc, or link none.** *Written, not yet run.*
+
+A Linux binary built against a modern glibc will not start on the older glibc that serverless images
+carry, because glibc symbol references are versioned. `.github/workflows/release.yml` builds
+`x86_64-unknown-linux-musl` instead, which links statically and depends on nothing outside the file,
+and it executes the result inside `amazonlinux:2023` and `alpine` before publishing, so the
+portability claim is checked on every release rather than asserted here.
 
 ### The alias table
 
