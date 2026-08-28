@@ -375,13 +375,17 @@ warm over 1000 samples. Spawning `kb route --json` per request pays the 136 ms e
 `kb serve` process alive and speaking MCP to it pays it once per process. Start with the spawn,
 because it is four lines of code, and move to the long-lived process when the number starts mattering.
 
-**4. Match the libc, or link none.** *Written, not yet run.*
+**4. Match the libc, or link none.** *Run, in CI, on 2026-08-28.*
 
 A Linux binary built against a modern glibc will not start on the older glibc that serverless images
 carry, because glibc symbol references are versioned. `.github/workflows/release.yml` builds
-`x86_64-unknown-linux-musl` instead, which links statically and depends on nothing outside the file,
-and it executes the result inside `amazonlinux:2023` and `alpine` before publishing, so the
-portability claim is checked on every release rather than asserted here.
+`x86_64-unknown-linux-musl` instead. `file` reports the result as `static-pie linked, stripped`, and
+the same artifact then runs `kb check --all examples/demo` inside `amazonlinux:2023` and inside
+`alpine:3`, clean in both, before anything is published.
+
+**That check is the whole point of the file and it runs on every release**, because the failure it
+catches is invisible until the deploy: a glibc build goes green in CI, uploads, and dies on the host
+with a missing symbol version. A portability claim nothing executes is a rumour.
 
 ### The alias table
 
