@@ -44,6 +44,18 @@
    * plate kept a rule whose foundation had gone. The machine's voice is quoted
    * in the page's own material, the way a book sets a quotation in its own
    * type rather than pasting in a photograph. */
+  /* The ambient field. Paper livery: red is the accent here and gold is
+   * illegal, so the field is warm paper with the faintest rose. */
+  --field-1: #ead9a8;
+  --field-2: #e6dcc6;
+  --field-3: #a63325;
+  --field-4: #dacfc0;
+  --field-alpha: 0.42;
+  --field-accent-alpha: 0.14;
+  --field-vignette: rgba(36, 29, 22, 0.055);
+  --grain-opacity: 0.055;
+  --grain-blend: multiply;
+
   --plate: #ede5d5;
   --plate-ink: #241d16; /* 13.28:1 */
   --plate-ink-2: #5a5044; /* 6.29:1 */
@@ -92,6 +104,17 @@
     --chrome-rule: #55452b;
     --lamp-glow: #c9a860; /* in the dark the glow is legible light, 8.37:1 */
     /* the plate in dark: every value unchanged since Richard approved it */
+    /* Cover livery: gold is legal here and red is not. */
+    --field-1: #c9a860;
+    --field-2: #a88c4e;
+    --field-3: #6b5a2f;
+    --field-4: #3d3320;
+    --field-alpha: 0.30;
+    --field-accent-alpha: 0.30;
+    --field-vignette: rgba(0, 0, 0, 0.38);
+    --grain-opacity: 0.05;
+    --grain-blend: overlay;
+
     --plate: #211b16;
     --plate-ink: #ede3d2; /* 13.40:1 */
     --plate-ink-2: #ac9c87; /* 6.37:1 */
@@ -113,6 +136,17 @@
   --chrome-ink: #c9a860;
   --chrome-rule: #55452b;
   --lamp-glow: #c9a860;
+  /* Cover livery: gold is legal here and red is not. */
+  --field-1: #c9a860;
+  --field-2: #a88c4e;
+  --field-3: #6b5a2f;
+  --field-4: #3d3320;
+  --field-alpha: 0.30;
+  --field-accent-alpha: 0.30;
+  --field-vignette: rgba(0, 0, 0, 0.38);
+  --grain-opacity: 0.05;
+  --grain-blend: overlay;
+
   --plate: #211b16;
   --plate-ink: #ede3d2;
   --plate-ink-2: #ac9c87;
@@ -144,7 +178,9 @@ details {
 }
 
 body {
-  background: var(--ground);
+  /* The ground moves to html so the field's pseudo-elements, which sit at
+   * z-index -1, paint above it and below every page's content. */
+  background: 0 0;
   color: var(--ink);
   font-family: "EB Garamond", Georgia, "Times New Roman", serif;
   font-size: var(--size-body);
@@ -1412,7 +1448,10 @@ input[type="email"]:focus-visible {
 .post-list {
   list-style: none;
   padding: 0;
-  margin: 2rem 0 0;
+  /* margin-block, never the shorthand: .doc > * sets margin-inline: auto
+   * earlier at equal specificity, and the shorthand this once was reset it,
+   * so the list sat at the page edge at 1280 (seen on /blog/, 2026-09-02). */
+  margin-block: 2rem 0;
 }
 
 .post-list li {
@@ -1449,6 +1488,22 @@ input[type="email"]:focus-visible {
   padding: 1rem 1.25rem;
   overflow-x: auto;
   margin-bottom: 1rem;
+  /* Gained with the docs (2026-09-02): the terminal's own type, so code in a
+   * document is set the way the machine's voice is set on the front page. The
+   * body's figures are oldstyle and proportional; a plate resets both, because
+   * code aligns by column. The block stays in the 32rem column: measured at
+   * 1280 that is 470px of content, about 56 columns at the 14px mono, so
+   * documentation code is written to 56 columns and a line that cannot be
+   * scrolls inside its plate and is named in the caption. */
+  color: var(--plate-ink);
+  font-family: ui-monospace, "Cascadia Code", SFMono-Regular, Menlo, Consolas,
+    "Liberation Mono", monospace;
+  font-size: var(--size-mono);
+  line-height: 1.6;
+  font-variant-numeric: normal;
+  font-feature-settings: normal;
+  tab-size: 4;
+  white-space: pre;
 }
 
 .doc pre code {
@@ -1463,6 +1518,10 @@ input[type="email"]:focus-visible {
   font-size: 0.9em;
   background: var(--plate);
   padding: 0.1em 0.3em;
+  /* A long path breaks at a slash rather than widening the column. The
+   * alternative, letting it overflow, scrolls the whole page sideways, which
+   * is the one thing a phone page must never do. */
+  overflow-wrap: anywhere;
 }
 
 .doc blockquote {
@@ -1638,22 +1697,28 @@ input[type="email"]:focus-visible {
   }
 }
 
-/* ---- benchmark tables (the benchmarks page). Data set in the book's own
+/* ---- the ledger: benchmark tables and, since the docs (2026-09-02), any
+ * table in a document. One rule set under two names, .bench on the benchmarks
+ * page as shipped and .ledger everywhere else, so the two cannot fork. Data set
+ * in the book's own
  * material: hairline rules, no fill, headers in the 600 weight the page
  * already owns. The figure breaks out to the wide measure the terminal plate
  * already uses, and the inner wrapper scrolls, so a wide table can never make
  * the page itself scroll sideways. ---- */
 
-.doc .bench {
+.doc .bench,
+.doc .ledger {
   max-width: min(var(--measure-wide), 100%);
   margin-block: 1.5rem;
 }
 
-.bench-scroll {
+.bench-scroll,
+.ledger-scroll {
   overflow-x: auto;
 }
 
-.bench table {
+.bench table,
+.ledger table {
   border-collapse: collapse;
   width: 100%;
   /* Below this the columns crush into single-word verticals; the wrapper
@@ -1664,7 +1729,9 @@ input[type="email"]:focus-visible {
 }
 
 .bench th,
-.bench td {
+.bench td,
+.ledger th,
+.ledger td {
   text-align: left;
   vertical-align: top;
   padding: 0.5rem 1.25rem 0.5rem 0;
@@ -1672,22 +1739,445 @@ input[type="email"]:focus-visible {
 }
 
 .bench th:last-child,
-.bench td:last-child {
+.bench td:last-child,
+.ledger th:last-child,
+.ledger td:last-child {
   padding-right: 0;
 }
 
-.bench thead th {
+.bench thead th,
+.ledger thead th {
   font-weight: 600;
   color: var(--ink-2);
 }
 
-.bench tbody th {
+.bench tbody th,
+.ledger tbody th {
   font-weight: 600;
 }
 
-.bench figcaption {
+.bench figcaption,
+.ledger figcaption {
   font-size: var(--size-small);
   font-style: italic;
   color: var(--ink-2);
   margin-top: 0.75rem;
+}
+
+/* ---- the document's furniture (Aldus, 2026-09-02): what a long document
+ * needs and the front page never did. Every value below is a token the sheet
+ * already owns and no colour is new, so nothing here is written a second time
+ * for dark: the tokens carry the scheme. Each rule names the mechanism it
+ * depends on. Rulings and measurements are in the scaffold brief. ---- */
+
+/* The skip link. A transform keeps it in the tab order and the accessibility
+ * tree where display: none would remove it, and it appears only under
+ * keyboard focus, which is the only moment it exists for anyone. No
+ * transition: an instant appearance under focus is feedback, a slide would
+ * be decoration. main carries tabindex="-1" in the markup so the jump moves
+ * focus and not just the scroll, and its own ring is suppressed the way the
+ * dialog card's is, because nobody tabbed to it. Declared with :visited so the
+ * global a:visited underline cannot outrank it once the link has been used. */
+.skip,
+.skip:visited {
+  position: absolute;
+  inset-inline-start: var(--pad-page);
+  inset-block-start: 0.5rem;
+  z-index: 1;
+  transform: translateY(-200%);
+  background: var(--ground);
+  color: var(--ink);
+  border: 1px solid var(--rule);
+  padding: 0.5rem 1rem;
+  font-size: var(--size-small);
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.skip:focus-visible {
+  transform: none;
+  outline: 2px solid var(--accent);
+  outline-offset: 3px;
+}
+
+main:focus {
+  outline: none;
+}
+
+/* Landing on a heading from the contents: the target sits 1.5rem below the
+ * top edge instead of flush against it. No :target colouring, because colour
+ * alone is not a signal and the scroll is the feedback. Every h2 and h3 in a
+ * document carries a stable id, the slug of its text, because the contents
+ * list and every link a reader keeps depend on it. */
+.doc h2[id],
+.doc h3[id] {
+  scroll-margin-top: 1.5rem;
+}
+
+/* The contents: a table of contents at the head of the book, in the column.
+ * A side rail was weighed and refused: at 52rem it leaves under 20rem for the
+ * rail and shifts the 32rem column off centre, turning a page into an
+ * instrument. The hairlines above and below say furniture, not prose, the
+ * same device .doc-back uses. An ordered list because order is meaning; the
+ * numbers are suppressed because the headings carry none. One nesting level,
+ * h3, never deeper. Tap height by arithmetic: a 21px line plus 16px of
+ * padding is about 37px at 360px, above the 24px floor, and adjacent targets
+ * do not overlap. Later than .doc ol and .doc li at equal specificity, so the
+ * book's list indents and item gaps yield here on source order. */
+.contents {
+  margin-block: 2rem 2.5rem;
+  padding-block: 1rem;
+  border-block: 1px solid var(--rule);
+}
+
+.contents-title {
+  font-size: var(--size-small);
+  font-weight: 600;
+  color: var(--ink);
+  margin: 0 0 0.5rem;
+}
+
+.contents ol {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.contents ol ol {
+  padding-left: 1.5rem;
+}
+
+.contents li {
+  margin: 0;
+}
+
+.contents a {
+  display: inline-block;
+  padding-block: 0.5rem;
+  font-size: var(--size-small);
+}
+
+/* The plate in a document: a captioned code block, figure.plate around the
+ * .doc pre above. The figure takes the ledger's margins and the pre inside
+ * gives its bottom margin to the caption. Three inks only: the prompt and the
+ * output one step down, the command in plate ink, and --plate-accent for the
+ * one line the reader must see, under the terminal's own role name. No
+ * syntax colouring: the system carries no colours for it, and law 2 leaves
+ * dark mode none to add. The prompt cannot be selected, so a copied command
+ * carries no dollar sign (read the docs, not run). .proof on a plate is a
+ * hook for authors and for the eye's sheet and carries no declaration: it
+ * marks the five-second proof that earns a claim about an absence its
+ * section. Every real-output plate names its date and commit in the caption,
+ * because a capture goes stale. */
+.doc .plate,
+.doc .diagram {
+  margin-block: 1.5rem;
+}
+
+.plate pre {
+  margin-bottom: 0;
+}
+
+.doc pre .prompt,
+.doc pre .out {
+  color: var(--plate-ink-2);
+}
+
+.doc pre .prompt {
+  user-select: none;
+}
+
+.doc pre .agree {
+  color: var(--plate-accent);
+}
+
+.plate figcaption,
+.diagram figcaption {
+  font-size: var(--size-small);
+  font-style: italic;
+  color: var(--ink-2);
+  margin-top: 0.75rem;
+}
+
+/* The plate on a phone. Two options: scroll inside, which is exact but iOS
+ * shows no scrollbar so the hidden tail is invisible; or wrap, where
+ * everything is visible and a wrapped line cannot be told from a real break
+ * in a shell snippet. Wrap, because a phone reader is reading, not typing,
+ * and the full bleed recovers about 40px of content width (278px to about
+ * 320px, measured at 360). Full bleed by negative page padding, the
+ * terminal's mechanism, never 100vw, which includes the classic scrollbar.
+ * The terminal bleeds below 56rem because its 52rem plate already fills the
+ * column there; this plate is 32rem wide and fills its column only below
+ * about 35rem, and above that a negative margin would float a borderless
+ * band two pads wider than the text. So it bleeds at 34rem, the width the
+ * system already calls a phone (the dialog becomes a sheet there). */
+@media (max-width: 34rem) {
+  .doc pre {
+    margin-inline: calc(-1 * var(--pad-page));
+    border-inline: 0;
+    padding: 1rem var(--pad-page);
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+    overflow-x: visible;
+  }
+}
+
+/* A key on the keyboard. A key and a token both sit on the plate because
+ * both are machine-written; the 1px edge is what tells a key from a token.
+ * A combination is two kbd with the plus in running text. Radius 0, like
+ * everything else. */
+kbd {
+  font-family: ui-monospace, "Cascadia Code", SFMono-Regular, Menlo, Consolas,
+    "Liberation Mono", monospace;
+  font-size: 0.85em;
+  background: var(--plate);
+  color: var(--plate-ink);
+  border: 1px solid var(--plate-border);
+  border-radius: 0;
+  padding: 0.05em 0.35em;
+}
+
+/* The ledger's additions (the shared rules sit with .bench above). Numeric
+ * cells and their headers take lining tabular figures, because the body's
+ * oldstyle proportional figures descend and vary in width, so a column of
+ * them never lines up; in the column and nowhere else. .ledger-fit drops the
+ * minimum width for a table of two columns: seen at 360px, two columns read
+ * inside 320px and four crush to one word per line, so two fit and three or
+ * more scroll. */
+.ledger .num {
+  text-align: right;
+  font-variant-numeric: lining-nums tabular-nums;
+  font-feature-settings: "lnum" 1, "tnum" 1;
+}
+
+.ledger-fit table {
+  min-width: 0;
+}
+
+/* The ledger on a phone. Two options: stack each row into a labelled list
+ * with data-label and ::before, which repeats the header in every cell's
+ * markup and turns five columns into a long list; or keep the table and let
+ * it scroll inside its own wrapper, which .bench-scroll already does. Scroll.
+ * The full bleed puts the table's cut edge on the screen edge, the oldest
+ * signal that there is more, needed because iOS draws no scrollbar. The
+ * sticky row header keeps the row's name in view while its numbers scroll;
+ * it must carry an opaque ground or the scrolled cells show through it. The
+ * page padding is carried by the outer cells and not by the wrapper: a sticky
+ * cell sticks at the scroll container's content edge (seen in Chromium at
+ * 360), so wrapper padding left a strip beside the header that the scrolled
+ * cells showed through; padding on the first cell puts the header's own
+ * opaque ground over that strip. Its 1px right rule exists only here, and
+ * only under 56rem, because the system's hairlines
+ * are horizontal and a vertical one is earned only where the column scrolls.
+ * overscroll-behavior stops a swipe at the table's end from becoming a back
+ * navigation in Safari (read the docs, not run). The wrapper carries
+ * tabindex="0" and role="region" in the markup, because an overflow container
+ * is not reliably focusable on its own, and a scroller no keyboard can reach
+ * hides its right-hand columns from a keyboard reader; the standard ring
+ * applies. overflow-x stays on the wrapper and never on the page. */
+@media (max-width: 56rem) {
+  .ledger-scroll {
+    margin-inline: calc(-1 * var(--pad-page));
+    overflow-x: auto;
+    overscroll-behavior-x: contain;
+  }
+
+  .ledger th:first-child,
+  .ledger td:first-child {
+    padding-left: var(--pad-page);
+  }
+
+  .ledger th:last-child,
+  .ledger td:last-child {
+    padding-right: var(--pad-page);
+  }
+
+  .ledger tbody th {
+    position: sticky;
+    left: 0;
+    background: var(--ground);
+    /* A shadow and not a border: under border-collapse the borders belong to
+     * the table grid and stay behind when the cell sticks (seen at 360, the
+     * rule was absent); a shadow is painted by the cell and travels with it. */
+    box-shadow: 1px 0 0 var(--rule);
+  }
+}
+
+/* The glossary, a definition list. Stacked, never side by side: a term column
+ * of 10rem inside a 32rem measure leaves about 45 characters for the
+ * definition, under the 58 to 70 band the measure was set for. 1.5rem is the
+ * indent the book already uses for lists. Definitions are running text and
+ * stay in ink; --ink-2 is for furniture, not for the meaning of a word. A
+ * term with two spellings is two dt on one dd. */
+.doc dl {
+  /* margin-block, never the shorthand: .doc > * sets margin-inline: auto at
+   * equal specificity and earlier in source, and a shorthand here would reset
+   * it and push the list to the page edge (seen at 1280 before this line). */
+  margin-block: 0 1rem;
+}
+
+.doc dt {
+  font-weight: 600;
+  color: var(--ink);
+  margin-top: 1rem;
+}
+
+.doc dt + dt {
+  margin-top: 0;
+}
+
+.doc dd {
+  margin: 0.25rem 0 0 1.5rem;
+  color: var(--ink);
+}
+
+/* The note in the margin, a callout. One component, two lead words (Note.
+ * and Careful.), one colour. Colour cannot distinguish kinds under law 2: a
+ * red warning in light would be gold in dark, and gold in dark is what every
+ * other accent already is. The same device as .doc blockquote, told apart by
+ * ink and by the label: a quotation is somebody else's words in --ink-2, a
+ * note is ours in ink with a 600 lead word, the .properties idiom of the
+ * front page. No fill, no icon, no radius: a filled box is the card this
+ * system refuses. role="note" rather than aside, because aside is a landmark
+ * and a page with six notes would have six landmarks. */
+.note {
+  margin-block: 1.5rem;
+  padding-left: 1rem;
+  border-left: 2px solid var(--accent);
+  color: var(--ink);
+}
+
+.note p:last-child {
+  margin-bottom: 0;
+}
+
+/* Diagrams and screenshots. The no-raster law holds for ornament; evidence is
+ * the exception. A diagram is inline SVG drawn in currentColor, so it takes
+ * ink and follows the scheme by inheritance instead of by a second palette.
+ * A screenshot ships only when it is the evidence, captured in both schemes
+ * and swapped with picture and a prefers-color-scheme media, or shipped in
+ * light only and said so in the caption, because a light screenshot on the
+ * cover ground reads as a hole in the page. */
+.diagram svg {
+  max-width: 100%;
+  height: auto;
+  display: block;
+  color: var(--ink);
+}
+
+.doc img {
+  max-width: 100%;
+  height: auto;
+  border: 1px solid var(--rule);
+}
+
+
+/* ============================================================================
+ * The ambient field, on every page.
+ *
+ * Four fixed layers behind the whole document, built entirely from
+ * pseudo-elements so one file reaches all sixteen pages and every page written
+ * after this one, with no markup to add and nothing for a second session
+ * editing HTML to collide with.
+ *
+ *   html::before   two soft lights, drifting on a 41 second clock
+ *   html::after    two more, on a 59 second clock
+ *   body::before   the vignette, which keeps the corners off the reading column
+ *   body::after    the grain
+ *
+ * Nothing here paints per frame. The only animated property is transform, so
+ * the work stays on the compositor and a full-viewport layer costs no layout
+ * and no paint while it moves. The two clocks are mutually prime, so the
+ * composite repeats every 41 x 59 = 2419 seconds, about forty minutes, which is
+ * longer than anyone reads one page. ease-in-out with alternate means each
+ * turnaround decelerates into a stop, so there is no seam where a loop
+ * restarts, and the seam is what gives a looping background away.
+ *
+ * Ground law 1 holds: gold appears only on the cover livery, red only on paper.
+ * ==========================================================================*/
+
+html {
+  background: var(--ground);
+}
+
+html::before,
+html::after,
+body::before,
+body::after {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+}
+
+html::before,
+html::after {
+  will-change: transform;
+}
+
+html::before {
+  opacity: var(--field-alpha);
+  background:
+    radial-gradient(38vmax 38vmax at 8% 4%, var(--field-1) 0%, transparent 62%),
+    radial-gradient(32vmax 32vmax at 96% 26%, var(--field-2) 0%, transparent 60%);
+  animation: field-a 41s ease-in-out infinite alternate;
+}
+
+html::after {
+  opacity: var(--field-accent-alpha);
+  background:
+    radial-gradient(30vmax 30vmax at 22% 92%, var(--field-3) 0%, transparent 64%),
+    radial-gradient(26vmax 26vmax at 68% 64%, var(--field-4) 0%, transparent 58%);
+  animation: field-b 59s ease-in-out infinite alternate;
+}
+
+@keyframes field-a {
+  from { transform: translate3d(0, 0, 0) scale(1); }
+  to   { transform: translate3d(6vmax, 4vmax, 0) scale(1.14); }
+}
+
+@keyframes field-b {
+  from { transform: translate3d(0, 0, 0) scale(1.08); }
+  to   { transform: translate3d(-7vmax, -5vmax, 0) scale(0.94); }
+}
+
+body::before {
+  background: radial-gradient(
+    ellipse 120% 100% at 50% 40%,
+    transparent 42%,
+    var(--field-vignette) 100%
+  );
+}
+
+/* One inlined feTurbulence, tiled at 220px. It does not animate: grain that
+ * shimmers over body text is television static, and this field sits under every
+ * page of a site people come to read. */
+body::after {
+  opacity: var(--grain-opacity);
+  mix-blend-mode: var(--grain-blend);
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='220' height='220'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='220' height='220' filter='url(%23n)'/%3E%3C/svg%3E");
+  background-size: 220px 220px;
+}
+
+/* The floor. Under reduce the field holds one composed frame: the colour stays,
+ * the motion goes. Print drops the whole thing. */
+@media (prefers-reduced-motion: reduce) {
+  html::before {
+    animation: none;
+    transform: translate3d(3vmax, 2vmax, 0) scale(1.07);
+  }
+  html::after {
+    animation: none;
+    transform: translate3d(-4vmax, -3vmax, 0) scale(1.01);
+  }
+}
+
+@media print {
+  html::before,
+  html::after,
+  body::before,
+  body::after {
+    display: none;
+  }
 }

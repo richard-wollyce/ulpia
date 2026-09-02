@@ -458,3 +458,42 @@
   instruments before and after: the calibration fleet unchanged to the decimal, the demo from
   8/10 to 10/10 routed, the abstention benchmark's refusal unchanged and its confident
   in-scope answers doubled.
+
+- **[[0037-what-survives-a-lost-machine]]** 🟢 accepted 2026-09-02.
+  **We do not build sync. We name the set that must survive and prove the copy still answers.**
+  ADR-0034 took git out of the runtime and with it the only backup story there was, and the the hosted product
+  study found the one row a hosted archive wins outright: theirs survives a lost laptop and ours
+  does not, while the README named an operation with no destination. Sync is conflict resolution
+  and we would ship a worse Syncthing, so the transport and the destination stay somebody else's;
+  the set and the verdict are ours. The set is a subtraction and not a list: everything under the
+  fleet root minus `.kb/` and the two runtime locks, which keeps the private layer,
+  `kb-misses.txt` and `kb-rejections.txt`, exactly what a git push leaves out, because a
+  publication rule read backwards is not a backup rule. Measured rather than assumed: excluding
+  the index saves 32 percent of the copy and not the order of magnitude expected, and costs a
+  1.97 second rebuild of 290 files. The verdict is a restore to a scratch path graded by
+  `kb check --all` and `kb eval`, run here: clean on three bases, FILE 10/10, three of three
+  refusals held. Three destinations, and the cloud one is the only one whose encryption is not
+  optional, because `profile/`, `projects/` and `records/` are in the set. Ends in a named trade
+  and not a recommendation. `kb backup --list` and `--verify` are the shape; the verb is not built.
+  Search for: `backup`, `copia de seguranca`, `restaurar`, `restore`, `sync`, `Syncthing`,
+  `perdi o notebook`, `lost laptop`, `disco morreu`, `kb backup`, `kb-misses.txt`, `nuvem`,
+  `cloud`, `criptografia`, `encryption`, `custodia`, `custody`, `camada privada`, `private layer`.
+
+- **[[0038-a-meaning-tier-sits-after-the-verdict]]** 🟢 accepted 2026-09-02.
+  **The slot where a meaning scorer would go exists, is empty, and stays empty.** The the hosted product
+  study named the one query shape ours structurally cannot reach: a paraphrase or a
+  cross-language question against a note whose keys do not carry those words. What makes the
+  slot safe is ordering, not a type: `Memory::confidence_of` computes the verdict from the
+  keyword list alone before anything else runs, and `recall_loss` returns `None` for every
+  verdict but `Nothing` before it asks for words, so a scorer after that point changes what a
+  refusal says and never what a verdict is. Two tests pin it. No model ships until ADR-0018's
+  revisit trigger is met by a named candidate with a measurement, and that measurement has not
+  been made. Records the six costs a candidate pays, including that it runs locally or not at
+  all, because the refusal path carries the user's real questions verbatim. Records that
+  `kb-aliases.txt` plus `index::expand_query` already cross languages and `kb misses` is what
+  turns a lost question into the alias line, so the model would be an accelerator on a loop
+  that already closes by hand.
+  Search for: `meaning tier`, `camada de significado`, `suggester`, `sugeridor`, `traducao`,
+  `translation`, `cross language`, `idioma diferente`, `modelo depois do veredito`,
+  `model after the verdict`, `trigram`, `SUGGEST_FLOOR`, `kb-aliases.txt`, `kb misses`,
+  `privacidade da consulta`, `query privacy`, `the hosted product`.

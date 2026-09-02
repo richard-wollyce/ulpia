@@ -179,6 +179,36 @@ impl RecallLoss {
     }
 }
 
+/// One candidate the gate refused, with the keys the file actually carries.
+///
+/// **The half a recall loss log cannot hold.** `kb-misses.txt` records the question and
+/// what the base offered back on the day it was asked. It cannot record which file
+/// nearly caught it, because that depends on the base as it stands now and changes every
+/// time a note is written. So this is computed against today's index and handed to the
+/// reader beside the logged question.
+///
+/// Owned rather than borrowing an `index::Hit`, for two reasons that point the same way:
+/// the caller holds one list per logged question while it prints, and `keys` has to be
+/// copied out of the entries anyway.
+///
+/// `keys` empty is a finding rather than a blank. It means the index holds no entry for
+/// this file at all, so the text scorer reached a file the keyword scorer can never see,
+/// and the work is a `Search for:` line rather than an alias.
+#[derive(Debug, Clone)]
+pub struct NearMiss {
+    pub base: String,
+    pub rel: String,
+    /// From the map entry. Empty when only the text scorer found the file.
+    pub title: String,
+    /// Zero when only the text scorer found it, which is the case worth reading: the
+    /// question's words are in the body and not on the `Search for:` line.
+    pub keyword_score: f32,
+    /// Which scorer ranked it and at what position, in `retrieve::fuse`'s own wording.
+    pub why: Vec<String>,
+    /// The words the file declares it can be found by. This is the line the reader edits.
+    pub keys: Vec<String>,
+}
+
 /// What the router is willing to claim about its own top result.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Verdict {
@@ -246,6 +276,133 @@ impl Confidence {
             ),
             Verdict::Nothing => Some("nothing matched, in either scorer"),
         }
+    }
+}
+
+/// The state a refusal is refusing from, so the refusal can name the next act.
+///
+/// **A refusal that stops at "nothing matched" is unintelligible at the moment it is
+/// read.** Every number that would explain it is already computed and already travels:
+/// [`Confidence`] carries the floor it measured against, [`Memory`] knows its entry
+/// count and which of its files no question can reach. What was missing was somewhere to
+/// put them together, so each surface either said nothing or invented its own sentence.
+///
+/// Nothing here is recomputed. `floor` and `scored` are read off the `Confidence` the
+/// gate actually used, never re-derived from [`Memory::floor`], because the two can
+/// legitimately differ: the caller may be holding a verdict taken over a different corpus
+/// than the one it is printing beside, and the number that refused the question is the
+/// one the reader needs.
+#[derive(Debug, Clone, Copy)]
+pub struct Shortfall {
+    /// Fleet wide, across every opened root, because [`Memory::entry_count`] is and the
+    /// floor is derived from it. Never worded as "this base" anywhere it is printed.
+    pub entries: usize,
+    pub agents: usize,
+    /// Off the `Confidence`, not off the memory. See the type comment.
+    pub floor: f32,
+    /// The top keyword score. Exactly zero on every `Verdict::Nothing`, which is what the
+    /// branch in [`Shortfall::lines`] exists for.
+    pub scored: f32,
+    /// How many files across the open bases the router can build no entry for. Same
+    /// population `kb check` reports as E02, because both read `index::is_exempt`.
+    pub unreachable: usize,
+}
+
+/// One count and its noun, agreeing. Two irregular plurals is one too many to leave to
+/// `format!`, and "1 entries" in a refusal is the kind of seam that makes a reader
+/// distrust the numbers beside it.
+fn counted(n: usize, one: &str, many: &str) -> String {
+    format!("{n} {}", if n == 1 { one } else { many })
+}
+
+impl Shortfall {
+    /// The sentences a surface prints under its refusal, whole, most structural cause
+    /// first, with no indentation and no trailing newline.
+    ///
+    /// **Sentences and not a paragraph, because the surfaces disagree about shape and
+    /// must not disagree about content.** The terminal indents each by two spaces, the
+    /// MCP reply joins them into one paragraph, and `kb boot` takes the first two and
+    /// injects them into a model's context. Wording them at those three sites is how the
+    /// miss message came to have three different meanings before, and none of the three
+    /// had a test, because none of them is reachable from one: `main.rs` prints with
+    /// `println!` and its tests assert on payloads and on files. Holding the words here
+    /// leaves each surface choosing only which true sentences to show.
+    ///
+    /// **Every sentence is conditioned on a fact, and that is the whole safety rule.** A
+    /// refusal that instructs can instruct wrongly, which is worse than one that says
+    /// nothing: it sends somebody to repair a base that is not broken. So a large, fully
+    /// keyed fleet that simply does not cover the question gets exactly one sentence, the
+    /// true one about what happened, and no remedy at all.
+    ///
+    /// **Empty on an empty base, deliberately.** [`Memory::is_empty`] already has its own
+    /// reply on the terminal and on the MCP surface, and that reply is right: the library
+    /// has not been written yet, which is a fact about the base and not about the
+    /// question. Two explanations of one fact is the drift this codebase keeps paying for.
+    pub fn lines(&self) -> Vec<String> {
+        let mut out = Vec::new();
+        if self.entries == 0 {
+            return out;
+        }
+
+        // Structural first: below the minimum nothing can be a hit whatever it scores, so
+        // every remedy that fits a large base is wasted work here.
+        if self.entries < MIN_ENTRIES_TO_ROUTE {
+            out.push(format!(
+                "The library holds {} across {} in all, and under {} entries nothing can \
+                 be a hit whatever it scores: with one entry every word has the same \
+                 rarity, so there is nothing for the ranking to tell apart. A second note \
+                 is what changes that, not a better question.",
+                counted(self.entries, "entry", "entries"),
+                counted(self.agents, "agent", "agents"),
+                MIN_ENTRIES_TO_ROUTE
+            ));
+        }
+
+        // Then the likeliest authoring cause, because a file with no keys is on disk,
+        // readable by a person, and scores zero on every question ever asked. A count and
+        // not a list: a list of eighty swamps the reply, and a count cannot name files, so
+        // it hands over the verb that can.
+        if self.unreachable > 0 {
+            let (carry, object, subject, score) = match self.unreachable {
+                1 => ("carries", "it", "it", "scores"),
+                _ => ("carry", "them", "they", "score"),
+            };
+            out.push(format!(
+                "{} across the open bases {carry} no `Search for:` line, so the index \
+                 holds no entry for {object} and {subject} {score} zero on every \
+                 question. `kb check` names {object}.",
+                counted(self.unreachable, "markdown file", "markdown files")
+            ));
+        }
+
+        // Then what this particular question did, which is one of two things and never
+        // both. **The floor is named only where it actually refused something.** A
+        // `Verdict::Nothing` reaches here with a score of exactly zero, because
+        // `index::route` keeps a hit only under `score > 0.0` and `confidence_of` returns
+        // `Nothing` only from its `hits.first()` early return: no term matched any key,
+        // the floor was never reached, and printing "0.0 against a floor of 17.5" reads as
+        // *nearly* and sends the reader to recalibrate a threshold that did nothing.
+        if self.scored > 0.0 {
+            if self.scored < self.floor {
+                out.push(format!(
+                    "The top result scored {:.1} against a floor of {:.1}, which is the \
+                     floor for a corpus of this size and not a fixed number.",
+                    self.scored, self.floor
+                ));
+            }
+            // Above the floor and still refused is a third thing, and this type does not
+            // know which: `kb boot` gets here when the classifier named nobody, and that
+            // is not a scoring failure at all. Saying nothing is the honest answer.
+        } else {
+            out.push(
+                "No term in the question matched any key here, so nothing was ranked at \
+                 all: this is a vocabulary miss and not a near miss, and asking again with \
+                 the words the notes declare is what changes it."
+                    .to_string(),
+            );
+        }
+
+        out
     }
 }
 
@@ -323,6 +480,21 @@ pub struct Agent {
     /// base that does not declare a name and a role has not claimed the job. That keeps
     /// ADR-0011's rule that the fleet is found by shape rather than declared in a list.
     pub routable: bool,
+    /// Files in this base the router can build no entry for, qualified as `base/rel`.
+    ///
+    /// An authoring problem, and one nothing tells anybody about until it is carried here:
+    /// the file is on disk, a person can open and read it, and it scores zero on every
+    /// question. `kb check` reports the same set as E02, and nobody is required to run
+    /// `kb check`.
+    pub unreachable: Vec<String>,
+    /// Files on disk this base's index holds no chunks for, qualified as `base/rel`.
+    ///
+    /// A different problem with a different fix: `kb index` has not run since these were
+    /// written. **Which scope produced the number matters and is not obvious.** An index
+    /// synced without `--all` and opened with `--all` correctly reports every private file
+    /// as unindexed, and the reverse reports nothing at all, so two runs can disagree
+    /// while both are telling the truth.
+    pub unindexed: Vec<String>,
     store: Store,
 }
 
@@ -330,6 +502,11 @@ pub struct Memory {
     entries: Vec<Entry>,
     aliases: Vec<(String, String)>,
     scope: Scope,
+    /// How a miss is answered with the base's own vocabulary. Private, and swapped only
+    /// by [`Memory::with_suggester`], for the reason this whole type exists: a surface
+    /// holding its own suggester is a second definition of the same answer, and two of
+    /// those have already come to disagree here. One place to land, one place to look.
+    suggester: Box<dyn crate::suggester::Suggester>,
     /// One per base, each with its own index, in the order the fleet was expanded.
     pub agents: Vec<Agent>,
     /// The paths as given, before expansion. Kept because the fleet root is where
@@ -422,21 +599,71 @@ impl Memory {
             })?;
             index_was_rebuilt |= store.rebuilt;
 
-            entries.extend(index::build(&base));
+            // **What the walk could not reach, carried rather than dropped.** `build`
+            // classified every file it walked, so this costs nothing beyond the move.
+            let name = index::base_name(&root);
+            let built = index::build(&base);
+            entries.extend(built.entries);
+            let unreachable: Vec<String> =
+                built.unreachable.iter().map(|rel| format!("{name}/{rel}")).collect();
+
+            // **The derived lag, over two lists that already exist.** `unwrap_or_default`
+            // on a store error is deliberate: a diagnostic number must never be the thing
+            // that refuses to open a base.
+            let indexed: std::collections::HashSet<String> =
+                store.indexed_paths().unwrap_or_default().into_iter().collect();
+            let unindexed: Vec<String> = base
+                .files
+                .iter()
+                // `Store::sync` skips the map on purpose, because it is the keyword
+                // scorer's corpus. Without the same filter here every base reports a
+                // permanent lag of one, and a number that is never zero is a number people
+                // learn to scroll past.
+                .filter(|f| Some(&f.rel) != base.map.as_ref())
+                .filter(|f| !indexed.contains(&f.rel))
+                .map(|f| format!("{name}/{}", f.rel))
+                .collect();
+
             aliases.extend(base.aliases.clone());
             let routable = root.join("agent.txt").is_file();
-            agents.push(Agent { name: name_of(&root), root, routable, store });
+            agents.push(Agent {
+                name: name_of(&root),
+                root,
+                routable,
+                unreachable,
+                unindexed,
+                store,
+            });
         }
 
         Ok(Memory {
             entries,
             aliases,
             scope: if private { Scope::All } else { Scope::Public },
+            suggester: Box::new(crate::suggester::Trigram),
             agents,
             skipped,
             opened: paths.iter().map(|p| p.to_path_buf()).collect(),
             index_was_rebuilt,
         })
+    }
+
+    /// Swaps in another way of measuring what a question looks like. Nothing but the
+    /// suggestion path changes: see [`crate::suggester`] for why that is the only place
+    /// a second scorer is allowed to land, and for the bar
+    /// [[0018-no-model-in-the-retrieval-path]] sets before one is written.
+    ///
+    /// **Consuming, rather than `&mut self`, and that is the point.** A surface holding
+    /// a `&mut Memory` could otherwise swap the suggester between the gate and the miss
+    /// reply, so one question would be judged by one thing and answered by another. Take
+    /// the memory or leave it.
+    ///
+    /// Its only caller today is the test module, which installs a suggester that answers
+    /// everything and one that panics on sight. That is deliberate: the property worth
+    /// pinning is that neither can move a verdict, and neither belongs in production.
+    pub fn with_suggester(mut self, suggester: Box<dyn crate::suggester::Suggester>) -> Memory {
+        self.suggester = suggester;
+        self
     }
 
     /// The fleet describing itself: its name, its role, and every agent with theirs.
@@ -467,6 +694,41 @@ impl Memory {
         }
     }
 
+    /// Every file on every open base that matches the facets, with nothing ranked.
+    ///
+    /// **A lookup, not a verb**, filed here beside [`Memory::describe`] for the same
+    /// reason: the contract is three verbs over a set of bases, and this answers no
+    /// question. It hands over what the library holds and lets the caller decide. Calling
+    /// it a fourth verb would make three doc headers lie, in `lib.rs`, at the top of this
+    /// file and on the front page of the README.
+    ///
+    /// **The privacy rule is one comparison and it is the only dangerous line here.**
+    /// `self.scope == Scope::All` is the round trip of the `private` bool `Memory::open`
+    /// handed `Base::discover`, so a listing sees exactly the files the memory was opened
+    /// with. Invert it and every private folder in the fleet is listed by default, over
+    /// MCP, to whatever model is reasoning. Nothing here re-derives which folders those
+    /// are: `base::private_layer` stays the single declaration, ADR-0034.
+    ///
+    /// **It walks the disk again rather than caching a listing on `Memory::open`.** The
+    /// alternative is a `Vec<Listed>` filled beside `entries.extend(...)`, and its cost
+    /// lands in the wrong place: `kb boot` calls `Memory::open` on every single user
+    /// message through the `UserPromptSubmit` hook, and would then pay one front matter
+    /// parse and one heading scan per file per message to serve a command nobody ran.
+    /// This way the second walk is paid by the caller that asked for it, and `Memory`
+    /// gains no new state.
+    pub fn list(
+        &self,
+        filter: &crate::list::Filter,
+    ) -> Result<Vec<crate::list::Listed>, OpenError> {
+        let mut out = Vec::new();
+        for agent in &self.agents {
+            let base = Base::discover(&agent.root, self.scope == Scope::All)
+                .map_err(|e| OpenError::Unreadable(agent.root.clone(), e))?;
+            out.extend(crate::list::build(&base).into_iter().filter(|l| filter.matches(l)));
+        }
+        Ok(out)
+    }
+
     pub fn scope(&self) -> Scope {
         self.scope
     }
@@ -483,6 +745,37 @@ impl Memory {
     pub fn alias_count(&self) -> usize {
         self.aliases.len()
     }
+
+    /// Every file across the open bases that no question can reach, qualified as `base/rel`.
+    ///
+    /// **Separate from [`Memory::unindexed`] because they are two failures wanting opposite
+    /// work.** This one is a file nobody wrote a `Search for:` line for, and the fix is
+    /// somebody writing one. The other is a `kb index` that never ran, and the fix is
+    /// running it. One combined number would say a base has a problem and refuse to say
+    /// what to do about it.
+    pub fn unreachable(&self) -> Vec<&str> {
+        self.agents
+            .iter()
+            .flat_map(|a| a.unreachable.iter().map(|s| s.as_str()))
+            .collect()
+    }
+
+    /// Every file on disk the indexes hold no chunks for, qualified as `base/rel`.
+    pub fn unindexed(&self) -> Vec<&str> {
+        self.agents
+            .iter()
+            .flat_map(|a| a.unindexed.iter().map(|s| s.as_str()))
+            .collect()
+    }
+
+    /// How many paths a surface names when it reports what it cannot reach.
+    ///
+    /// One number in one place, for the reason [`Memory::SUGGEST_LIMIT`] carries below:
+    /// two surfaces free to choose their own cap is one question answered two ways. **The
+    /// count is always exact and only the list is capped**, because a short array beside a
+    /// count taken from the same short array is a payload that lies about the size of the
+    /// problem.
+    pub const PATHS_SHOWN: usize = 8;
 
     /// True when there is nothing to search, as opposed to nothing found.
     ///
@@ -556,8 +849,18 @@ impl Memory {
     /// Belongs on the contract rather than at each call site for the same reason the
     /// three verbs do: `mcp.rs` and `main.rs` both have a miss path, and two callers
     /// building the same answer separately is how they came to disagree before.
+    ///
+    /// **Which comparison answers this is now a field and not a call.** The body used to
+    /// name `index::suggest`, so "a second scorer lands here" was true of the call graph
+    /// and stated nowhere. It is one line on [`crate::suggester::Suggester`] instead,
+    /// with the default still being the trigram overlap that has always run.
+    ///
+    /// Reached from one place, [`Memory::recall_loss`], which has already returned `None`
+    /// for every verdict but `Verdict::Nothing` before it gets here. That ordering, and
+    /// not this signature, is what makes a suggester incapable of turning a refusal into
+    /// a hit.
     pub fn suggest(&self, question: &str, limit: usize) -> Vec<String> {
-        index::suggest(question, &self.entries, limit)
+        self.suggester.words(question, &self.entries, limit)
     }
 
     /// Which files a question should open. No text is read, so this is cheap and can
@@ -783,7 +1086,7 @@ impl Memory {
         // The floor alone, scaled to this corpus. See MIN_MARGIN for the measurement
         // that removed the margin from this line and why the reasoning behind it was
         // wrong, and `floor_for` for why the floor is no longer one number.
-        let verdict = if top.score >= floor && self.enough_to_route() {
+        let verdict = if self.clears_floor(top.score) {
             Verdict::Hit
         } else {
             Verdict::Guess
@@ -798,10 +1101,97 @@ impl Memory {
         floor_for(self.entry_count())
     }
 
+    /// The state behind a refusal, gathered once for whichever surface is about to print
+    /// it. See [`Shortfall`] for why the floor is taken from the `Confidence` and not
+    /// from [`Memory::floor`] here.
+    pub fn shortfall(&self, c: &Confidence) -> Shortfall {
+        Shortfall {
+            entries: self.entry_count(),
+            agents: self.agents.len(),
+            floor: c.floor,
+            scored: c.keyword_score,
+            unreachable: self.unreachable().len(),
+        }
+    }
+
     /// Whether the fleet is large enough for a `hit` to mean anything. See
     /// `MIN_ENTRIES_TO_ROUTE`.
     pub fn enough_to_route(&self) -> bool {
         self.entry_count() >= MIN_ENTRIES_TO_ROUTE
+    }
+
+    /// The gate itself: whether a keyword score is one this fleet will answer from.
+    ///
+    /// **One predicate, because the expression was already written twice.**
+    /// [`Memory::confidence_of`] gates the keyword ranking and [`Memory::confidence`]
+    /// gates a fused list, and both spelled out `score >= floor && enough_to_route()`
+    /// by hand with a comment between them saying they must not drift. A third caller
+    /// now needs the same cut: [`Memory::near_misses`] splits a ranking into what the
+    /// gate would serve and what it would refuse, and a surface that re-derived the
+    /// gate would be a fourth opinion about the one decision this type exists to hold.
+    ///
+    /// **Both halves, and the second is the one an extraction drops.**
+    /// `enough_to_route` is what stops a base of one entry calling any shared word a
+    /// hit: with one entry every word has `df = 1`, so idf can tell nothing apart and
+    /// the floor built from it is cleared by evidence that is not evidence. Keeping
+    /// only the comparison would turn every tiny fleet's guess into an answer, on every
+    /// surface at once.
+    pub fn clears_floor(&self, keyword_score: f32) -> bool {
+        keyword_score >= self.floor() && self.enough_to_route()
+    }
+
+    /// The words a file declares it can be found by, joined on the pair fusion keys on.
+    ///
+    /// `retrieve::fuse` accumulates keyword hits under `(entry.base, entry.rel)` and text
+    /// hits under `(hit.base, hit.path)`, so both halves land in one namespace and this
+    /// lookup can use it for either. That join is the thing that silently returns nothing
+    /// if either side changes shape, which is why a test pins it rather than trusting it.
+    ///
+    /// An empty slice is an answer and not a failure: the index holds no entry for that
+    /// file, which is exactly what a file with no `Search for:` line looks like from here.
+    /// The caller prints it rather than skipping it.
+    fn keys_of(&self, base: &str, rel: &str) -> &[String] {
+        self.entries
+            .iter()
+            .find(|e| e.base == base && e.rel == rel)
+            .map(|e| e.keywords.as_slice())
+            .unwrap_or(&[])
+    }
+
+    /// The candidates this question reached and the gate refused, with their keys.
+    ///
+    /// **What "just under the floor" has to mean here, because the literal reading is
+    /// empty by construction.** [`Memory::recall_loss`] records only on
+    /// `Verdict::Nothing`, and [`Memory::confidence_of`] returns `Nothing` only when the
+    /// keyword list is empty. A sub-floor *keyword* score is a `guess`, which is served,
+    /// and a served question is deliberately not a recall loss. So every question in the
+    /// log has a keyword ranking of nothing at all, and the candidates worth naming are
+    /// the ones the **text** scorer reached whose keys missed. That is F-02 itself, the
+    /// case the log was built for: the base holds the answer and only its keys are wrong.
+    ///
+    /// Built on [`Memory::retrieve`] rather than [`Memory::ask`] on purpose. `ask` also
+    /// folds an agent choice and computes a verdict, neither of which this needs, and a
+    /// reader must not re-run the gate over a question the log already says was refused.
+    /// `retrieve` records nothing and applies no gate, so asking it costs the corpus once
+    /// and decides nothing a second time.
+    ///
+    /// Cost, stated rather than claimed away: this runs the full retrieval once per
+    /// question it is asked about, so a caller looping over a long log pays the corpus
+    /// once per line. `top` bounds the candidates carried per question, not the number of
+    /// questions.
+    pub fn near_misses(&self, question: &str, top: usize) -> Vec<NearMiss> {
+        self.retrieve(question, top)
+            .into_iter()
+            .filter(|f| !self.clears_floor(f.keyword_score))
+            .map(|f| NearMiss {
+                keys: self.keys_of(&f.base, &f.path).to_vec(),
+                base: f.base,
+                rel: f.path,
+                title: f.title,
+                keyword_score: f.keyword_score,
+                why: f.why,
+            })
+            .collect()
     }
 
     /// The older gate, over a fused list.
@@ -846,7 +1236,7 @@ impl Memory {
         // Agreement is real evidence that a file is on topic and no evidence at all
         // that the topic is one the base covers, so it cannot carry a result over the
         // line on its own. `no_agreement` still exists and still says its own thing.
-        let verdict = if top.keyword_score >= floor && self.enough_to_route() {
+        let verdict = if self.clears_floor(top.keyword_score) {
             Verdict::Hit
         } else {
             Verdict::Guess
@@ -1459,6 +1849,77 @@ mod tests {
         assert!(!written.contains("chutada"), "a guess was served, so it is not a loss: {written}");
     }
 
+    /// **The property the seam exists for: a suggester cannot move a verdict.**
+    ///
+    /// The suggestion path runs strictly after the gate at every surface, and that
+    /// ordering used to be a fact about the call graph that nothing stated. It is what
+    /// makes a second implementation safe to add: whatever it returns is vocabulary
+    /// offered to a reader who was already told the base does not cover the question,
+    /// so a suggester that lies costs a wasted retry and can never turn a refusal into
+    /// an answer the caller mistakes for a hit.
+    ///
+    /// The loud suggester answers every question with two words the trigram one would
+    /// not have produced here, and the last assertion is what stops this test being
+    /// vacuous: it proves the replacement actually ran, so the unchanged `Confidence`
+    /// above is a measurement and not an artefact of nothing having happened.
+    #[test]
+    fn a_suggester_that_answers_everything_cannot_move_a_verdict() {
+        struct AlwaysAnswers;
+        impl crate::suggester::Suggester for AlwaysAnswers {
+            fn words(&self, _question: &str, _entries: &[index::Entry], _limit: usize) -> Vec<String> {
+                vec!["zebra".to_string(), "quagga".to_string()]
+            }
+        }
+
+        let (_root, memory) = one_note_base("suggester-inert");
+        let question = "uma pergunta sobre zebras";
+
+        let before = memory.ask(question, 5).confidence;
+        assert_eq!(before.verdict, Verdict::Nothing, "one entry never routes: the gate refuses");
+
+        let memory = memory.with_suggester(Box::new(AlwaysAnswers));
+        let after = memory.ask(question, 5).confidence;
+
+        assert_eq!(after.verdict, before.verdict, "the verdict is the gate's, not the suggester's");
+        assert_eq!(after.agreement, before.agreement, "agreement counts scorers, not suggestions");
+        assert_eq!(after.keyword_score, before.keyword_score, "the keyword score is untouched");
+        assert_eq!(after.margin, before.margin, "so is the runner-up margin");
+        assert_eq!(after.floor, before.floor, "and the floor the verdict was measured against");
+
+        let loss = memory.recall_loss(question, &after).expect("a refusal is a recall loss");
+        assert_eq!(
+            loss.looked_like,
+            vec!["zebra".to_string(), "quagga".to_string()],
+            "the installed suggester ran: trigrams answer this question with `zebra` alone"
+        );
+    }
+
+    /// **The ordering, checked rather than read.**
+    ///
+    /// A suggester that panics the moment it is asked anything, installed on a memory
+    /// big enough that the empty-base early return cannot be what saves it. If
+    /// `recall_loss` ever asked for vocabulary before consulting the verdict, or asked
+    /// on a verdict that was served, this is a panic instead of an assertion failure.
+    ///
+    /// `Verdict::Nothing` is deliberately not exercised here. `calibrated_memory` has
+    /// no `opened` root, so `recall_loss` would resolve the log to a relative path and
+    /// `misses::record` would write `kb-misses.txt` into the crate root. The refusal
+    /// path is covered on `one_note_base` by the test above, which has somewhere to
+    /// write.
+    #[test]
+    fn the_suggester_never_runs_on_a_verdict_that_was_served() {
+        struct Explodes;
+        impl crate::suggester::Suggester for Explodes {
+            fn words(&self, _question: &str, _entries: &[index::Entry], _limit: usize) -> Vec<String> {
+                panic!("the suggester ran on a verdict that was served")
+            }
+        }
+
+        let memory = calibrated_memory().with_suggester(Box::new(Explodes));
+        assert!(memory.recall_loss("uma pergunta respondida", &saying(Verdict::Hit)).is_none());
+        assert!(memory.recall_loss("uma pergunta chutada", &saying(Verdict::Guess)).is_none());
+    }
+
     /// **The loss comes back whether or not it could be stored, which is the whole
     /// point of F-03.** A hosted consumer has no writable path beside its base, so the
     /// only copy that will ever exist is the one it is handed. Reporting the failure
@@ -1581,6 +2042,7 @@ mod tests {
             entries: vec![], aliases: vec![],
             scope: Scope::Public, agents: vec![], opened: vec![], skipped: vec![],
             index_was_rebuilt: false,
+            suggester: Box::new(crate::suggester::Trigram),
         }
     }
 
@@ -1602,6 +2064,100 @@ mod tests {
             })
             .collect();
         m
+    }
+
+    /// Every entry carries one key the whole corpus carries, so a question made of it
+    /// is a real match that no honest floor lets through: `idf` of a term in all 226
+    /// entries is `ln(1 + 226/227)`, about 0.69, and 6 x 0.69 is 4.15 against a floor
+    /// of 17.5. Each entry also carries a unique key, so the same fixture produces a
+    /// result **above** the floor and the split can be tested in both directions.
+    fn memory_with_one_key_everybody_shares() -> Memory {
+        let mut m = empty_memory();
+        m.entries = (0..FLOOR_CALIBRATED_AT)
+            .map(|i| index::Entry {
+                base: "zed".into(),
+                rel: format!("knowledge/{i}.md"),
+                stem: i.to_string(),
+                title: String::new(),
+                keywords: vec!["common".into(), format!("k{i}")],
+                summary: String::new(),
+                body: String::new(),
+            })
+            .collect();
+        m
+    }
+
+    /// The gate is one predicate, and the size clause is half of it.
+    ///
+    /// Both existing gate sites wrote `score >= floor && enough_to_route()` by hand,
+    /// with a comment between them saying they must not drift. `near_misses` needs the
+    /// same cut to split a ranking, and a third copy is a third chance to disagree.
+    ///
+    /// The last assertion is the one a careless extraction drops. Without
+    /// `enough_to_route` a fleet of one entry calls any shared word a hit, on every
+    /// surface at once, because with one entry every word has `df = 1` and idf can tell
+    /// nothing apart.
+    #[test]
+    fn one_floor_decides_the_gate_and_every_surface_that_splits_a_ranking() {
+        let m = calibrated_memory();
+        assert!(m.clears_floor(SCORE_FLOOR + 1.0), "above the floor on the fleet it was measured on");
+        assert!(!m.clears_floor(SCORE_FLOOR - 1.0), "below it");
+
+        // The same answer the gate itself gives, over the same numbers.
+        for score in [SCORE_FLOOR - 1.0, SCORE_FLOOR + 1.0] {
+            let verdict = m.confidence(&[found("zed", 0.9, score, &["keywords #1"])]).verdict;
+            assert_eq!(
+                m.clears_floor(score),
+                verdict == Verdict::Hit,
+                "the predicate and the gate must be one decision (at {score})"
+            );
+        }
+
+        let mut tiny = empty_memory();
+        tiny.entries = vec![index::Entry {
+            base: "zed".into(),
+            rel: "knowledge/only.md".into(),
+            stem: "only".into(),
+            title: String::new(),
+            keywords: vec!["k".into()],
+            summary: String::new(),
+            body: String::new(),
+        }];
+        assert!(
+            !tiny.clears_floor(1_000.0),
+            "a base below MIN_ENTRIES_TO_ROUTE has no ruler, whatever the score"
+        );
+    }
+
+    /// A near miss comes back with the keys the file carries, not just its path.
+    ///
+    /// The keys are the actionable half: they are what the reader compares against the
+    /// question before writing an alias line or another `Search for:` term. Looking them
+    /// up joins on the `(base, rel)` pair `retrieve::fuse` keys its map on, and that join
+    /// returns nothing at all rather than failing loudly if either side changes shape,
+    /// so it is pinned here.
+    ///
+    /// The second half is the split itself: an entry that clears the floor is served and
+    /// is therefore not a near miss, whatever else it is.
+    #[test]
+    fn an_entry_that_ranked_below_the_floor_comes_back_with_the_keys_it_carries() {
+        let m = memory_with_one_key_everybody_shares();
+
+        let near = m.near_misses("common", 3);
+        assert!(!near.is_empty(), "a shared key is a real match under the floor: {near:?}");
+        let top = &near[0];
+        assert_eq!(top.base, "zed", "{top:?}");
+        assert!(top.rel.starts_with("knowledge/"), "{top:?}");
+        assert!(
+            top.keys.iter().any(|k| k == "common"),
+            "the keys travelled with the path: {top:?}"
+        );
+        assert!(!m.clears_floor(top.keyword_score), "under the floor by construction: {top:?}");
+
+        assert!(
+            m.near_misses("k5", 3).is_empty(),
+            "a unique key clears the floor, and what the gate serves is not a near miss"
+        );
     }
 
     /// ADR-0036. The floor on the calibration fleet is the measured number, to the
@@ -1956,5 +2512,357 @@ mod tests {
         assert!(m.entry_count() > 0, "and its entries reach the index");
         assert!(m.skipped_bases().is_empty(), "nothing was left out");
         assert_eq!(m.scope(), Scope::Public);
+    }
+
+    // -----------------------------------------------------------------------
+    // kb list: a lookup by facet, with no ranking question in it
+    // -----------------------------------------------------------------------
+
+    /// A base with files placed by path, no index synced, because a listing walks the
+    /// files and never reads a chunk. `MAP.md` is here only so `looks_like_a_base`
+    /// recognises the directory when it is pointed at directly.
+    fn listed_base(name: &str, files: &[(&str, &str)]) -> PathBuf {
+        let root = scratch(name).join("probe");
+        std::fs::create_dir_all(&root).expect("mkdir");
+        std::fs::write(root.join("MAP.md"), "# MAP
+").expect("map");
+        for (rel, text) in files {
+            let path = root.join(rel);
+            std::fs::create_dir_all(path.parent().expect("a parent")).expect("mkdir");
+            std::fs::write(path, text).expect("file");
+        }
+        root
+    }
+
+    fn listed_paths(m: &Memory) -> Vec<String> {
+        m.list(&crate::list::Filter::default())
+            .expect("the listing walks the same bases the memory opened")
+            .into_iter()
+            .map(|l| l.path)
+            .collect()
+    }
+
+    /// **THE privacy test for this surface, and it is aimed at one comparison.**
+    ///
+    /// `Memory::list` reaches the private layer through `Base::discover(root, all)`,
+    /// the same call `Memory::open` makes, with `all` recovered from the scope the
+    /// memory was opened with. Invert that comparison and every private folder in the
+    /// fleet is listed by default, over MCP, to whatever model is reasoning. The
+    /// declaration itself stays in `base::private_layer` and is not restated here,
+    /// which is ADR-0034's single declaration; this pins that the fifth surface reads
+    /// it rather than growing a fourth copy of `profile/ projects/ records/`.
+    ///
+    /// One surface up from `base::tests::the_folder_map_is_the_private_layer_when_nothing_is_declared`,
+    /// which pins the same rule at the walk.
+    #[test]
+    fn a_private_folder_is_absent_from_a_listing_until_all_asks_for_it() {
+        let root = listed_base(
+            "list-private",
+            &[("knowledge/public.md", "# Public
+"), ("profile/me.md", "# Me
+")],
+        );
+        assert!(!root.join("agent.txt").exists(), "nothing is declared, so the folder map applies");
+
+        let public = Memory::open(&[root.as_path()], false).expect("opens");
+        let served = listed_paths(&public);
+        assert!(served.contains(&"knowledge/public.md".to_string()), "{served:?}");
+        assert!(
+            !served.contains(&"profile/me.md".to_string()),
+            "the private layer is not listed without --all: {served:?}"
+        );
+
+        let all = Memory::open(&[root.as_path()], true).expect("opens");
+        let rows = all.list(&crate::list::Filter::default()).expect("lists");
+        let paths: Vec<&str> = rows.iter().map(|r| r.path.as_str()).collect();
+        assert!(paths.contains(&"knowledge/public.md"), "{paths:?}");
+        assert!(paths.contains(&"profile/me.md"), "--all is the deliberate act: {paths:?}");
+        assert!(
+            rows.iter().any(|r| r.path == "profile/me.md" && r.private),
+            "and the row says which one it is"
+        );
+    }
+
+    /// A listing walks `base.files`, not `index::build`'s entries.
+    ///
+    /// `index::build` classifies a file with no `Search for:` line as unreachable or
+    /// exempt and builds no entry for it, which is the entire deposit plus every
+    /// README. Listing the entries instead would answer `--stage raw` with zero rows on
+    /// a base full of raw captures, and a raw capture is exactly what that facet is
+    /// asked about. The two populations differ on purpose and this pins which one the
+    /// listing serves.
+    #[test]
+    fn a_file_with_no_search_for_line_is_still_listed() {
+        let root = listed_base(
+            "list-keyless",
+            &[
+                ("knowledge/keyed.md", "# Keyed
+
+**Search for:** `zebra`
+"),
+                ("inbox/2026-09-01-drop.md", "# Drop
+
+something nobody has judged yet
+"),
+            ],
+        );
+        let m = Memory::open(&[root.as_path()], true).expect("opens");
+
+        let served = listed_paths(&m);
+        assert!(served.contains(&"knowledge/keyed.md".to_string()), "{served:?}");
+        assert!(
+            served.contains(&"inbox/2026-09-01-drop.md".to_string()),
+            "a deposit file is on the shelf whether or not a question can reach it: {served:?}"
+        );
+        assert_eq!(m.entry_count(), 1, "while the index holds only the keyed one");
+    }
+
+    /// ADR-0034 on the fifth surface: unjudged material is served with its label on,
+    /// never hidden and never bare. The same property
+    /// `mcp::tests::a_passage_from_the_deposit_is_served_with_its_label_on` pins for
+    /// `kb_retrieve`, so a caller reading a listing and a caller reading passages are
+    /// told the same thing about the same file.
+    #[test]
+    fn a_deposit_file_is_listed_with_its_short_memory_label_on() {
+        let root = listed_base(
+            "list-layer",
+            &[("knowledge/settled.md", "# Settled
+"), ("inbox/fresh.md", "# Fresh
+")],
+        );
+        let m = Memory::open(&[root.as_path()], true).expect("opens");
+        let rows = m.list(&crate::list::Filter::default()).expect("lists");
+
+        let fresh = rows.iter().find(|r| r.path == "inbox/fresh.md").expect("present");
+        let settled = rows.iter().find(|r| r.path == "knowledge/settled.md").expect("present");
+        assert_eq!(fresh.layer, crate::retrieve::Layer::Short);
+        assert_eq!(settled.layer, crate::retrieve::Layer::Long);
+    }
+
+    /// A one agent base on disk with its index synced, the way `kb index` leaves it.
+    ///
+    /// The sync is not optional and it is the whole subject of the lag tests below.
+    /// `Memory::open` reads an index and never builds one, so a fixture that skips the
+    /// sync reports the entire base as unindexed, which is true and tests nothing.
+    fn synced_base(name: &str, notes: &[(&str, &str)]) -> PathBuf {
+        let root = scratch(name).join("probe");
+        std::fs::create_dir_all(root.join("knowledge")).expect("mkdir");
+        std::fs::write(root.join("agent.txt"), "name = Probe\nrole = testing\n").expect("agent");
+        std::fs::write(root.join("MAP.md"), "# MAP\n").expect("map");
+        for (rel, text) in notes {
+            let path = root.join(rel);
+            std::fs::create_dir_all(path.parent().expect("a parent")).expect("mkdir");
+            std::fs::write(path, text).expect("note");
+        }
+
+        let base = Base::discover(&root, true).expect("discover");
+        let mut db = Store::open(&index_path(&root)).expect("index");
+        db.sync(&base, &index::base_name(&root)).expect("sync");
+        root
+    }
+
+    fn zebra() -> (&'static str, &'static str) {
+        (
+            "knowledge/zebra.md",
+            "# Zebra\n\n**Search for:** `zebra`, `quagga`\n\n**Exists to:** hold one animal\n",
+        )
+    }
+
+    /// **The exact window the SessionEnd hook opens, and the reason the two numbers are
+    /// two fields.**
+    ///
+    /// That hook runs `kb capture` and detaches `kb promote`, and it never runs
+    /// `kb index`. What `capture::render` writes carries no `Search for:` line, so the
+    /// deposit the system makes for itself lands on disk, out of the store, and exempt
+    /// from the reachability rule because `inbox/` is a quarantine. Unindexed is a
+    /// `kb index` that has not run; unreachable is a file nobody wrote keys for. Collapse
+    /// them into one number and the answer to "what do I do about it" is gone.
+    #[test]
+    fn the_deposit_the_session_writes_for_itself_is_unindexed_and_not_unreachable() {
+        let root = synced_base("session-end", &[zebra()]);
+
+        std::fs::create_dir_all(root.join("inbox")).expect("mkdir");
+        std::fs::write(
+            root.join("inbox").join("2026-09-01-session-abc.md"),
+            "# Session abc\n\nwhat the session left behind.\n",
+        )
+        .expect("deposit");
+
+        let memory = Memory::open(&[root.as_path()], true).expect("opens");
+        assert_eq!(memory.unindexed(), vec!["probe/inbox/2026-09-01-session-abc.md"]);
+        assert!(
+            memory.unreachable().is_empty(),
+            "inbox is exempt by design: {:?}",
+            memory.unreachable()
+        );
+    }
+
+    /// **A `nothing` verdict never lost to the floor, and saying it did is the failure
+    /// this whole change exists to avoid.**
+    ///
+    /// `index::route` keeps a hit only under `if score > 0.0`, and `confidence_of`
+    /// returns `Verdict::Nothing` only from the `hits.first()` early return, so on every
+    /// refusal path that reaches a terminal, an MCP reply or the boot briefing the
+    /// keyword score is exactly zero: no term in the question matched any key at all and
+    /// the floor was never reached, let alone failed. A sentence of the shape *you scored
+    /// 0.0 against a floor of 4.1* reads as *nearly*, sends the reader off to recalibrate
+    /// a threshold that did nothing, and is the "instructs wrongly" case that is worse
+    /// than a bare refusal.
+    #[test]
+    fn a_refusal_that_scored_nothing_does_not_blame_the_floor() {
+        let mut m = empty_memory();
+        m.entries = (0..4)
+            .map(|i| index::Entry {
+                base: "zed".into(),
+                rel: format!("knowledge/{i}.md"),
+                stem: i.to_string(),
+                title: String::new(),
+                keywords: vec![format!("k{i}")],
+                summary: String::new(),
+                body: String::new(),
+            })
+            .collect();
+
+        let said = m.shortfall(&saying(Verdict::Nothing)).lines().join(" ");
+        assert!(!said.is_empty(), "a refusal that says nothing is the state being fixed");
+        assert!(
+            said.to_lowercase().contains("no term"),
+            "it has to name what actually happened: {said}"
+        );
+        assert!(
+            !said.contains("floor"),
+            "nothing was measured against the floor, so the floor must not appear: {said}"
+        );
+    }
+
+    /// The other half of the branch, and the one the boot briefing actually prints.
+    ///
+    /// A `Guess` carries a real score under a real floor, so here the floor sentence is
+    /// true and both numbers belong in it. The floor printed is the one **on the
+    /// `Confidence`**, never `Memory::floor()` recomputed at the print site: the fixture
+    /// hands over a floor the memory would never derive, so a surface that recomputed it
+    /// fails here rather than in production six months later.
+    #[test]
+    fn a_refusal_that_scored_and_lost_to_the_floor_names_the_floor_it_lost_to() {
+        let m = calibrated_memory();
+        let c = Confidence {
+            verdict: Verdict::Guess,
+            agreement: 1,
+            keyword_score: 3.25,
+            margin: 1.0,
+            floor: 99.5,
+        };
+        assert!(m.floor() != 99.5, "the fixture floor has to be one the memory would not derive");
+
+        let said = m.shortfall(&c).lines().join(" ");
+        assert!(said.contains("3.2") || said.contains("3.3"), "the score it made: {said}");
+        assert!(said.contains("99.5"), "the floor it lost to, off the Confidence: {said}");
+        assert!(
+            !said.contains(&format!("{:.1}", m.floor())),
+            "not the floor recomputed from the memory: {said}"
+        );
+    }
+
+    /// **A fleet under `MIN_ENTRIES_TO_ROUTE` refuses for a reason no score explains, and
+    /// today it refuses in exactly the words a thousand entry fleet uses.**
+    ///
+    /// With one entry every word has `df = 1`, so idf can tell nothing apart and no
+    /// evidence can be good evidence. The reader has to be told that, because every
+    /// remedy that fits a large base (rewrite the question, fix the keys) is wasted work
+    /// here and the only thing that helps is a second note. Written against the constant,
+    /// so re-deriving it does not leave a literal 2 stranded in a sentence.
+    #[test]
+    fn a_refusal_on_a_fleet_too_small_to_route_says_so_and_says_what_to_do() {
+        let mut m = empty_memory();
+        m.entries = vec![index::Entry {
+            base: "zed".into(),
+            rel: "knowledge/only.md".into(),
+            stem: "only".into(),
+            title: String::new(),
+            keywords: vec!["zebra".into()],
+            summary: String::new(),
+            body: String::new(),
+        }];
+        assert!(!m.enough_to_route(), "the fixture is the state under test");
+
+        let said = m.shortfall(&saying(Verdict::Nothing)).lines().join(" ");
+        assert!(said.contains('1'), "the count it actually has: {said}");
+        assert!(
+            said.contains(&MIN_ENTRIES_TO_ROUTE.to_string()),
+            "and the threshold, read off the constant: {said}"
+        );
+        assert!(
+            !said.contains("this base"),
+            "the count is fleet wide across every opened root: {said}"
+        );
+    }
+
+    /// **The guard on "a refusal that instructs can instruct wrongly".**
+    ///
+    /// A large, fully keyed fleet that simply does not cover the question has no cause to
+    /// name, and a remedy printed here sends somebody to repair a base that is not broken.
+    /// So the only sentence allowed is the true one about what happened. This fails the
+    /// moment a remedy is added that is not conditioned on a fact.
+    #[test]
+    fn a_base_big_enough_and_fully_keyed_gets_no_invented_cause() {
+        let m = calibrated_memory();
+        assert!(m.unreachable().is_empty(), "the fixture is a healthy base");
+
+        let said = m.shortfall(&saying(Verdict::Nothing)).lines();
+        assert_eq!(said.len(), 1, "one true sentence and no invented cause: {said:?}");
+        let one = &said[0];
+        assert!(!one.contains("floor"), "nothing reached the floor: {one}");
+        assert!(!one.contains("Search for"), "every file here has its keys: {one}");
+        assert!(!one.to_lowercase().contains("too small"), "226 entries is not small: {one}");
+    }
+
+    /// **One fact, one message.** A base with no entries already has a reply of its own on
+    /// the terminal and on the MCP surface, and it says the right thing: the library is
+    /// empty, and here is what fills it. A second explanation printed beside it is the
+    /// drift this codebase keeps paying for, so this returns nothing and leaves the case
+    /// to the text that already owns it.
+    #[test]
+    fn an_empty_base_still_says_only_the_thing_it_already_says() {
+        let m = empty_memory();
+        assert!(m.is_empty(), "the fixture is the state under test");
+        assert!(
+            m.shortfall(&saying(Verdict::Nothing)).lines().is_empty(),
+            "the empty base text is the sole answer for an empty base"
+        );
+    }
+
+    /// **The likeliest cause of a miss on a base that does have files in it.**
+    ///
+    /// A note with no `Search for:` line is on disk, readable by a person, and scores zero
+    /// on every question ever asked. Nothing tells anybody it is there unless they run
+    /// `kb check`, and nobody is required to run `kb check`. The refusal is the one moment
+    /// the reader is already looking, so it is where the number belongs. The count is
+    /// [`Memory::unreachable`], which is `index::is_exempt`'s population and therefore the
+    /// same set `kb check` reports as E02: a second definition here would accuse a base of
+    /// a fault its own linter says it does not have.
+    #[test]
+    fn a_refusal_names_the_files_that_declare_no_keys_because_that_is_the_likeliest_cause() {
+        let root = synced_base(
+            "shortfall-keyless",
+            &[zebra(), ("knowledge/keyless.md", "# Keyless\n\nno line saying what finds this.\n")],
+        );
+        let m = Memory::open(&[root.as_path()], true).expect("opens");
+        assert_eq!(m.unreachable(), vec!["probe/knowledge/keyless.md"], "the fixture");
+
+        let said = m.shortfall(&saying(Verdict::Nothing)).lines().join(" ");
+        assert!(said.contains('1'), "the count: {said}");
+        assert!(said.contains("Search for"), "and what is missing from it: {said}");
+        assert!(said.contains("kb check"), "and the verb that names the files: {said}");
+    }
+
+    /// The false positive floor. A base whose index is current must report nothing
+    /// lagging, which is what guards the map filter and the decision to key the query on
+    /// nothing at all rather than on `Agent.name`, which is `"."` when a base is opened as
+    /// `.` and would report the whole corpus as missing.
+    #[test]
+    fn a_base_that_was_indexed_a_moment_ago_is_not_lagging() {
+        let root = synced_base("lag-floor", &[zebra()]);
+        let memory = Memory::open(&[root.as_path()], true).expect("opens");
+        assert!(memory.unindexed().is_empty(), "{:?}", memory.unindexed());
     }
 }

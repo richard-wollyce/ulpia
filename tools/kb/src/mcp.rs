@@ -263,6 +263,31 @@ impl Server {
                      write about identity.",
                     vec![],
                 ),
+                tool(
+                    "kb_list",
+                    "List the files the knowledge base holds, narrowed by facet. This is \
+                        NOT a search and it takes no question: nothing here is ranked, \
+                        nothing carries a score and nothing carries a verdict, because there \
+                        is no ranking problem in a filter. Call it when the question is \
+                        about what exists rather than about what answers something: which \
+                        notes are still raw, what is in one agent's tools folder, what \
+                        landed in the deposit. Asking that of kb_route or kb_retrieve scores \
+                        it against a floor and comes back as a guess, which is the confusion \
+                        this tool exists to end. Every argument is optional, and an omitted \
+                        facet means DO NOT FILTER ON                      THIS rather than \
+                        any particular value. Facets combine with AND. Every file is listed, \
+                        including ones no question can reach because they carry no Search \
+                        for line, which is the whole deposit and every README: a filter is a \
+                        question about what the library holds, not about what a search can find.",
+                    vec![
+                        ("base", "string", "One agent, by its directory name. Omit for every open base.", false),
+                        ("folder", "string", "A directory under the base, and everything below it: knowledge, knowledge/systems, inbox.", false),
+                        ("kind", "string", "The species, read from the folder: memory, skills or tools.", false),
+                        ("stage", "string", "raw, captured, distilled or derived, from the file's own front matter.", false),
+                        ("provenance", "string", "human, agent or external, from the file's own front matter.", false),
+                        ("limit", "integer", "How many rows to return. Default 50, and the count of what was cut is always reported.", false),
+                    ],
+                ),
             ]),
         );
         out
@@ -291,6 +316,7 @@ impl Server {
                 let claim = string_arg(&args, "claim")?;
                 self.remember(&claim)
             }
+            "kb_list" => self.list(&args)?,
             other => return Err(format!("unknown tool: {other}")),
         };
 
@@ -316,9 +342,9 @@ impl Server {
         let looked_like: &[String] = loss.as_ref().map_or(&[], |m| &m.looked_like);
         if hits.is_empty() {
             if self.memory.is_empty() {
-                return nothing_to_search();
+                return nothing_to_search(self.memory.unreachable().len());
             }
-            return no_match(question, looked_like);
+            return no_match(question, looked_like, &self.memory.shortfall(&confidence));
         }
 
         let mut out = format!("Files to open for: {question}\n\n");
@@ -352,9 +378,9 @@ impl Server {
         let looked_like: &[String] = loss.as_ref().map_or(&[], |m| &m.looked_like);
         if found.is_empty() {
             if self.memory.is_empty() {
-                return nothing_to_search();
+                return nothing_to_search(self.memory.unreachable().len());
             }
-            return no_match(question, looked_like);
+            return no_match(question, looked_like, &self.memory.shortfall(&answer.confidence));
         }
 
         let mut out = format!("Passages for: {question}\n\n");
@@ -421,6 +447,55 @@ impl Server {
         out
     }
 
+    /// The filter surface. It states no privacy rule of its own: `serve` opened the
+    /// memory with the scope it was given, and `Memory::list` reads that scope back. The
+    /// module header already claims that property for every other tool here, and this is
+    /// the fifth one to keep it.
+    ///
+    /// **A bad facet is an error and not an empty list.** A JSON-RPC error naming the
+    /// legal set tells a model it made a typo; zero rows tells it the base holds none of
+    /// those, which is the wrong lesson and the one it will act on.
+    fn list(&self, args: &Value) -> Result<String, String> {
+        let filter = crate::list::Filter::parse(
+            opt_str_arg(args, "base").as_deref(),
+            opt_str_arg(args, "folder").as_deref(),
+            opt_str_arg(args, "kind").as_deref(),
+            opt_str_arg(args, "stage").as_deref(),
+            opt_str_arg(args, "provenance").as_deref(),
+        )
+        .map_err(|e| e.to_string())?;
+
+        let rows = self.memory.list(&filter).map_err(|e| e.to_string())?;
+        if rows.is_empty() {
+            return Ok("No file in the open bases carries every facet you named. That is a fact \
+                about the filter and about what is on disk, not a ranking: nothing was scored and nothing was refused."
+                .to_string());
+        }
+
+        let limit = args
+            .get("limit")
+            .and_then(|v| v.as_usize())
+            .unwrap_or(crate::list::MCP_LIMIT)
+            .max(1);
+        let shown = rows.len().min(limit);
+        let mut out = format!("{} files. Nothing here is ranked.
+
+", rows.len());
+        out.push_str(&crate::list::to_text(&rows[..shown]));
+        if shown < rows.len() {
+            // The count stays exact and only the list is shortened, the same rule
+            // `Memory::PATHS_SHOWN` follows: a caller has to be able to tell a narrow
+            // filter from a truncated one, and a bare cut destroys exactly that.
+            out.push_str(&format!(
+                "
+{} more not shown. Narrow the facets, or raise limit.
+",
+                rows.len() - shown
+            ));
+        }
+        Ok(out)
+    }
+
     fn remember(&self, claim: &str) -> String {
         let a = self.memory.remember(claim);
         let mut out =
@@ -467,27 +542,66 @@ impl Server {
 ///
 /// It also names the tool that **does** work on an empty base, since identity is a
 /// lookup over `fleet.txt` and `agent.txt` and never needed the index at all.
-fn nothing_to_search() -> String {
-    "This base has no knowledge files yet, so nothing could have matched. That is a \
+/// `unreachable` is [`crate::memory::Memory::unreachable`]'s count, taken by the caller
+/// because this function has no memory to ask. **It changes what the reply is telling
+/// somebody to do.** A base can hold markdown a person already wrote and still be empty
+/// here, because a file with no `Search for:` line builds no entry; telling that reader to
+/// start putting markdown in the folder is telling them to redo work they have done.
+fn nothing_to_search(unreachable: usize) -> String {
+    let mut out = "This base has no knowledge files yet, so nothing could have matched. That is a \
      fact about the base and not about the question.\n\n\
      A base is filled by putting markdown in the agent's folder, giving each file a \
      `Search for:` line of its own near the top, naming the words a real question \
      would use, and running `kb index`. The line lives in the file it describes, not \
      in a list somewhere else, so a file without one is a file nothing can reach and \
-     no map can rescue.\n\n\
-     kb_fleet works regardless: who this fleet is and which agents exist is read \
-     from fleet.txt and each agent.txt, not from the index, so identity is \
-     answerable before a single note is written."
-        .to_string()
+     no map can rescue."
+        .to_string();
+
+    // **Beside the paragraph that explains the line, not after the closing note.** The
+    // terminal's copy of this reply orders it this way, and two surfaces printing the same
+    // three paragraphs in two orders is the drift this whole change is against.
+    if unreachable > 0 {
+        let (are, they, them) = match unreachable {
+            1 => ("file is", "it is", "it"),
+            _ => ("files are", "they are", "them"),
+        };
+        out.push_str(&format!(
+            // **The open bases, not this base**, because `Memory::unreachable` folds
+            // every agent the server opened and a server started on a fleet root holds
+            // more than one. The sentence said "this base" and was false for exactly the
+            // deployment shape `kb serve` is built for.
+            "\n\n{unreachable} markdown {are} already in the open bases without that \
+             line: {they} on disk, a person can read {them}, and no question reaches \
+             {them}. `kb check` names each one."
+        ));
+    }
+
+    out.push_str(
+        "\n\nkb_fleet works regardless: who this fleet is and which agents exist is read \
+         from fleet.txt and each agent.txt, not from the index, so identity is \
+         answerable before a single note is written.",
+    );
+    out
 }
 
-fn no_match(question: &str, suggestions: &[String]) -> String {
+/// `state` is the refusal's own circumstances, and it goes in **before** the suggestion
+/// block on purpose: this function returns early when there is nothing to suggest, so a
+/// paragraph appended at the end reaches only the callers who least need it. One paragraph
+/// rather than a bulleted list because the reader is a model with a context window, and the
+/// sentences are [`crate::memory::Shortfall::lines`]'s so that the terminal, this reply and
+/// the boot briefing cannot come to mean three different things again.
+fn no_match(question: &str, suggestions: &[String], state: &crate::memory::Shortfall) -> String {
     let mut out = format!(
         "Nothing matched \"{question}\".\n\n\
          Either the base does not cover it, or its keyword lines do not carry the words \
          a real question uses. Saying so plainly is deliberate: a router that always \
          returns something teaches you to trust a guess."
     );
+
+    let said = state.lines();
+    if !said.is_empty() {
+        out.push_str(&format!("\n\n{}", said.join(" ")));
+    }
 
     if suggestions.is_empty() {
         return out;
@@ -506,6 +620,17 @@ fn no_match(question: &str, suggestions: &[String]) -> String {
         suggestions.join(", ")
     ));
     out
+}
+
+/// An optional string argument. Absent, null, or whitespace all mean the same thing here
+/// and it is not an error: an omitted facet does not filter, so there is nothing to
+/// refuse. Separate from `string_arg`, which refuses exactly those cases, because a
+/// required question and an optional facet want opposite answers to one shape.
+fn opt_str_arg(args: &Value, key: &str) -> Option<String> {
+    args.get(key)
+        .and_then(|v| v.as_str())
+        .map(|s| s.trim().to_string())
+        .filter(|s| !s.is_empty())
 }
 
 fn string_arg(args: &Value, key: &str) -> Result<String, String> {
@@ -661,6 +786,79 @@ mod tests {
     /// fixture: the binary and the library are two crates, and a `#[cfg(test)]` helper
     /// in one is not compiled into the other. Duplicating fifteen lines of fixture is
     /// the cheaper of the two honest options.
+    /// **The refusal has to carry the next act, on the surface a model actually queries.**
+    ///
+    /// `served_fleet` is a one entry base, so this is the small fleet case exactly: a
+    /// question with no matching term is refused, and today the reply says only that
+    /// nothing matched and that the keys may be wrong. On a fleet of one entry the keys
+    /// are not what refused it and never could have been, and the reader is sent to edit
+    /// a `Search for:` line that would not have helped.
+    ///
+    /// The second half of this test is the one that catches a careless insertion:
+    /// `no_match` returns early when there are no suggestions, so a paragraph appended
+    /// after that return reaches nobody, and a paragraph inserted before the suggestion
+    /// block must not swallow it.
+    #[test]
+    fn a_miss_on_a_small_fleet_carries_the_next_act_and_not_just_the_refusal() {
+        let (_, server) = served_fleet("shortfall-small");
+        let out = server.route("qual a taxa de juros do trimestre", 4);
+
+        assert!(out.contains("Nothing matched"), "the refusal is still the first thing: {out}");
+        assert!(out.contains('1'), "and it names the size it refused from: {out}");
+        assert!(
+            out.contains(&crate::memory::MIN_ENTRIES_TO_ROUTE.to_string()),
+            "and the threshold that size fails: {out}"
+        );
+        // A second question, because the first has nothing that looks like it and takes
+        // `no_match`'s early return. A misspelling reaches the trigram suggestions, so this
+        // call carries both paragraphs and pins their order: the state was inserted before
+        // that return and did not swallow what comes after it.
+        let typo = server.route("zebr listrada", 4);
+        assert!(typo.contains("look like words you used"), "the suggestions survive: {typo}");
+        assert!(typo.contains("vocabulary miss"), "and the state is there too: {typo}");
+        assert!(
+            typo.find("vocabulary miss") < typo.find("look like words you used"),
+            "state first, suggestions last: {typo}"
+        );
+    }
+
+    /// **The same blame-the-question defect, one level down.**
+    ///
+    /// The empty base reply tells a first time reader to give each file a `Search for:`
+    /// line. On a base whose markdown is already written without one, that is advice about
+    /// files they have already got, and the reply says nothing about them. The count is
+    /// the difference between "start writing" and "seven files are one line short".
+    #[test]
+    fn an_empty_base_names_the_files_that_declare_no_keys() {
+        let root = std::env::temp_dir()
+            .join("kb-mcp-miss-tests")
+            .join(format!("{}-shortfall-empty", std::process::id()));
+        let _ = std::fs::remove_dir_all(&root);
+        let agent = root.join("probe");
+        std::fs::create_dir_all(agent.join("knowledge")).expect("mkdir");
+        std::fs::write(agent.join("MAP.md"), "# MAP\n").expect("map");
+        std::fs::write(
+            agent.join("knowledge").join("keyless.md"),
+            "# Keyless\n\nwritten before anybody knew about the line.\n",
+        )
+        .expect("note");
+
+        let memory = Memory::open(&[agent.as_path()], true).expect("opens");
+        assert!(memory.is_empty(), "no keys means no entries, which is the fixture");
+        let server = Server { memory, top: 4 };
+
+        let out = server.route("qual a taxa de juros do trimestre", 4);
+        assert!(out.contains("no knowledge files yet"), "still the empty base reply: {out}");
+        assert!(out.contains('1'), "and it counts the file already on disk: {out}");
+        assert!(out.contains("markdown file is"), "one file, singular: {out}");
+        // Beside the paragraph that explains the line, not after the closing note, which
+        // is the order the terminal copy of this reply already prints.
+        assert!(
+            out.find("markdown file is") < out.find("kb_fleet works regardless"),
+            "the count comes before the closing note: {out}"
+        );
+    }
+
     fn served_fleet(name: &str) -> (std::path::PathBuf, Server) {
         let root = std::env::temp_dir()
             .join("kb-mcp-miss-tests")
@@ -744,6 +942,69 @@ mod tests {
         let out = server.retrieve("quagga population", 4);
         assert!(out.contains("inbox/dropped.md"), "the deposit is served: {out}");
         assert!(out.contains("[short memory: recent, not distilled"), "and labelled: {out}");
+    }
+
+    /// The filter tool is offered, and it cannot be reached with a ranking question.
+    ///
+    /// **`required` is an empty array and `question` is not a property**, which is the
+    /// confusion the tool exists to end: the other four all score a question against a
+    /// floor, so a filter shaped ask with no ranking problem in it came back as a
+    /// guess. A tool that accepted a question here would be a fifth scorer with no
+    /// floor, which is worse than the four.
+    ///
+    /// The four existing tools are asserted present in the same test, because a tool
+    /// added by editing an array is a tool that can displace one.
+    #[test]
+    fn the_list_tool_is_offered_and_requires_no_question() {
+        let (_, server) = served_fleet("tools-list");
+        let listed = server.tools_list();
+        let tools = match listed.get("tools") {
+            Some(Value::Arr(a)) => a.clone(),
+            other => panic!("tools is not an array: {other:?}"),
+        };
+        let names: Vec<&str> = tools.iter().filter_map(|t| t.get("name")?.as_str()).collect();
+        for existing in ["kb_route", "kb_retrieve", "kb_remember", "kb_fleet"] {
+            assert!(names.contains(&existing), "nothing was displaced: {names:?}");
+        }
+        assert!(names.contains(&"kb_list"), "{names:?}");
+
+        let t = tools
+            .iter()
+            .find(|t| t.get("name").and_then(|n| n.as_str()) == Some("kb_list"))
+            .expect("present");
+        let schema = t.get("inputSchema").expect("camelCase, as the spec writes it");
+        assert_eq!(
+            schema.get("required"),
+            Some(&Value::Arr(Vec::new())),
+            "every facet is optional: an omitted one does not filter"
+        );
+        assert!(
+            schema.get("properties").and_then(|p| p.get("question")).is_none(),
+            "there is no ranking question to ask this tool"
+        );
+    }
+
+    /// This surface states no privacy rule of its own, which is what the module header
+    /// already claims for every other tool: the declaration is read off each base by
+    /// `Memory::open`, and nothing here is consulted about it. `.mcp.json` runs
+    /// `kb serve .` with no `--all`, so the live server is Public scope and this is the
+    /// arm that matters in production.
+    #[test]
+    fn the_list_tool_inherits_the_servers_scope_and_states_none_of_its_own() {
+        let (root, _) = served_fleet("list-scope");
+        std::fs::create_dir_all(root.join("profile")).expect("mkdir");
+        std::fs::write(root.join("profile").join("me.md"), "# Me
+").expect("private note");
+
+        let public =
+            Server { memory: Memory::open(&[root.as_path()], false).expect("opens"), top: 4 };
+        let out = public.list(&Value::obj()).expect("no facet named is no filter, never an error");
+        assert!(out.contains("knowledge/striped.md"), "the public shelf is listed: {out}");
+        assert!(!out.contains("profile/me.md"), "and the private layer is not: {out}");
+
+        let all = Server { memory: Memory::open(&[root.as_path()], true).expect("opens"), top: 4 };
+        let out = all.list(&Value::obj()).expect("lists");
+        assert!(out.contains("profile/me.md"), "--all is the deliberate act: {out}");
     }
 
     /// A served answer is not a loss, on this surface as on every other.

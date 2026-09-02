@@ -65,8 +65,9 @@ use crate::memory::Memory;
 /// matched. ADR-0034 made the real behaviour the intended one: the deposit is served,
 /// and every surface labels a passage from it as short memory, so a model deciding to
 /// lean on it does so knowing it is recent and unjudged. `retrieve::layer_of` is the one
-/// place that rule lives, and `checks::is_exempt` keeps E02 quiet about the missing
-/// keyword line, because a deposit file is not supposed to have one.
+/// place that rule lives, and `index::is_exempt` keeps E02 quiet about the missing
+/// keyword line, because a deposit file is not supposed to have one. That predicate
+/// spells the deposit by reading this constant, so there is one name and not two.
 pub const DEPOSIT: &str = "inbox";
 
 /// The stage a promoted note carries until a person or a later pass distils it.

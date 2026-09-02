@@ -13,11 +13,13 @@
     <link rel="stylesheet" href="/src/styles.css" />
   </head>
   <body class="not-found">
+    <a class="skip" href="#main">Skip to content</a>
     <header class="band">
       <div class="band-inner">
         <p class="wordmark">Ulpia</p>
         <nav class="nav" aria-label="Sections">
           <ul>
+            <li><a href="/docs/">Docs</a></li>
             <li><a href="/blog/">Writing</a></li>
           </ul>
         </nav>
@@ -42,10 +44,10 @@
         </button>
       </div>
     </header>
-    <main>
+    <main id="main" tabindex="-1">
       <p class="err-figure" aria-hidden="true">404</p>
       <h1>Nothing is shelved at this address.</h1>
-      <p><a class="back" href="/">Back to the library</a></p>
+      <p><a class="back" href="/">Back to the library</a> <a class="back" href="/docs/">All of the docs</a></p>
     </main>
     <footer>
       <p class="address-line">

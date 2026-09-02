@@ -26,11 +26,13 @@
     <link rel="stylesheet" href="/src/styles.css" />
   </head>
   <body>
+    <a class="skip" href="#main">Skip to content</a>
     <header class="band">
       <div class="band-inner">
         <p class="wordmark">Ulpia</p>
         <nav class="nav" aria-label="Sections">
           <ul>
+            <li><a href="/docs/">Docs</a></li>
             <li><a href="/blog/">Writing</a></li>
           </ul>
         </nav>
@@ -56,22 +58,29 @@
       </div>
     </header>
 
-    <main>
+    <main id="main" tabindex="-1">
       <section class="hero" aria-label="Ulpia">
         <h1>The memory is yours. The&nbsp;model is a guest.</h1>
         <p class="subhead" data-anim="type"><span class="type-real">A fleet of AI agents, each with its own knowledge base, and one memory layer under all of them. On your machine, in plain files, with no model in the retrieval&nbsp;path.</span></p>
         <p class="cta-row" data-anim="hero">
           <a class="cta-primary" href="mailto:hello@ulpia.io" aria-haspopup="dialog">Write to hello@ulpia.io</a>
+          <a class="back" href="https://github.com/richard-wollyce/ulpia">Read the source</a>
         </p>
-        <p class="status-line" data-anim="hero">Pre-launch. Built daily.</p>
+        <p class="status-line" data-anim="hero">Pre-launch. Used daily.</p>
       </section>
 
       <section aria-labelledby="library">
         <h2 id="library">A library that lives with&nbsp;you.</h2>
         <p class="opening" data-anim="rise">
-          Ulpia is a library. Your notes, your decisions, your protocols:
-          markdown files, in folders, in git, on your disk. Move the folder and
-          everything moves with it.
+          Ulpia is a library. Your notes, your decisions, your protocols are
+          its books: markdown files, in folders, on your disk. Move the folder
+          and everything moves with it, because no absolute path exists
+          anywhere inside a fleet.
+        </p>
+        <p data-anim="rise">
+          Version it with git if you want the history; nothing is served on
+          that condition. A folder with a note in it is already a base, with no
+          git init, no manifest and no marker.
         </p>
         <p data-anim="rise">
           Vesta is its librarian. Ask her a question and she answers with the
@@ -79,46 +88,48 @@
           When she is wrong, she says why, in words you can act on.
         </p>
         <p data-anim="rise">
-          Which file holds the answer and which of your agents should give it
-          are different questions, and each goes to the thing that is good at
-          it. Finding the file is a lookup, and code does that exactly.
-          Choosing the agent is a judgement about a subject, so a model does
-          that one. It is handed your question, the roster, the file names
-          Vesta found with the words that matched, and the one line at the top
-          of each of those files where you said what it is for. Never the files
-          themselves.
-          It is a guest too: it reads a briefing at the door, never the
-          shelves.
-        </p>
-        <p data-anim="rise">
-          Then you hand those files to whatever model you like. Yours, running
-          locally. Claude, through MCP. Something else next year. The memory
-          outlives the model.
+          Named for the Bibliotheca Ulpia, Trajan's library: Rome's reading
+          room and its record office in one building. That pair, the knowledge
+          and the record of the decisions behind it, is what this software
+          holds.
         </p>
       </section>
 
       <section aria-labelledby="work">
         <h2 id="work">Watch her&nbsp;work.</h2>
         <figure class="terminal" data-anim="rise">
-          <pre class="term"><span class="line cmd-line"><span class="prompt">$ </span><span class="cmd">kb route "why is there no embedding model in the retrieval path" decisions <span class="flag">--hybrid</span></span></span><span class="blank"></span><span class="line meta">question: why is there no embedding model in the retrieval path</span><span class="line meta">indexed:  22 entries across 1 agents, 0 aliases</span><span class="blank"></span><span class="line hit"><span class="pad">  </span><span class="score">0.033</span><span class="pad">  </span><span class="base">decisions</span><span class="pad"> </span><span class="file">0018-no-model-in-the-retrieval-path.md</span><span class="pad">       </span><span class="agree">keywords #1 + text #1</span></span><span class="line hit"><span class="pad">  </span><span class="score">0.031</span><span class="pad">  </span><span class="base">decisions</span><span class="pad"> </span><span class="file">0017-no-dense-scorer-yet.md</span><span class="pad">                  </span><span class="agree">keywords #2 + text #9</span></span><span class="line hit"><span class="pad">  </span><span class="score">0.029</span><span class="pad">  </span><span class="base">decisions</span><span class="pad"> </span><span class="file">0004-local-first-inference.md</span><span class="pad">                </span><span class="agree">keywords #3 + text #14</span></span></pre>
-          <figcaption>Real output, uncut.</figcaption>
+          <pre class="term"><span class="line cmd-line"><span class="prompt">$ </span><span class="cmd">kb route "why is there no embedding model in the retrieval path" decisions <span class="flag">--hybrid</span></span></span><span class="blank"></span><span class="line meta">question: why is there no embedding model in the retrieval path</span><span class="line meta">indexed:  36 entries across 1 agents, 0 aliases</span><span class="blank"></span><span class="line hit"><span class="pad">  </span><span class="score">0.033</span><span class="pad">  </span><span class="base">decisions</span><span class="pad"> </span><span class="file">0018-no-model-in-the-retrieval-path.md</span><span class="pad">       </span><span class="agree">keywords #1 + text #2</span></span><span class="line hit"><span class="pad">  </span><span class="score">0.032</span><span class="pad">  </span><span class="base">decisions</span><span class="pad"> </span><span class="file">0027-a-model-decides-who-answers.md</span><span class="pad">          </span><span class="agree">keywords #4 + text #1</span></span><span class="line hit"><span class="pad">  </span><span class="score">0.029</span><span class="pad">  </span><span class="base">decisions</span><span class="pad"> </span><span class="file">0017-no-dense-scorer-yet.md</span><span class="pad">                  </span><span class="agree">keywords #6 + text #11</span></span></pre>
+          <figcaption>
+            Real output, 2 September 2026, commit ea43d1d, on Windows: the
+            first three of the five files it listed, with the passage preview
+            under each left out and nothing else touched.
+          </figcaption>
         </figure>
         <p data-anim="rise">
-          Two independent scorers read every question: a keyword index built
-          from your own map, and full text search over the content. The signal
-          is not the score, it is the agreement. A file both scorers found is a
-          hit. A file only one found is a guess, and Vesta says so.
+          Two independent scorers read every question. One is a keyword scorer
+          over the Search for line each note carries under its title, the label
+          on the book. The other is full text search over the content. The
+          verdict is hit, guess or nothing, and it comes from one number: the
+          top file's keyword score, measured against a floor that scales with
+          the size of the library. Whether the second scorer found the same
+          file is reported beside it, as in the last column above, and never as
+          the verdict. The number printed above is the fused score of both
+          rankings; the keyword score behind the verdict, and the floor it was
+          measured against, are printed by kb route --json.
         </p>
         <p data-anim="rise">
-          When nothing matches, the base answers with its own vocabulary, so a
-          miss teaches you what the library covers instead of teaching you to
-          stop asking.
+          When nothing matches, the library answers with its own vocabulary, so
+          a miss teaches you what it covers instead of teaching you to stop
+          asking. That comparison is spelling and not meaning: it reaches a
+          typo or a cognate and never a translation, and the reply says which
+          kind of help it is.
         </p>
         <p data-anim="rise">
           And when a subject belongs to nobody in your fleet, Vesta says
           exactly that: nothing in this fleet covers it, which is a gap in the
           fleet rather than a gap in your question. No score can produce that
-          sentence, and it is how you learn an agent is missing.
+          sentence. It is a judgement about a subject, and the section on the
+          guest says who makes it.
         </p>
       </section>
 
@@ -134,18 +145,50 @@
         <p data-anim="rise">Ulpia takes the other trade.</p>
         <ul class="properties" data-anim="rise">
           <li><strong>Offline</strong>, because your files are read on your machine and nowhere else.</li>
-          <li><strong>Explainable</strong>, because every answer names the reason it was chosen.</li>
+          <li><strong>Explainable</strong>, because the answer names the words that matched under each file, and says when a file was found by its text alone.</li>
           <li>
             <strong>Reproducible</strong>, because the same question finds the
             same files, today and in a year.
           </li>
-          <li><strong>Private</strong>, because what git does not track, Vesta will not serve.</li>
+          <li>
+            <strong>Private</strong>, because each base declares its own
+            private layer, and Vesta serves nothing inside it unless the owner
+            asks for it with --all.
+          </li>
         </ul>
         <p data-anim="rise">
-          Choosing which agent answers is the one step that can call a model,
-          and it calls a command you name, which you can swap or remove. A
-          model may stand between you and your fleet. Never between you and
-          your notes.
+          Those four are properties of how your notes are read. The one step
+          that may call a model is about your fleet and not your notes, and it
+          is next.
+        </p>
+      </section>
+
+      <section aria-labelledby="guest">
+        <h2 id="guest">The model is a&nbsp;guest.</h2>
+        <p data-anim="rise">
+          Which file holds the answer and which of your agents should give it
+          are different questions. Finding the file is a lookup, and code does
+          that exactly. Choosing the agent is a judgement about a subject, so a
+          model does that one.
+        </p>
+        <p data-anim="rise">
+          That model is handed your question, the roster, the file names Vesta
+          found with the words that matched, and the one line at the top of
+          each of those files where you said what it is for. Never the files
+          themselves. It reads a briefing at the door, never the shelves.
+        </p>
+        <p data-anim="rise">
+          The step calls a command you name, which you can swap or remove; with
+          none configured, the keyword scores pick the agent on their own. It
+          takes seconds, and moving it onto your own machine is the work in
+          front of us. The code is open source under
+          <a href="https://github.com/richard-wollyce/ulpia/blob/main/LICENSE">Apache 2.0</a>.
+        </p>
+        <p data-anim="rise">
+          A model may stand between you and your fleet. Never between you and
+          your notes. Then you hand the files to whatever model you like:
+          yours, locally; Claude, through MCP; something else next year. The
+          memory outlives the model.
         </p>
       </section>
 
@@ -153,15 +196,22 @@
         <h2 id="stands">Where it&nbsp;stands.</h2>
         <p data-anim="rise">
           Early, used daily, and honest about which is which. The core is
-          tested. The tray app is young. The model that picks which agent
-          answers takes seconds, and moving it onto your own machine is the
-          work in front of us. The code is open source under Apache 2.0.
-          The licence gives you the code with attribution kept; the name Ulpia
-          stays ours, which is what makes both promises honest.
+          tested, and no count is printed because the number moves between
+          sessions. The tray app is Windows only and young. There is no macOS
+          binary and no hosted instance, and local model routing is not built.
+          The source is public at
+          <a href="https://github.com/richard-wollyce/ulpia">github.com/richard-wollyce/ulpia</a>.
         </p>
         <p data-anim="rise">
           If that paragraph made you more curious instead of less, this is
           being built for you.
+        </p>
+        <p data-anim="rise">
+          The first four pages of the <a href="/docs/">docs</a> are written to
+          be read in order, and say beside each how long it takes. The
+          <a href="/benchmarks/">benchmarks</a> put every number of ours beside its
+          command, machine and date, and the commit where the results file
+          records one.
         </p>
       </section>
 
@@ -172,47 +222,52 @@
           <a href="https://github.com/richard-wollyce/ulpia">github.com/richard-wollyce/ulpia</a>,
           Apache 2.0, cloneable today. If we ever run a hosted version, it is
           this same folder, run for you; you leave by copying it out. Our
-          address is hello@ulpia.io, and the button at the top puts it on your
-          clipboard.
+          address is hello@ulpia.io, and it sits under this button as a plain
+          mailto, so with JavaScript off, or with a modified click, your mail
+          client opens. With it on, the button at the top of the page also puts
+          the address on your clipboard and offers the other direction: leave
+          yours, and we write when there is something you can install, rarely
+          otherwise.
+        </p>
+        <p class="cta-row" data-anim="rise">
+          <a class="cta-primary" href="mailto:hello@ulpia.io">Write to hello@ulpia.io</a>
         </p>
       </section>
     </main>
 
     <footer>
       <details>
-        <summary>Why Ulpia?</summary>
-        <p>
-          Named for the Bibliotheca Ulpia, Trajan's library: Rome's reading
-          room and its record office in one building.
-        </p>
-      </details>
-      <details>
         <summary>No cookies, no analytics, nothing loaded from anyone else.</summary>
         <p>
           This page sets no cookies and runs no analytics. Everything it loads
-          comes from ulpia.io: the styles, the fonts, the small scripts. Open
-          the network tab and you will not find another origin.
+          comes from ulpia.io: the stylesheet and the small scripts, and no
+          font file at all, since the type is whatever your system has. The
+          page's own Content-Security-Policy allows each kind of resource from
+          'self' and nothing from anywhere else, with the default set to
+          'none', so a request to another origin would be refused before it
+          left. Open the network tab and you will not find another origin.
         </p>
         <p>
           It makes exactly one request that loading the page did not make, and
           only if you ask for it: when you submit the form, your address is
-          posted to ulpia.io and stored so that we can write to you. Nothing
-          else goes with it. If you never submit that form, this page never
-          speaks to us at all.
+          posted to ulpia.io and stored in Cloudflare D1, with the time and the
+          version of the consent sentence you ticked, so that we can write to
+          you. No IP address is recorded. Nothing else goes with it, and
+          nothing goes at all until you submit.
         </p>
         <p>
-          The button copies our address to your clipboard when you press it. It
-          writes; it never reads.
+          The button at the top of the page copies our address to your clipboard
+          when you press it. It writes; it never reads.
         </p>
         <p>
           If you choose a light or dark scheme, that choice is kept in your
-          browser's local storage and never leaves your machine.
+          browser's local storage under the key ulpia-scheme and never leaves
+          your machine.
         </p>
         <p>
           The page is served by Cloudflare Pages, which means Cloudflare
-          terminates TLS and sees the request, as it does for a large part of
-          the web. That is the one third party in the path and we would rather
-          name it here than have you find it.
+          terminates TLS and sees the request. That is the one third party in
+          the path and we would rather name it here than have you find it.
         </p>
         <p>
           What happens to an address afterwards is in the
@@ -221,8 +276,7 @@
         </p>
       </details>
       <p class="address-line">
-        <a href="/benchmarks/">Benchmarks</a> ·
-        <a href="mailto:hello@ulpia.io">hello@ulpia.io</a>
+        <a href="/docs/">Docs</a> · <a href="/benchmarks/">Benchmarks</a> · <a href="mailto:hello@ulpia.io">hello@ulpia.io</a>
       </p>
     </footer>
 

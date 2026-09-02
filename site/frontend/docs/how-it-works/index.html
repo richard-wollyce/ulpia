@@ -1,0 +1,887 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>How the Catalogue Ranks · Ulpia</title>
+    <meta name="description" content="How a question becomes a verdict: two scorers and their fusion, the floor term by term, what a miss returns, and where the one model sits." />
+    <meta name="color-scheme" content="light dark" />
+    <meta name="theme-color" media="(prefers-color-scheme: light)" content="#F6F1E7" />
+    <meta name="theme-color" media="(prefers-color-scheme: dark)" content="#12100D" />
+    <link rel="canonical" href="https://ulpia.io/docs/how-it-works/" />
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <meta property="og:title" content="How the Catalogue Ranks · Ulpia" />
+    <meta property="og:description" content="How a question becomes a verdict: two scorers and their fusion, the floor term by term, what a miss returns, and where the one model sits." />
+    <meta property="og:url" content="https://ulpia.io/docs/how-it-works/" />
+    <meta property="og:type" content="website" />
+    <script src="/theme.js"></script>
+    <link rel="stylesheet" href="/src/styles.css" />
+  </head>
+  <body>
+    <a class="skip" href="#main">Skip to content</a>
+    <header class="band">
+      <div class="band-inner">
+        <p class="wordmark"><a href="/">Ulpia</a></p>
+        <nav class="nav" aria-label="Sections">
+          <ul>
+            <li><a href="/docs/" aria-current="page">Docs</a></li>
+            <li><a href="/blog/">Writing</a></li>
+          </ul>
+        </nav>
+        <button type="button" class="lamp-toggle" aria-label="Color scheme: light, press to change">
+          <svg viewBox="0 0 28 28" width="28" height="28" aria-hidden="true" focusable="false">
+            <g class="glow">
+              <path class="ray ray-c" d="M 14 1.2 L 14 3.6" />
+              <path class="ray ray-l" d="M 8.6 2.6 L 10.1 4.3" />
+              <path class="ray ray-r" d="M 19.4 2.6 L 17.9 4.3" />
+              <path class="shade-fill" d="M 6 13.5 L 10.5 5.5 L 17.5 5.5 L 22 13.5 Z" />
+            </g>
+            <g class="lamp">
+              <path class="shade-line" d="M 6 13.5 L 10.5 5.5 L 17.5 5.5 L 22 13.5 Z" />
+              <path class="stem" d="M 12.6 13.5 C 11.9 14.3, 11.1 15.0, 11.1 16.1 C 11.1 17.6, 12.9 18.2, 12.9 19.5 C 12.9 20.6, 10.6 20.9, 10.6 22.2 L 17.4 22.2 C 17.4 20.9, 15.1 20.6, 15.1 19.5 C 15.1 18.2, 16.9 17.6, 16.9 16.1 C 16.9 15.0, 16.1 14.3, 15.4 13.5 Z" />
+              <path class="base" d="M 9 24.25 L 19 24.25" />
+              <g class="chain-group">
+                <path class="chain" d="M 19 14.35 L 19 16.35" />
+                <circle class="chain-pull" cx="19" cy="17.15" r="1.05" />
+              </g>
+            </g>
+          </svg>
+        </button>
+      </div>
+    </header>
+
+    <main class="doc" id="main" tabindex="-1">
+      <h1>How the Catalogue Ranks</h1>
+      <p class="doc-date">Last updated: 2 September 2026</p>
+
+      <nav class="contents" aria-labelledby="contents-title">
+        <p class="contents-title" id="contents-title">Contents</p>
+        <ol>
+          <li>
+            <a href="#two-scorers-one-fusion">Two scorers, one fusion</a>
+            <ol>
+              <li><a href="#the-keyword-scorer-reads-the-labels">The keyword scorer reads the labels</a></li>
+              <li><a href="#the-text-scorer-reads-the-books">The text scorer reads the books</a></li>
+              <li><a href="#why-they-are-kept-apart">Why they are kept apart</a></li>
+              <li><a href="#the-index-on-disk">The index on disk</a></li>
+            </ol>
+          </li>
+          <li>
+            <a href="#intent-chooses-the-owner-agreement-chooses-the-reading">Intent chooses the owner, agreement chooses the reading</a>
+            <ol>
+              <li><a href="#folding-files-into-an-agent">Folding files into an agent</a></li>
+              <li><a href="#measured-on-a-fleet-you-do-not-have">Measured on a fleet you do not have</a></li>
+            </ol>
+          </li>
+          <li>
+            <a href="#the-floor-term-by-term">The floor, term by term</a>
+            <ol>
+              <li><a href="#why-it-scales">Why it scales</a></li>
+              <li><a href="#a-fleet-of-one-has-no-ruler">A fleet of one has no ruler</a></li>
+              <li><a href="#measured-before-and-after">Measured, before and after</a></li>
+              <li><a href="#the-tool-failing-its-own-test">The tool failing its own test</a></li>
+            </ol>
+          </li>
+          <li>
+            <a href="#what-a-miss-returns">What a miss returns</a>
+            <ol>
+              <li><a href="#why-not-a-model-on-the-miss-path">Why not a model on the miss path</a></li>
+              <li><a href="#the-log-and-what-a-miss-earns">The log, and what a miss earns</a></li>
+            </ol>
+          </li>
+          <li><a href="#writing-a-label">Writing a label</a></li>
+          <li><a href="#who-chooses-the-agent-and-what-it-is-shown">Who chooses the agent, and what it is shown</a></li>
+          <li><a href="#one-contract-every-surface">One contract, every surface</a></li>
+          <li><a href="#what-was-measured-and-kept-out">What was measured and kept out</a></li>
+        </ol>
+      </nav>
+
+      <p>
+        A question reaches the library and comes back as a verdict, <code>hit</code>,
+        <code>guess</code> or <code>nothing</code>, with the books that should open and
+        the agent that should answer. This page is the arithmetic in between. It names
+        every constant, prints what <a href="https://github.com/richard-wollyce/ulpia/tree/main/examples/demo">the demo fleet</a> prints today, and keeps the
+        measurement where the tool fails its own test, because a threshold nobody can
+        read is a threshold nobody can argue with.
+      </p>
+
+      <h2 id="two-scorers-one-fusion">Two scorers, one fusion</h2>
+      <p>
+        Two scorers read every question, and they read different things. The first
+        reads the labels: the <em>Search for</em> line each book carries under its
+        title, the words a person wrote to say which questions the book answers. The
+        second reads the books themselves, the prose, split into chunks. The catalogue
+        Vesta keeps is the first of these, a keyword index; the second is full text
+        search.
+      </p>
+
+      <h3 id="the-keyword-scorer-reads-the-labels">The keyword scorer reads the labels</h3>
+      <p>
+        Each word of the question is weighted by inverse document frequency, the
+        standard arithmetic for how much a word says about which file to open:
+        <code>idf = ln(1 + N / (1 + df))</code>, where <code>N</code> is the number of
+        entries and <code>df</code> is how many of them carry the word. A word on one
+        book in a thousand weighs 6.2; a word on every book weighs almost nothing. One
+        matched key is worth <code>6 × idf</code>, and the weights fall in order: a
+        hand-written key at 6, the title and the file name at 3 each, the prose of the
+        purpose line at 1. A label outranks a title, and a
+        title outranks a sentence that happened to mention the word.
+      </p>
+      <p>
+        A multi-word key found whole in the question is the strongest signal a single
+        key can give. It is scored before the individual words, at 10 times the mean
+        idf of its words, which is why the section on writing a label below asks for
+        keys written as the phrases somebody types. Words too common to carry meaning,
+        in both languages a fleet writes, are dropped before any of this, and accents
+        are folded, so <code>producao</code> and <code>produção</code> are one word.
+      </p>
+
+      <h3 id="the-text-scorer-reads-the-books">The text scorer reads the books</h3>
+      <p>
+        The second scorer is SQLite FTS5 with BM25 over the chunks of every file, so it
+        reaches words nobody put on a label. <code>kb route --hybrid</code> runs both
+        and fuses the two rankings by Reciprocal Rank Fusion: each list contributes
+        <code>1 / (60 + rank)</code> to every document it ranks, and the sums are
+        compared. Fusion uses positions and ignores the raw scores on purpose. A BM25
+        value and a keyword score live in different numeric universes, and normalising
+        them into a weighted sum means inventing a conversion factor and then tuning
+        it per corpus. Ranks need no conversion.
+      </p>
+
+      <h3 id="why-they-are-kept-apart">Why they are kept apart</h3>
+      <p>
+        Agreement between two lists is evidence only when the lists are looking at
+        different things, so the independence is a design constraint and not a detail
+        of the implementation. The <em>Search for</em> lines and the map file are
+        excluded from the text index: they are the keyword scorer's corpus, and
+        indexing them twice would make one scorer reading one source twice look like two
+        scorers agreeing. A file contributes to the fusion once, at the rank of its
+        best chunk. Before that rule, scoring every matching chunk turned the ranking
+        into which file has the most matching pieces, and a safety protocol that
+        defined the calorie floor in a single table row lost to a longer file that
+        mentioned it three times in passing.
+      </p>
+
+      <h3 id="the-index-on-disk">The index on disk</h3>
+      <p>
+        One dependency: <code>rusqlite</code> with SQLite compiled in, so there is no
+        system package to install and nothing to run. SQLite is there because it brings
+        FTS5 with BM25 built in, holds the chunks and their metadata in one file, and
+        stays readable with any <code>sqlite3</code> binary. <code>kb index</code>
+        writes one file per base at <code>&lt;base&gt;/.kb/index.db</code>, and there is
+        deliberately no flag to point it anywhere else. The file holds nothing that
+        cannot be recomputed from the markdown: delete it and the next
+        <code>kb index</code> rebuilds it, which is what keeps the books the source of
+        truth and the index a disposable projection of them.
+      </p>
+      <p>
+        Files are content hashed with SipHash, deliberately not cryptographic, because
+        the question is whether a file changed since last time and the adversary is a
+        text editor. An unchanged file costs nothing on reindex. Chunks split at heading
+        boundaries, then any section over about 1800 characters into windows with 300
+        characters of overlap, cutting at a blank line when there is one, and the
+        heading path travels with each chunk because it carries context the chunk
+        itself rarely repeats.
+      </p>
+      <p>
+        Above 10,000 chunks the text scorer prunes. A term found in more than a quarter of
+        the chunks leaves the FTS expression, because BM25's own idf sits near its
+        floor there and the longest doclists in the index would be walked to move
+        nothing; the keyword scorer still sees every word. Measured on 2026-08-26 on the
+        57,486 chunk LongMemEval-V2 enterprise haystack, identical 19-question sets
+        against the unpruned binary: p95 fell from 1,772 ms to 1,264 ms while the median
+        rose from 306 ms to 371 ms, because the document frequency probes cost more than
+        they save there. Below the threshold nothing changes and the demo eval is
+        bit-identical. That haystack is its own regime: <a href="https://github.com/richard-wollyce/ulpia/blob/main/benchmarks/longmemeval-v2/README.md">the V2 benchmark that built it</a>
+        names its machine as an 11th Gen i5-1135G7 with 16 GB on Windows 11, and no
+        personal fleet measured so far comes near 10,000 chunks.
+      </p>
+      <div class="note" role="note">
+        <p><strong>Note.</strong> A book is served the moment it is on disk. The keyword scorer re-reads the labels on every run, so a new note routes with or without <code>kb index</code>. What the index buys is the second scorer: a note written after the last <code>kb index</code> has no chunks, so <code>--hybrid</code> on it drops to one scorer and reports a weak guess with no passage. The answer is thinner, not wrong.</p>
+      </div>
+
+      <h2 id="intent-chooses-the-owner-agreement-chooses-the-reading">Intent chooses the owner, agreement chooses the reading</h2>
+      <p>
+        The two scorers are not two attempts at one job. The owner and the verdict come
+        from the keyword ranking alone; the reading list, the passages a person or a
+        model will read, comes from the fusion. Fusion rewards agreement, which is
+        right when assembling passages, because a book both scorers noticed belongs in
+        front of the reader. It is the wrong rule for choosing one owner: a file each
+        scorer ranks fourth beats a file one scorer ranks first, and that halves
+        precision at the top to buy recall nobody asked for at that step. Both answers
+        come back from one call, <code>Memory::ask</code>, so no caller can pair them
+        differently.
+      </p>
+      <figure class="plate">
+        <pre><code><span class="prompt">$ </span>kb route "quem decide se um deploy pode ir pra producao" examples/demo
+<span class="out">question: quem decide se um deploy pode ir pra producao</span>
+<span class="out">indexed:  11 entries across 3 agents, 0 aliases</span>
+<span class="out"></span>
+<span class="out">   1.  33.69  zed/knowledge/deploy-checklist.md</span>
+<span class="out">      matched: deploy, producao</span>
+<span class="out">   2.   7.49  steve/knowledge/hooks-that-hold.md</span>
+<span class="out">      matched: decide</span>
+<span class="prompt">$ </span>kb route "quem decide se um deploy pode ir pra producao" examples/demo --hybrid
+<span class="out">question: quem decide se um deploy pode ir pra producao</span>
+<span class="out">indexed:  11 entries across 3 agents, 0 aliases</span>
+<span class="out"></span>
+<span class="agree">  0.033  zed      knowledge/deploy-checklist.md                keywords #1 + text #2</span>
+<span class="out">         What a deploy needs before production: ... A deploy without a rollback plan is a bet, not a release. Canary first ...</span>
+<span class="out">  0.033  steve    knowledge/hooks-that-hold.md                 keywords #2 + text #1</span>
+<span class="out">         Hooks: the first three seconds decide the rest: **Exists to:** Why openings decide retention, and the three hook shapes that hold  A ...</span></code></pre>
+        <figcaption>Real output, uncut, 2 September 2026, commit ea43d1d, release build from a clean export of that commit, on an 11th Gen Intel i5-1135G7, 16 GB, Windows 11 Pro. The two passage lines run past the plate and scroll.</figcaption>
+      </figure>
+      <p>
+        On the demo's first gold question the catalogue separates the two candidates by
+        four and a half to one, 33.69 against 7.49, on the words <code>deploy</code> and
+        <code>producao</code>. The fusion ties them at 0.033 each: the text scorer
+        ranked the marketing note first, so each file is first on one list and second
+        on the other, and <code>1/61 + 1/62</code> is the
+        same sum either way. The owner is <code>zed</code> and the verdict is a hit
+        because the keyword ranking says so. The fused list is what the reader is
+        handed, and here it is right to hand over both.
+      </p>
+
+      <h3 id="folding-files-into-an-agent">Folding files into an agent</h3>
+      <p>
+        An agent's evidence has three species, computed from the path and carried
+        nowhere as data: memory is what it knows, the <code>knowledge/</code> and
+        domain folders; skills is how it works, <code>skills/</code>, <code>protocols/</code> and
+        <code>templates/</code>; tools is what it has the means to use, the
+        declarations under <code>tools/</code>. The fold takes the best file of each
+        species per agent and sums those at most three numbers. Dense memory
+        contributes exactly one number however many files matched, so fifty-nine notes
+        are worth their best one, and a new agent with no memory at all can win on a
+        skills file that names the subject. The rule replaced a plain sum per agent,
+        under which an agent won by mass, many small scores beating one large one. An
+        agent scoring in two species beats an agent scoring the same in one, which is
+        the shape of being prepared rather than merely informed.
+      </p>
+
+      <h3 id="measured-on-a-fleet-you-do-not-have">Measured on a fleet you do not have</h3>
+      <p>
+        On the private fleet's answer key, 33 questions of which 24 are answerable, the
+        keyword scorer alone names the right file 11 times and the fusion it feeds
+        names it 8 times. Read that as a direction and not as a score. The key's own
+        header records that the keyword lines were tuned against these same questions
+        on the day they were graded, so the keyword column is flattered, and the key
+        lives in a fleet the repository ignores, so a reader cannot re-run it. What
+        survives the bias is the direction: fed by that same flattered scorer, the
+        fusion still lands behind it when the job is to name one file.
+      </p>
+      <div class="note" role="note">
+        <p><strong>Careful.</strong> Every private-fleet figure on this page was measured on a fleet a reader does not have. The demo eval further down is the reproducible half of every number here, and it is the one to run before believing the rest.</p>
+      </div>
+
+      <h2 id="the-floor-term-by-term">The floor, term by term</h2>
+      <p>
+        The verdict is one comparison: the top file's keyword score against a floor.
+        Both sides are made of the same pieces, so here they are, named as <a href="https://github.com/richard-wollyce/ulpia/tree/main/tools/kb/src">the source</a>
+        names them.
+      </p>
+      <dl>
+        <dt>entry</dt>
+        <dd>One note the catalogue can find: a markdown file with a <em>Search for</em> line. A fleet's size, for everything below, is its number of entries.</dd>
+        <dt><code>N</code></dt>
+        <dd>The number of entries in the fleet being asked.</dd>
+        <dt>key</dt>
+        <dd>One term on a note's <em>Search for</em> line.</dd>
+        <dt><code>df</code>, document frequency</dt>
+        <dd>How many entries carry a given key. A key on one note has <code>df</code> 1.</dd>
+        <dt><code>idf</code>, inverse document frequency</dt>
+        <dd><code>ln(1 + N / (1 + df))</code>, the weight of a key. Rare keys weigh more; a key on every note weighs almost nothing.</dd>
+        <dt><code>idf_unique(N)</code></dt>
+        <dd><code>idf</code> with <code>df</code> 1, written out: <code>ln(1 + N/2)</code>. The weight of a key exactly one note carries, the heaviest a single key can be at this size. 0.41 at one entry, 1.10 at four, 1.87 at eleven, 4.74 at 226, 6.22 at a thousand.</dd>
+        <dt><code>W_KEYWORD</code></dt>
+        <dd>6.0. One matched key is worth <code>6 × idf</code>.</dd>
+        <dt>keyword score</dt>
+        <dd>The sum over every key the question matched, plus smaller terms for title and phrase matches. The number <code>kb route</code> prints beside each file.</dd>
+        <dt><code>SCORE_FLOOR</code></dt>
+        <dd>17.5. Measured on a fleet of 226 entries and moved twice by <code>kb eval</code>.</dd>
+        <dt><code>FLOOR_CALIBRATED_AT</code></dt>
+        <dd>226. The two constants are one fact, that 17.5 was the right floor for a fleet of 226 entries, and they are re-derived together or not at all.</dd>
+        <dt><code>floor_for(N)</code></dt>
+        <dd><code>0.616 × 6 × idf_unique(N)</code>, where 0.616 is 17.5 divided by <code>6 × idf_unique(226)</code>. The same floor, restated as 62 percent of what one unique key scores, and carried to every other size in that unit. A test asserts that <code>floor_for(226)</code> equals <code>SCORE_FLOOR</code> to four decimals.</dd>
+        <dt><code>MIN_ENTRIES_TO_ROUTE</code></dt>
+        <dd>2. Below it the verdict is never <code>hit</code>, whatever the score.</dd>
+      </dl>
+      <figure class="ledger">
+        <div class="ledger-scroll" tabindex="0" role="region" aria-labelledby="ledger-floor-caption">
+          <table>
+            <thead>
+              <tr>
+                <th scope="col" class="num">Entries, N</th>
+                <th scope="col" class="num">idf_unique(N)</th>
+                <th scope="col" class="num">One unique key, 6 × idf_unique</th>
+                <th scope="col" class="num">The floor, floor_for(N)</th>
+                <th scope="col" class="num">The fixed 17.5, in unique keys</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <th scope="row" class="num">1</th>
+                <td class="num">0.41</td>
+                <td class="num">2.43</td>
+                <td class="num">1.50</td>
+                <td class="num">7.19</td>
+              </tr>
+              <tr>
+                <th scope="row" class="num">2</th>
+                <td class="num">0.69</td>
+                <td class="num">4.16</td>
+                <td class="num">2.56</td>
+                <td class="num">4.21</td>
+              </tr>
+              <tr>
+                <th scope="row" class="num">4</th>
+                <td class="num">1.10</td>
+                <td class="num">6.59</td>
+                <td class="num">4.06</td>
+                <td class="num">2.65</td>
+              </tr>
+              <tr>
+                <th scope="row" class="num">11</th>
+                <td class="num">1.87</td>
+                <td class="num">11.23</td>
+                <td class="num">6.92</td>
+                <td class="num">1.56</td>
+              </tr>
+              <tr>
+                <th scope="row" class="num">226</th>
+                <td class="num">4.74</td>
+                <td class="num">28.42</td>
+                <td class="num">17.50</td>
+                <td class="num">0.62</td>
+              </tr>
+              <tr>
+                <th scope="row" class="num">1000</th>
+                <td class="num">6.22</td>
+                <td class="num">37.30</td>
+                <td class="num">22.97</td>
+                <td class="num">0.47</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <figcaption id="ledger-floor-caption">
+          Arithmetic from the formulas in <a href="https://github.com/richard-wollyce/ulpia/blob/main/tools/kb/src/memory.rs"><code>memory.rs</code></a> and <a href="https://github.com/richard-wollyce/ulpia/blob/main/tools/kb/src/index.rs"><code>index.rs</code></a>
+          at commit ea43d1d, computed for this page and not printed by any run, with two
+          anchors: 6.92 at eleven entries is what <code>gate.floor</code> printed on the
+          demo on 2 September 2026, as 6.916209, and 17.5 at 226 is what a test pins to
+          <code>SCORE_FLOOR</code>. The last column is 17.5 divided by one unique key,
+          which is what the fixed floor used to demand at each size. At one entry the
+          verdict is at most <code>guess</code> whatever the floor says. No fleet here
+          has reached a thousand entries; that row is arithmetic alone.
+        </figcaption>
+      </figure>
+
+      <h3 id="why-it-scales">Why it scales</h3>
+      <p>
+        <code>idf</code> grows with <code>N</code>, because rarity needs a corpus to be
+        rare in. A fixed 17.5 therefore meant a different number of keys at every size:
+        close to three unique keys on a base of four entries, one on the base it was
+        measured on, and half a key on a thousand, where a word in fifty files clears
+        it alone. The floor got harder as the base shrank and easier as it grew, in
+        exactly the two directions that hurt. Measured on the demo before the change, a
+        base of two to four entries got not one <code>hit</code> on its own gold
+        questions, every one a <code>guess</code> on the right file, and at the full
+        demo two correct answers were still demoted.
+      </p>
+
+      <h3 id="a-fleet-of-one-has-no-ruler">A fleet of one has no ruler</h3>
+      <p>
+        With one entry every key has <code>df</code> 1, so every key weighs the same and
+        <code>idf</code> can tell nothing apart; any shared word clears a floor built
+        from that, not because the evidence is good but because there is nothing to
+        compare rarity against. Below <code>MIN_ENTRIES_TO_ROUTE</code>, two, the verdict
+        is at most <code>guess</code>, served with its warning, and <code>kb boot</code>
+        hands over no identity. Two is the structural minimum, the first size at which
+        a word in both notes weighs less than a word in one, which is the first size at
+        which there is a ruler. A larger minimum would refuse bases that are measured
+        to route correctly, and no measurement supports one.
+      </p>
+
+      <h3 id="measured-before-and-after">Measured, before and after</h3>
+      <p>
+        Three instruments, the same binary either side of the change, 2026-09-02. The
+        demo, 11 entries and 13 questions: agent routes went from 8 of 10 to 10 of 10,
+        correct answers demoted to a guess from 2 of 10 to 0 of 10, and the three
+        refusals held on both sides. <a href="https://github.com/richard-wollyce/ulpia/blob/main/benchmarks/abstention/RESULTS.md">The blind abstention set</a> over the same demo, 50
+        questions: 28 of 30 out-of-scope questions not answered confidently on either
+        side, the same two medical baits through at 33.0 and 24.8, above either floor,
+        and the in-scope column moved from 6 confident, 8 guess and 6 nothing to 12, 2
+        and 6. Nothing left the nothing column, because a question sharing no token
+        with the corpus scores zero at any floor. The private fleet of 226 entries, the
+        one the constant was calibrated on: identical line for line, neutral by
+        construction and checked rather than assumed.
+      </p>
+      <figure class="plate">
+        <pre><code><span class="prompt">$ </span>kb eval examples/demo/gold.tsv examples/demo
+<span class="out">gold:     13 questions, 10 answerable</span>
+<span class="out">indexed:  11 entries across 3 agents</span>
+<span class="out"></span>
+<span class="out">  file agent kw    score  marg verdict question</span>
+<span class="out">  ok   ok    ok     33.7  4.50 hit    quem decide se um deploy pode ir pra producao</span>
+<span class="out">  ok   ok    ok     11.2  1.00 hit    como faco rollback sem downtime</span>
+<span class="out">  ok   ok    ok     22.5  1.00 hit    devo usar sqlite ou postgres no comeco</span>
+<span class="out">  ok   ok    ok     29.3  1.00 hit    what makes a review comment blocking</span>
+<span class="out">  ok   ok    ok     24.8  1.00 hit    como prender a atencao nos primeiros segundos do video</span>
+<span class="out">  ok   ok    ok     24.8  1.00 hit    qual a melhor frequencia de postagem</span>
+<span class="out">  ok   ok    ok     66.9  5.95 hit    how much protein per meal</span>
+<span class="out">  ok   ok    ok     11.2  1.00 hit    quanto tempo um musculo leva pra recuperar</span>
+<span class="out">  ok   ok    ok     24.8  1.00 hit    onde consulto a tabela nutricional de um alimento</span>
+<span class="out">  ok   ok    ok     33.0  1.00 hit    quantos gramas de proteina por quilo</span>
+<span class="out">  ok   -     -       0.0  0.00 none   qual acao da bolsa devo comprar</span>
+<span class="out">  ok   -     -       0.0  0.00 none   me conta uma piada</span>
+<span class="out">  ok   -     -       0.0  0.00 none   qual o sentido da vida</span>
+<span class="out"></span>
+<span class="out">FILE   fused   10/10  (100%)</span>
+<span class="out">       keyword 10/10  (100%), the same question asked of the keyword scorer alone</span>
+<span class="out">AGENT  routes  10/10  (100%), ...</span>
+<span class="out">       keyword 10/10  (100%), ...</span>
+<span class="out">       fused   10/10  (100%), ...</span>
+<span class="out">       always-yaron   4/10  (40%), the best a fixed choice can do on this set</span>
+<span class="out">       routing beats the fixed choice by +6 questions</span>
+<span class="out"></span>
+<span class="out">GATE   flagged 0/0 of its own misses as a guess</span>
+<span class="agree">       demoted 0/10 correct answers to a guess</span>
+<span class="out">       of 3 question(s) the set says to decline: refused 3, hedged 0, answered 0</span>
+<span class="out"></span>
+<span class="out">SPEED  1779 us per question fused, 710 us keyword only. No model, no network.</span>
+<span class="out">       Release binary.</span></code></pre>
+        <figcaption>Real output, 2 September 2026, commit ea43d1d, release build from a clean export of that commit, on an 11th Gen Intel i5-1135G7, 16 GB, Windows 11 Pro, after <code>kb index examples/demo</code>. The three <code>AGENT</code> lines each end in a sentence explaining the column, cut here and marked with an ellipsis; every figure is as printed and nothing else is changed. The demo names no command for choosing the agent, so the routes line and the keyword line are the same fold. The <code>SPEED</code> line is one run's figure and moves between runs: a later run of the same binary on the same machine printed 12540 us fused and 3017 us keyword only, so read it as an order of magnitude and not as a measurement.</figcaption>
+      </figure>
+      <p>
+        The same verdict, for a program. <code>kb route --json</code> carries the floor
+        that applied beside the score it was measured against, so the gate can be argued
+        with rather than guessed at, and a caller branches on <code>gate.served</code>
+        and never on the length of <code>results</code>, because a refusal still
+        carries its candidates.
+      </p>
+      <figure class="plate">
+        <pre><code><span class="prompt">$ </span>kb route "quem decide se um deploy pode ir pra producao" examples/demo --json
+<span class="out">{"agent":{"contenders":2,"files":1,"margin":4.5,"name":"zed","score":33.69244,"totals":[{"agent":"zed","score":33.69244},{"agent":"steve","score":7.487209}]},</span>
+<span class="out">"confidence":{"agreement":2,"keyword_score":33.69244,"margin":4.5},</span>
+<span class="agree">"gate":{"floor":6.916209,"ranked_by_text_only":false,"served":true},</span>
+<span class="out">"index_was_rebuilt":false,</span>
+<span class="out">"indexed":{"agents":3,"aliases":0,"entries":11},</span>
+<span class="out">"keyword_top":"zed/knowledge/deploy-checklist.md",</span>
+<span class="out">"miss":null,</span>
+<span class="out">"question":"quem decide se um deploy pode ir pra producao",</span>
+<span class="out">"results":[ ... ],</span>
+<span class="out">"skipped":[],"suggestions":[],"verdict":"hit"}</span></code></pre>
+        <figcaption>The reply of the same run, 2 September 2026, commit ea43d1d, same machine. On the terminal it is one line of 2,477 bytes; here it is broken at the top-level commas, and the <code>results</code> array, the two ranked files with their passages, is cut to fit. Nothing else is changed. The keys are printed in alphabetical order, which is the order the tool emits.</figcaption>
+      </figure>
+
+      <h3 id="the-tool-failing-its-own-test">The tool failing its own test</h3>
+      <p>
+        On the private fleet's 33-question key the <code>GATE</code> block ends in
+        <code>OVERLAPS</code>. In the run <a href="https://github.com/richard-wollyce/ulpia/blob/main/README.md">the README</a> quotes, hits score 29.43 to 129.87
+        and misses 7.45 to 91.86, so no single floor separates the two, and the gate
+        flags only 1 of its 13 misses as a guess. What it does not do is demote a correct
+        answer, 0 of 11, and it declines 4 of the 9 questions the key says to decline.
+        <a href="https://github.com/richard-wollyce/ulpia/blob/main/decisions/0036-the-floor-scales-with-the-corpus.md">The decision record of 2 September 2026</a> reports a later run of the same key,
+        hits 33.15 to 145.95, misses 7.98 to 93.60 and 3 of the 9 refused, which is the
+        same overlap with the figures moved. The README keeps the block because it is
+        the tool failing its own test in public; an earlier version quoted a run that
+        separated cleanly, over a 19-question set that no longer exists.
+      </p>
+      <figure class="plate">
+        <pre><code><span class="prompt">$ </span>kb eval fleet/zed/fleet/eval/gold.tsv .
+<span class="out"></span>
+<span class="out">  GATE   flagged 1/13 of its own misses as a guess</span>
+<span class="out">         demoted 0/11 correct answers to a guess</span>
+<span class="out">         abstained on 4/9 question(s) the set says to decline</span>
+<span class="out">         hit scores  29.43 to 129.87</span>
+<span class="out">         miss scores 7.45 to 91.86</span>
+<span class="agree">         OVERLAPS: no floor tells a hit from a miss on this set.</span></code></pre>
+        <figcaption>Quoted from <a href="https://github.com/richard-wollyce/ulpia/blob/main/README.md">the repository README</a> at commit ea43d1d, read on 2 September 2026. The README does not date this run and says its figures are re-measured before anything quotes them; <a href="https://github.com/richard-wollyce/ulpia/blob/main/decisions/0036-the-floor-scales-with-the-corpus.md">the decision record on the floor</a>, dated 2 September 2026, carries a later run of the same key with different ranges, given in the paragraph above. The fleet and its answer key are private, so a reader cannot reproduce this block; a trailing comment on the command line, naming who keeps the key, is cut here.</figcaption>
+      </figure>
+      <p>
+        What the floor still does perfectly is tell nothing from something: a question
+        that shares no token with the base scores zero and abstains, which is the whole
+        of the three refusals above. What it cannot do is tell a real match on the wrong
+        file from a real match on the right one. That job is handed to the model
+        described further down, and it is the reason that model exists.
+      </p>
+      <div class="note" role="note">
+        <p><strong>Careful.</strong> Every surface that prints a floor prints the one that applied to that fleet, never the calibration constant: <code>gate.floor</code> in the JSON, the prompt <code>kb answer</code> builds, the notice <code>kb boot</code> prints, the dossier the model reads, the reading room and <code>kb eval</code>. A reply that says 17.5 about a fleet of eleven entries is stale.</p>
+      </div>
+      <p>
+        Two things reopen the floor: the first fleet that misroutes at two to four
+        entries, which is the number <code>MIN_ENTRIES_TO_ROUTE</code> is waiting for,
+        and the first fleet near a thousand entries, where the large side of the ledger
+        stops being arithmetic. <code>kb eval</code> on it is the instrument, and
+        <code>gate.floor</code> in every JSON reply says what applied. <a href="https://github.com/richard-wollyce/ulpia/blob/main/decisions/0036-the-floor-scales-with-the-corpus.md">The decision
+        record behind this section</a> is retold in the writing at
+        <a href="/blog/the-floor-scales-with-the-corpus/">The confidence floor now scales with your corpus</a>.
+      </p>
+
+      <h2 id="what-a-miss-returns">What a miss returns</h2>
+      <p>
+        When nothing clears the floor the librarian does not hand over the least wrong
+        book. She says she does not have it, and then she says what she does have that
+        looks like what was asked: the base's own vocabulary, chosen by character
+        trigram overlap between the question's words and the keys on every label, at
+        most eight terms, in microseconds, with no dependency. Trigram overlap measures
+        spelling. It reaches a typo and a cognate across languages and it never reaches
+        a translation, and the reply says which kind of help it is, because a
+        suggestion whose limits are not stated gets read as the whole answer. When no
+        orthographic neighbour exists it offers nothing rather than the nearest thing
+        it holds. That property has its own test, because a suggester that always
+        answers is one nobody can use.
+      </p>
+      <figure class="plate">
+        <pre><code><span class="prompt">$ </span>kb route "come funziona il registro delle decisioni" examples/demo
+<span class="out">question: come funziona il registro delle decisioni</span>
+<span class="out">indexed:  11 entries across 3 agents, 0 aliases</span>
+<span class="out"></span>
+<span class="out">  nothing matched. Either the base does not cover it, or the</span>
+<span class="out">  Search for lines do not carry the words a real question uses.</span>
+<span class="out"></span>
+<span class="out">  the base does know these, and they look like words you used:</span>
+<span class="out">    technical decision</span>
+<span class="agree">  that is spelling and not meaning, so it finds a typo or a cognate</span>
+<span class="out">  and never finds a translation.</span></code></pre>
+        <figcaption>Real output, uncut, 2 September 2026, commit ea43d1d, release build from a clean export of that commit, on an 11th Gen Intel i5-1135G7, 16 GB, Windows 11 Pro. The Italian question is <a href="https://github.com/richard-wollyce/ulpia/blob/main/README.md">the README</a>'s own demonstration, asked here of the demo fleet instead of the private one.</figcaption>
+      </figure>
+      <p>
+        <code>decisioni</code> reached <code>technical decision</code>, a key on the
+        demo architect's own index, with no alias line, no model and no dependency. The
+        same reply, where spelling misleads:
+      </p>
+      <figure class="plate">
+        <pre><code><span class="prompt">$ </span>kb route "how do I roll back" examples/demo
+<span class="out">question: how do I roll back</span>
+<span class="out">indexed:  11 entries across 3 agents, 0 aliases</span>
+<span class="out"></span>
+<span class="out">  nothing matched. Either the base does not cover it, or the</span>
+<span class="out">  Search for lines do not carry the words a real question uses.</span>
+<span class="out"></span>
+<span class="out">  the base does know these, and they look like words you used:</span>
+<span class="agree">    backup do banco, database backup, parar o scroll, stop the scroll</span>
+<span class="out">  that is spelling and not meaning, so it finds a typo or a cognate</span>
+<span class="out">  and never finds a translation.</span></code></pre>
+        <figcaption>Real output, uncut, same run, same machine, 2 September 2026, commit ea43d1d.</figcaption>
+      </figure>
+      <p>
+        The book that answers this question is keyed <code>rollback</code>, one word,
+        and the question wrote it as two. <code>roll</code> reached <code>scroll</code>
+        and <code>back</code> reached <code>backup</code>, four terms spelled near and
+        none of them meant. A reader sees that at once from a reply that has said what
+        kind of help it is. A scorer cannot see it, and this one does not pretend to.
+      </p>
+
+      <h3 id="why-not-a-model-on-the-miss-path">Why not a model on the miss path</h3>
+      <p>
+        <a href="https://github.com/richard-wollyce/ulpia/blob/main/decisions/0006-language-architecture.md">The specification for this step</a> named a local model rewriting the question into
+        candidate terms, 20 to 40 tokens, the cheapest kind of local generation there
+        is. It was <a href="https://github.com/richard-wollyce/ulpia/blob/main/decisions/0015-expansion-split-by-distance.md">costed before it was built, on 2026-08-17</a>, from generation measured
+        on the author's Dell Latitude 3420, an i5-1135G7 with four cores and no
+        dedicated GPU, at 5.55 to 5.88 tokens per second: that puts the expansion at
+        3.4 to 7.2 seconds, against 4.43 ms for the whole of <code>kb_retrieve</code>
+        end to end, both figures from the same machine. Roughly a thousand
+        times the retrieval, paid on the path where the question already failed, so the
+        person waits five seconds to be told the library may not cover the subject. The
+        trigram half shipped first because it costs nothing and can state its own limit
+        exactly. The model half stays specified and unbuilt, and the miss log decides
+        whether it is ever needed.
+      </p>
+
+      <h3 id="the-log-and-what-a-miss-earns">The log, and what a miss earns</h3>
+      <p>
+        Every refusal is written to <code>kb-misses.txt</code> beside the fleet manifest:
+        one line per distinct question with its count, first seen, last seen and the
+        question verbatim, and an indented <code>looked like:</code> line recording what
+        the base offered back, so it is visible whether the free suggestion helped or a
+        translation was needed. The count is the priority; a question that missed five
+        times earns its fix before one that missed once. It is a recall loss log, not a
+        list of chores, and it is private by construction: these are a person's real
+        questions, a nutrition agent's miss is a health question, so the file is
+        gitignored wherever it lands. Over <code>kb route --json</code> the same loss
+        comes back as the <code>miss</code> object, with the question, the words offered,
+        the date, the path the log was written to and whether the write succeeded, so a
+        deployment whose filesystem cannot keep the file can keep the loss.
+      </p>
+      <p>
+        What a miss eventually earns is an alias line in <code>kb-aliases.txt</code>,
+        <code>alias = canonical</code>, one per line. Expansion is additive, the original
+        words always survive, so a wrong alias can add noise and can never remove
+        signal. Only add a line after a real question missed: it is a record of misses
+        and not a dictionary, and a dictionary is what makes it unmaintainable. It is
+        also how a fleet answers questions in one language over a base written in
+        another, which is the loud case; the quiet case is the same shape and more
+        common, a file keyed <code>sono</code> and a person who said <code>dormir</code>.
+      </p>
+
+      <h2 id="writing-a-label">Writing a label</h2>
+      <p>
+        The <em>Search for</em> line is the whole ranking, and the most common way to own
+        a base that holds the answer and cannot find it is to fill that line with topic
+        words. Write the keys as questions, the phrases somebody types from inside the
+        problem, not as subjects. The note carries its own keys, directly under its
+        title, and a file is in the index if and only if it declares them; a map file,
+        when a base keeps one, is a reading list for people, and the catalogue does not
+        consult it. Three questions against one five-file base, as they printed under
+        the fixed floor of 17.5:
+      </p>
+      <figure class="plate">
+        <pre><code><span class="out">"quanto custa o frete"                             hit     20.68   matched: quanto custa o frete, frete</span>
+<span class="out">"o frete e gratis a partir de quanto"              hit     19.24   matched: frete gratis, frete, gratis</span>
+<span class="agree">"quanto tempo demora pra cair o estorno no cartao" guess    6.19   matched: tempo, estorno</span></code></pre>
+        <figcaption>Quoted from <a href="https://github.com/richard-wollyce/ulpia/blob/main/README.md">the repository README</a> at commit ea43d1d, read on 2 September 2026. The five-file base is not in the repository and the README does not date the run. The lines run past the plate and scroll.</figcaption>
+      </figure>
+      <p>
+        The third note is not worse written. Its keys are <code>reembolso</code>,
+        <code>estorno</code>, <code>devolucao do dinheiro</code>, which name the subject
+        correctly and match no phrase anybody types. Under the floor a five-file base
+        gets today, 4.6, that third line is a <code>hit</code> at 6.19 rather than a
+        guess: right file, a third of the score. That is arithmetic from
+        <code>floor_for(5)</code> and not a re-run, because the base is not in the
+        repository. The point about phrases stands either way, and it is the point.
+      </p>
+      <p>
+        <code>kb check</code> grades the line, and two of its warnings are the ones to act
+        on first. <code>W06</code>, thin keyword line, fires under twelve terms and asks
+        for thirty, in both languages, including the words somebody types from inside
+        the problem. The number comes from a real miss: a file keyed
+        <code>eating out, restaurant, poke, salmon</code> scored zero on a real question
+        and, widened to thirty terms, answered it at 130.21. <code>W07</code>,
+        unsearchable key, fires when a written key collapses to one word after
+        stopwords, so it reaches neither index. The example that earned the check is
+        <code>nao contestar</code> indexed as <code>contestar</code>, its own opposite,
+        until somebody rewrote it as <code>proibido contestar</code>.
+      </p>
+
+      <h2 id="who-chooses-the-agent-and-what-it-is-shown">Who chooses the agent, and what it is shown</h2>
+      <p>
+        Which book holds the answer and which agent should give it are different
+        questions. Finding the book is a lookup, lexical, and the catalogue answers it
+        exactly. Choosing the agent is a judgement about a subject, and no count of
+        shared words makes it: ask how to deploy with zero downtime and monitor the
+        infrastructure, in a fleet where nobody operates systems, and every base scores
+        zero or noise, while a reader who knows only that one agent builds software
+        and another does marketing places the question at once, and can also say the
+        thing that matters most, that nobody here covers it. A score of zero says no match. It can never say no one
+        here does this kind of work.
+      </p>
+      <p>
+        So the one model in the path sits here, after retrieval and never inside it.
+        Retrieval stays deterministic, reproducible, and the only thing that reads the
+        books. What reaches the model is a dossier: the roster, with what each agent
+        does and where it stops; the question; up to five lines of evidence as
+        base/path with the keyword score and the words that matched; one
+        <code>about:</code> line per file, taken from the note's <em>Exists to</em> line,
+        because a path is not evidence about a subject; and a per-agent table of the
+        best score in each species, memory, skills and tools, with a dash where there
+        is none. Roughly three hundred tokens, and never the base. It cannot invent a
+        file, because it never sees one, and its answer is a name from the list it was
+        handed; a name off the roster resolves to no owner.
+      </p>
+      <p>
+        Coverage is a first-class answer with three values: <code>covered</code>,
+        <code>adjacent</code> and <code>uncovered</code>. Adjacent names the nearest agent
+        and says plainly that answering from there is a stretch, and that the honest
+        options are to give that agent the knowledge or to create an agent for the
+        subject. Uncovered prints one line, the same on the desk, on the hook and in the
+        reading room, so one wrong answer cannot be worded three ways:
+      </p>
+      <pre><code>VESTA: nothing in this fleet covers {subject}, and no agent is near enough to name. {reason} This is a gap in the fleet rather than a gap in the question: it is worth deciding whether an agent should exist for it.</code></pre>
+      <p>
+        The command is named in <code>fleet.txt</code>, on the line
+        <code>classifier =</code>, and it is a process rather than a provider: the dossier
+        on stdin, the verdict on stdout. Any model behind any runtime satisfies that,
+        including a local one, and <code>kb</code> gains no dependency and no network code
+        for it. With no line configured, or a command that fails, the deterministic fold
+        described above chooses, so the fleet never stops answering because a model was
+        unavailable.
+      </p>
+      <p>
+        The price, with its conditions: 9 to 15 seconds per message through the Claude
+        Code CLI on the author's laptop, the figure <a href="https://github.com/richard-wollyce/ulpia/blob/main/decisions/0027-a-model-decides-who-answers.md">the decision record of 2026-08-19</a>
+        carries after its correction of 2026-08-20. That line read 13 to 16 until
+        2026-08-20, and the real figure then was 43 to 48 seconds against a hook
+        budget of 30: the process had been spawned with its working directory set to
+        the fleet root, so the CLI inspected 11,510 files and 2.5 GB of build output on
+        every message before reading a dossier that arrives whole on stdin. Starting it
+        in an empty directory outside the fleet fixed it. The way down is a faster
+        chooser, a local model or a resident process, and not a cheaper decision about
+        when to think. Local model routing is not built.
+      </p>
+      <p>
+        Why not a score, once more. A cascade that called the model only when the
+        deterministic choice did not dominate its field was built and rejected inside
+        the same decision. It cut the common case from about 14 seconds to about 1, and
+        it routed that same deployment question to marketing in 971 ms, because the
+        word <code>zero</code> matched three of the marketing agent's research notes and
+        gave it the whole of a field nobody else was in. A cascade can only gate on the deterministic score, and that score
+        does not know when it is wrong: one agent alone in the field does not
+        distinguish plainly theirs from a coincidence of vocabulary, since those are the
+        same number. A gate built on a blind signal inherits the blindness, so no
+        threshold rescues it. The constant and the measurement are kept in <a href="https://github.com/richard-wollyce/ulpia/blob/main/tools/kb/src/classify.rs">the source</a>
+        so the idea is met rather than rediscovered.
+      </p>
+
+      <h2 id="one-contract-every-surface">One contract, every surface</h2>
+      <p>
+        <code>kb</code> is a library as well as a binary, and <a href="https://github.com/richard-wollyce/ulpia/blob/main/tools/kb/src/memory.rs"><code>Memory</code></a> is the
+        contract: three verbs over a set of bases, <code>route</code>,
+        <code>retrieve</code> and <code>remember</code>, and the one place an answer is
+        computed. The CLI and the reading room call it, <code>kb serve</code> wraps it in MCP
+        for other people's runtimes, and the tray app links it as a library, so no
+        two surfaces can answer differently about one question. Reaching past it into
+        the modules means rebuilding the pipeline, which is how two bugs happened: alias expansion reaching one scorer and not the other, and
+        the two oversampling factors drifting apart. <a href="https://github.com/richard-wollyce/ulpia/blob/main/tools/kb/src/mcp.rs"><code>mcp.rs</code></a> assembled the
+        pipeline by hand for one commit, and that is exactly why it does not any more.
+      </p>
+      <p>
+        The same rule holds for what counts as a miss. <code>Memory::recall_loss</code>
+        decides whether a question was a recall loss, records it, and hands back the
+        vocabulary to offer, in one call. Before 2026-08-30 six surfaces decided it four
+        different ways: two tested the length of the keyword list, two the fused list,
+        and <code>kb answer</code> suggested vocabulary without ever recording anything.
+        The surface a deployment used had the hole in it, so the loss most worth having,
+        a question the text scorer answered and the gate refused, went unrecorded
+        everywhere it mattered. A <code>guess</code> is not a loss: it was served, with a
+        warning, and that line is pinned by a test because moving it changes what the
+        log counts.
+      </p>
+      <p>
+        A path handed to any verb may be a base, or a fleet root, a directory that is
+        not itself a base but whose immediate children are. Both work and neither is
+        required, because requiring an arrangement would be an assumption about the
+        reader's filesystem. A directory holding a map of its own is a base and is never
+        expanded, even when it contains bases, since expanding it would silently drop
+        the parent's own notes.
+      </p>
+
+      <h2 id="what-was-measured-and-kept-out">What was measured and kept out</h2>
+      <p>
+        None of this is a position against models. It is a set of measurements the
+        models lost, on this corpus, at this scale, by the system's own code. BGE-M3,
+        on 2026-08-17, against twenty real questions on the private fleet, embedding the
+        note bodies chunked the way <code>kb</code> chunks them: 13 right against roughly
+        16 for the keyword scorer. Losing the direct comparison is not what disqualified it,
+        because fusion does not need a second scorer to win, it needs it to be wrong
+        about different questions. So the fusion was computed directly. Nineteen of
+        twenty answers were unchanged; the one that changed moved a correct answer onto
+        an unrelated file, and the question the keyword scorer honestly did not answer
+        stopped returning nothing and started returning another unrelated file. An
+        honest abstention became a confident wrong answer, which is the failure the
+        whole system exists to avoid. It also cost 2.2 GB and 2,833 seconds to index
+        1,039 chunks, 47 minutes at 2.7 seconds per chunk.
+      </p>
+      <p>
+        Two cross-encoder rerankers on 2026-08-18, over the 19 answerable questions of
+        the same set, each handed the keyword scorer's top five with the right file
+        first 16 times: <code>bge-reranker-v2-m3</code> returned it first 11 times at
+        2,571 ms per pair, and <code>jina-reranker-v2</code> 14 times at 647 ms per pair,
+        under a non-commercial licence that would have kept it out of a product
+        regardless of quality. Both degraded the ranking they were handed. A sceptic
+        commissioned against the reranker plan predicted zero marginal gain before the
+        numbers existed, and the reality was negative.
+      </p>
+      <figure class="ledger">
+        <div class="ledger-scroll" tabindex="0" role="region" aria-labelledby="ledger-models-caption">
+          <table>
+            <thead>
+              <tr>
+                <th scope="col">Scorer</th>
+                <th scope="col" class="num">Right file first, of 19</th>
+                <th scope="col">Score separates hit from miss</th>
+                <th scope="col">Cost</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <th scope="row">Keyword, the shipped scorer</th>
+                <td class="num">16</td>
+                <td>Yes: one miss at 3.82, every hit at 9.55 or above</td>
+                <td>Microseconds, no model</td>
+              </tr>
+              <tr>
+                <th scope="row">BGE-M3 dense, over map entries</th>
+                <td class="num">8</td>
+                <td>No</td>
+                <td>570 MB, INT8</td>
+              </tr>
+              <tr>
+                <th scope="row">BGE-M3 sparse, over map entries</th>
+                <td class="num">10</td>
+                <td>No</td>
+                <td>The same pass</td>
+              </tr>
+              <tr>
+                <th scope="row">BGE-M3 dense, over note bodies</th>
+                <td class="num">13</td>
+                <td>No</td>
+                <td>47 minutes to index, fp32</td>
+              </tr>
+              <tr>
+                <th scope="row">BGE-M3 sparse, over note bodies</th>
+                <td class="num">4</td>
+                <td>No</td>
+                <td>The same pass</td>
+              </tr>
+              <tr>
+                <th scope="row">bge-reranker-v2-m3 over the keyword top five</th>
+                <td class="num">11</td>
+                <td>No, the widest overlap of all</td>
+                <td>2,571 ms per pair, median</td>
+              </tr>
+              <tr>
+                <th scope="row">jina-reranker-v2 over the keyword top five</th>
+                <td class="num">14</td>
+                <td>No</td>
+                <td>647 ms per pair, median; non-commercial licence</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <figcaption id="ledger-models-caption">
+          The table of <a href="https://github.com/richard-wollyce/ulpia/blob/main/decisions/0018-no-model-in-the-retrieval-path.md">the decision record of 2026-08-18</a>, read at commit ea43d1d on 2 September 2026: the 19 answerable questions of
+          a 20-question private set, a corpus of 122 tracked files and 1,529 chunks, on
+          the author's Dell Latitude 3420, CPU only, through <a href="https://github.com/richard-wollyce/ulpia/tree/main/tools/bench"><code>tools/bench</code></a>,
+          which links the same library the index uses. The dense-over-bodies row is the
+          Python fp32 run of 2026-08-17 that <a href="https://github.com/richard-wollyce/ulpia/blob/main/decisions/0017-no-dense-scorer-yet.md">the record of that day</a> reports. The
+          question set was written and tuned by the same hand on the same day, which
+          flatters the keyword row, and it is private, so none of this can be re-run by
+          a reader.
+        </figcaption>
+      </figure>
+      <p>
+        The finding that outlives the decision is about scores rather than about any
+        model. The keyword scorer's one wrong answer on that set scored 3.82 while every
+        correct answer scored 9.55 or more. BGE-M3's correct answers scored 0.496 to 0.659
+        and its wrong ones 0.510 to 0.608, overlapping completely, and no model measured
+        that day produced a usable abstention signal. The keyword scorer is the only
+        scorer whose score separates a hit from a miss, and that is what makes the floor
+        a mechanism at all. A dense scorer that never abstains removes the property that
+        separates this library from the ones that always return a top hit.
+      </p>
+      <p>
+        Three things reopen it: a base past roughly a thousand files, where hand-written
+        keys plausibly stop covering it and a dense scorer's advantage grows; a question
+        set nobody tuned against showing the keyword scorer below the dense one; or an
+        embedding or reranking model under a permissive licence and under 1 GB that
+        separates a hit from a miss on somebody else's benchmark, the one property no
+        candidate had. The instrument is <a href="https://github.com/richard-wollyce/ulpia/tree/main/tools/bench"><code>tools/bench</code></a>, one Rust command, and every
+        model artefact was deleted after the review, so re-running it downloads them
+        again.
+      </p>
+
+      <p class="doc-back">
+        Previous: <a href="/docs/concepts/">Concepts</a> ·
+        Next: <a href="/docs/local/">On Your Machine</a> ·
+        <a href="/docs/">All of the docs</a> ·
+        <a href="/">Back to the library</a>
+      </p>
+    </main>
+
+    <footer>
+      <p class="address-line">
+        <a href="/docs/">Docs</a> · <a href="/benchmarks/">Benchmarks</a> · <a href="mailto:hello@ulpia.io">hello@ulpia.io</a>
+      </p>
+    </footer>
+  </body>
+</html>

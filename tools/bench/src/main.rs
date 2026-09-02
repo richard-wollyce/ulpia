@@ -230,7 +230,7 @@ fn entry_docs(root: &Path) -> Result<Vec<Doc>, String> {
     for agent in agents {
         let base = kb::base::Base::discover(&agent, false)
             .map_err(|e| format!("cannot open {}: {e}", agent.display()))?;
-        for e in kb::index::build(&base) {
+        for e in kb::index::build(&base).entries {
             if e.rel.is_empty() {
                 continue;
             }

@@ -11,6 +11,7 @@
 
 use crate::base::Base;
 use std::collections::HashMap;
+use std::path::Path;
 
 pub struct Entry {
     /// Which agent this belongs to, taken from the base directory name.
@@ -145,14 +146,97 @@ const STOPWORDS: &[&str] = &[
 // Building
 // ---------------------------------------------------------------------------
 
-pub fn build(base: &Base) -> Vec<Entry> {
-    let base_name = base
-        .root
-        .canonicalize()
-        .unwrap_or_else(|_| base.root.clone())
+/// The name a base is known by beside a path: the last component of its canonical root.
+///
+/// **One definition, because there were two of these and they were the same six lines.**
+/// `build` stamps it on every entry and `kb index` printed it per base from its own copy,
+/// so a change to either was a change to half of one output.
+///
+/// It is deliberately not `Agent.name`, which is `name_of(root)` and does not canonicalise.
+/// `kb route q .` from inside a base produces an agent called `.` while its entries say
+/// `zed`, and a path qualified with the first would never match the second.
+pub fn base_name(root: &Path) -> String {
+    root.canonicalize()
+        .unwrap_or_else(|_| root.to_path_buf())
         .file_name()
         .map(|n| n.to_string_lossy().to_string())
-        .unwrap_or_else(|| base.root.display().to_string());
+        .unwrap_or_else(|| root.display().to_string())
+}
+
+/// Files nothing should ever search for, in three classes whose reasons are not interchangeable.
+///
+/// **Orientation files** are found by standing in the directory they describe, never by a
+/// question. Three names, because one name was doing three jobs across thirteen files and a
+/// reader could not tell which they had opened: `README.md` is a base's front door,
+/// `what-goes-here.md` is a folder legend read by whoever is about to drop a file in, and
+/// `MOVED.md` is a signpost that shouts because it has to catch somebody who arrived expecting
+/// content. `MAP.md` is a reading list for a person and `CLAUDE.md` is injected by the runtime,
+/// so neither is ever retrieved.
+///
+/// **`inbox/` is the deposit, and it is served rather than hidden.** This used to say the
+/// opposite twice in three lines, that the deposit is a quarantine whose invisibility is the
+/// feature and that it becomes findable on promotion, and neither half was ever true:
+/// `promote::DEPOSIT` records that nothing excluded it from the text index, and
+/// `retrieve::layer_of` is what actually happens to a passage out of it. It is served with the
+/// short memory label on, at every surface, so a model leaning on a raw drop does it knowing
+/// the material is recent and unjudged. ADR-0034. What this exemption does is narrower and is
+/// the only claim it can support: a deposit file is not supposed to carry a `Search for:` line,
+/// so its absence is not a defect and E02 stays quiet about it. Two files gave two reasons for
+/// one behaviour, and a wrong doc comment is exactly the failure no test can fail.
+///
+/// **`records/` is an append-only log**, one near-identical file per day. Keying them would put
+/// the same vocabulary on dozens of files and collapse the idf of every word they share, which
+/// charges the files that answer questions to benefit files that answer lookups. Looking
+/// something up by date is a different job from asking a question and wants its own mechanism.
+///
+/// **It lives here, next to the walk, and not in the linter, because two callers read it.**
+/// `kb check` reports the files it does not cover as E02 and `kb index` counts them, and on
+/// this fleet the exemption is nearly the whole answer: 63 keyless files, every one of them
+/// exempt, so a count that tested only for an empty keyword list would have printed 63 beside
+/// a linter reporting 0. That coupling is the point and it has a cost worth stating: editing
+/// this list now changes what `kb index` prints as well as what `kb check` reports.
+pub fn is_exempt(rel: &str) -> bool {
+    let name = rel.to_lowercase();
+    let orientation = name.ends_with("readme.md")
+        || name.ends_with("what-goes-here.md")
+        || name.ends_with("moved.md")
+        || name.ends_with("map.md")
+        || name.ends_with("claude.md");
+
+    let in_dir =
+        |dir: &str| name.starts_with(&format!("{dir}/")) || name.contains(&format!("/{dir}/"));
+
+    orientation
+        || in_dir(crate::promote::DEPOSIT)
+        || in_dir("records")
+        || name.contains("calculation-log/")
+}
+
+/// What one walk over a base produced, and what the same walk could not.
+///
+/// **The three numbers come out of one loop and sum back to the files on disk**, so
+/// `entries.len() + unreachable.len() + exempt == base.files.len()` holds by construction and
+/// a file the walk touched cannot be counted nowhere.
+///
+/// The alternative was leaving `build` returning entries and adding a second function to
+/// count what it skipped. That touches no call site, and it walks every file twice, parses
+/// every header twice, and leaves two functions free to disagree about what "no keys" means.
+/// That drift is not hypothetical here: E02 went on reading `MAP.md` for four months after
+/// `index::build` stopped reading it, and certified 33 unreachable files clean while it did.
+pub struct Built {
+    pub entries: Vec<Entry>,
+    /// Files the router can build no entry for: stored on disk, readable by a person, and
+    /// scoring zero on every question, silently. Relative to the base root, unqualified;
+    /// whoever displays them beside another base's paths qualifies them with [`base_name`].
+    pub unreachable: Vec<String>,
+    /// Files with no keys that are not a defect, by [`is_exempt`]. Counted and not listed,
+    /// because there is nothing for anybody to do about them, and a reader who subtracts the
+    /// entry count from the file count is otherwise left with an unexplained remainder.
+    pub exempt: usize,
+}
+
+pub fn build(base: &Base) -> Built {
+    let base_name = base_name(&base.root);
 
     // **The walk is over files, not over map entries, and that is [[0028]].** It used to
     // iterate the base's `MAP.md` and look a file up for each entry, so one file's formatting
@@ -165,9 +249,20 @@ pub fn build(base: &Base) -> Vec<Entry> {
     // The lines now carry thirty to seventy terms each, in both languages, which is what the
     // list was always supposed to be.
     let mut out = Vec::new();
+    let mut unreachable = Vec::new();
+    let mut exempt = 0usize;
     for f in &base.files {
         let (keywords, purpose) = header_of(&f.text);
         if keywords.is_empty() {
+            // **The `continue` became a classification and that is the whole change.** A
+            // file with no `Search for:` line used to leave the walk without a trace, so
+            // the base held files nobody could reach and said nothing about it anywhere a
+            // person was required to look.
+            if is_exempt(&f.rel) {
+                exempt += 1;
+            } else {
+                unreachable.push(f.rel.clone());
+            }
             continue;
         }
         out.push(Entry {
@@ -184,11 +279,16 @@ pub fn build(base: &Base) -> Vec<Entry> {
             body: purpose,
         });
     }
-    out
+    Built { entries: out, unreachable, exempt }
 }
 
 /// The first markdown heading, skipping front matter.
-fn first_heading(text: &str) -> String {
+///
+/// Public because `list::build` names files the index has no entry for. A listing walks
+/// `Base::files`, so the deposit and every README are rows in it, and `Entry.title`
+/// exists only for the files that carry keys. One definition, or a file has one title in
+/// a route result and another in a listing.
+pub fn first_heading(text: &str) -> String {
     let mut in_front_matter = false;
     for (i, line) in text.lines().enumerate() {
         let trimmed = line.trim();
@@ -1180,5 +1280,91 @@ mod tests {
         let json = to_json(&e);
         assert!(json.contains("\\\"hi\\\""));
         assert!(json.contains("\\n"));
+    }
+
+    /// The exemption table, pinned, because it had no test at all while it lived in the
+    /// linter and it is now read by two callers: a later edit to `inbox/` or `records/`
+    /// changes what `kb index` prints as well as what `kb check` reports.
+    #[test]
+    fn a_file_nobody_searches_for_is_not_counted_against_the_base() {
+        for (rel, want) in [
+            ("readme.md", true),
+            ("MAP.md", true),
+            ("CLAUDE.md", true),
+            ("knowledge/what-goes-here.md", true),
+            ("MOVED.md", true),
+            ("inbox/x.md", true),
+            ("records/2026-09-01.md", true),
+            ("a/calculation-log/b.md", true),
+            ("knowledge/note.md", false),
+            ("skills/research.md", false),
+        ] {
+            assert_eq!(is_exempt(rel), want, "{rel}");
+        }
+    }
+
+    /// **The deposit is one name used in three places, not three string literals.**
+    ///
+    /// `promote::DEPOSIT` is where a promotion reads from, `retrieve::layer_of` is what
+    /// labels a passage out of it as short memory, and this predicate is what keeps E02
+    /// quiet about the `Search for:` line a deposit file is not supposed to carry. Those
+    /// three used to give two different reasons for one behaviour, and prose is the one
+    /// thing `cargo test` cannot read.
+    ///
+    /// **Stated honestly: this cannot fail today.** It is a pin, not a red-green test.
+    /// Its value arrives the day somebody renames the deposit, which would otherwise
+    /// silently un-exempt it and start reporting every dropped file as unreachable.
+    #[test]
+    fn the_deposit_is_exempt_under_the_name_promote_writes_to() {
+        let rel = format!("{}/dropped.md", crate::promote::DEPOSIT);
+        assert!(is_exempt(&rel), "the deposit carries no keys by design: {rel}");
+        assert_eq!(
+            crate::retrieve::layer_of(&rel),
+            crate::retrieve::Layer::Short,
+            "exempt from the keyword line and served with the label on: the same file"
+        );
+    }
+
+    fn md(rel: &str, text: &str) -> crate::base::MdFile {
+        crate::base::MdFile {
+            rel: rel.into(),
+            stem: rel.rsplit('/').next().unwrap().trim_end_matches(".md").into(),
+            text: text.into(),
+            private: false,
+        }
+    }
+
+    /// **The arithmetic that makes drift between the count and the entries impossible.**
+    ///
+    /// One walk classifies every file it touched into exactly one of three buckets, so the
+    /// three numbers sum back to the files on disk by construction. This is the reason
+    /// `build` hands the count back with the entries instead of a second function
+    /// re-deriving it: two functions free to answer "no keys" separately is how E02 came to
+    /// read the map for four months after the index had stopped.
+    #[test]
+    fn one_walk_accounts_for_every_file_it_walked() {
+        let base = Base {
+            root: std::path::PathBuf::from("probe"),
+            map: None,
+            knowledge_dir: Some("knowledge".into()),
+            files: vec![
+                md("knowledge/keyed.md", "# Keyed\n\n**Search for:** `alpha`, `beta`\n"),
+                md("knowledge/keyless.md", "# Keyless\n\njust prose.\n"),
+                md("README.md", "# Readme\n\nthe front door.\n"),
+                md("inbox/2026-09-01-session-x.md", "# Deposit\n\nwhat a session left.\n"),
+            ],
+            unreadable: Vec::new(),
+            aliases: Vec::new(),
+        };
+
+        let built = build(&base);
+        assert_eq!(built.entries.len(), 1);
+        assert_eq!(built.unreachable, vec!["knowledge/keyless.md".to_string()]);
+        assert_eq!(built.exempt, 2);
+        assert_eq!(
+            built.entries.len() + built.unreachable.len() + built.exempt,
+            base.files.len(),
+            "a file the walk touched and counted nowhere is the silence this exists to break"
+        );
     }
 }

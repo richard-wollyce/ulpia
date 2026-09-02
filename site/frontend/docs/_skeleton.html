@@ -1,0 +1,244 @@
+<!doctype html>
+<html lang="en">
+  <!--
+    The skeleton every docs page is copied from (Aldus, 2 September 2026).
+    It is not a page: vite builds only files named index.html, so this one
+    is never served from the site. Open it under the dev server to see every
+    component below rendered: http://localhost:5173/docs/_skeleton.html
+
+    To make a page: copy this file to docs/<name>/index.html, replace every
+    UPPERCASE placeholder, delete the sections you do not need, and keep the
+    rest exactly as it is. The band is byte-identical on every page; the Docs
+    door wears aria-current="page" on every page under /docs/. No section
+    wrappers under main: children stay flat. Every h2 and h3 carries an id
+    that is the slug of its text (lowercase, hyphens), and the contents list
+    links every one of them. No em dashes anywhere. No new CSS in a page: if
+    a page needs what the system lacks, the stylesheet gains it, with the
+    reason.
+  -->
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>PAGE TITLE · Ulpia</title>
+    <meta name="description" content="ONE SENTENCE SAYING WHAT THE PAGE IS." />
+    <meta name="color-scheme" content="light dark" />
+    <meta name="theme-color" media="(prefers-color-scheme: light)" content="#F6F1E7" />
+    <meta name="theme-color" media="(prefers-color-scheme: dark)" content="#12100D" />
+    <link rel="canonical" href="https://ulpia.io/docs/PATH/" />
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <meta property="og:title" content="PAGE TITLE · Ulpia" />
+    <meta property="og:description" content="ONE SENTENCE SAYING WHAT THE PAGE IS." />
+    <meta property="og:url" content="https://ulpia.io/docs/PATH/" />
+    <meta property="og:type" content="website" />
+    <script src="/theme.js"></script>
+    <link rel="stylesheet" href="/src/styles.css" />
+  </head>
+  <body>
+    <a class="skip" href="#main">Skip to content</a>
+    <header class="band">
+      <div class="band-inner">
+        <p class="wordmark"><a href="/">Ulpia</a></p>
+        <nav class="nav" aria-label="Sections">
+          <ul>
+            <li><a href="/docs/" aria-current="page">Docs</a></li>
+            <li><a href="/blog/">Writing</a></li>
+          </ul>
+        </nav>
+        <button type="button" class="lamp-toggle" aria-label="Color scheme: light, press to change">
+          <svg viewBox="0 0 28 28" width="28" height="28" aria-hidden="true" focusable="false">
+            <g class="glow">
+              <path class="ray ray-c" d="M 14 1.2 L 14 3.6" />
+              <path class="ray ray-l" d="M 8.6 2.6 L 10.1 4.3" />
+              <path class="ray ray-r" d="M 19.4 2.6 L 17.9 4.3" />
+              <path class="shade-fill" d="M 6 13.5 L 10.5 5.5 L 17.5 5.5 L 22 13.5 Z" />
+            </g>
+            <g class="lamp">
+              <path class="shade-line" d="M 6 13.5 L 10.5 5.5 L 17.5 5.5 L 22 13.5 Z" />
+              <path class="stem" d="M 12.6 13.5 C 11.9 14.3, 11.1 15.0, 11.1 16.1 C 11.1 17.6, 12.9 18.2, 12.9 19.5 C 12.9 20.6, 10.6 20.9, 10.6 22.2 L 17.4 22.2 C 17.4 20.9, 15.1 20.6, 15.1 19.5 C 15.1 18.2, 16.9 17.6, 16.9 16.1 C 16.9 15.0, 16.1 14.3, 15.4 13.5 Z" />
+              <path class="base" d="M 9 24.25 L 19 24.25" />
+              <g class="chain-group">
+                <path class="chain" d="M 19 14.35 L 19 16.35" />
+                <circle class="chain-pull" cx="19" cy="17.15" r="1.05" />
+              </g>
+            </g>
+          </svg>
+        </button>
+      </div>
+    </header>
+
+    <main class="doc" id="main" tabindex="-1">
+      <h1>PAGE TITLE</h1>
+      <p class="doc-date">Last updated: D Month YYYY</p>
+
+      <!-- The contents: every h2, and every h3 nested one level under its h2.
+           Never deeper. Placed after the dateline and before the first h2. -->
+      <nav class="contents" aria-labelledby="contents-title">
+        <p class="contents-title" id="contents-title">Contents</p>
+        <ol>
+          <li>
+            <a href="#first-section">First section</a>
+            <ol>
+              <li><a href="#a-smaller-heading">A smaller heading</a></li>
+            </ol>
+          </li>
+          <li><a href="#a-command-and-its-output">A command and its output</a></li>
+          <li><a href="#a-table">A table</a></li>
+          <li><a href="#a-note-in-the-margin">A note in the margin</a></li>
+          <li><a href="#the-words">The words</a></li>
+          <li><a href="#the-reading-order">The reading order</a></li>
+        </ol>
+      </nav>
+
+      <h2 id="first-section">First section</h2>
+      <p>
+        Body text, at the measure the book already uses. A paragraph says one
+        thing, and a number in it carries its platform, corpus, commit and date
+        in the same sentence. The library comes first and the term second: a
+        note is a book, its <em>Search for</em> line is the label, the router
+        is the catalogue, Vesta is the librarian, and a miss says I do not
+        have that book.
+      </p>
+      <ul>
+        <li>A list item, when the items are parallel and short.</li>
+        <li>A second item. Two are fine; a list is not a rhythm device.</li>
+      </ul>
+
+      <h3 id="a-smaller-heading">A smaller heading</h3>
+      <p>
+        Inline code such as <code>kb route</code> and a path such as
+        <code>fleet/yaron/knowledge/creatina.md</code> sit on the plate. A key
+        on the keyboard wears an edge: press <kbd>Ctrl</kbd> + <kbd>C</kbd>,
+        with the plus in running text. There is no fourth heading level; a
+        page that needs one is two pages.
+      </p>
+
+      <h2 id="a-command-and-its-output">A command and its output</h2>
+      <p>
+        A plate quotes the machine. The prompt and the output are one step
+        down, the command is in plate ink, and the one line the reader must
+        see wears <code>class="agree"</code>, the terminal's own role. Code is
+        written to 56 columns; a longer line scrolls inside the plate and the
+        caption says so. Every plate with real output names its date and
+        commit in the caption. Add <code>proof</code> to the class when the
+        plate is the five-second proof beside a claim about an absence; it
+        changes nothing visually and everything about what the section is
+        allowed to claim.
+      </p>
+      <figure class="plate">
+        <pre><code><span class="prompt">$ </span>kb index examples/demo
+<span class="out">OUTPUT LINE, pasted from the run named in the caption</span>
+<span class="out">A SECOND OUTPUT LINE</span>
+<span class="agree">THE ONE LINE THE READER MUST SEE, if there is one</span></code></pre>
+        <figcaption>Real output, D Month YYYY, commit HASH, on PLATFORM.</figcaption>
+      </figure>
+
+      <h2 id="a-table">A table</h2>
+      <p>
+        A ledger is data set in the book's own material, one step down in size.
+        The wrapper scrolls on a phone and the page never does; it carries
+        <code>tabindex="0"</code> so a keyboard reaches the right-hand columns.
+        Numeric cells and their headers wear <code>class="num"</code>. A table
+        of two columns adds <code>ledger-fit</code> to the figure and drops the
+        minimum width; three or more columns keep it and scroll.
+      </p>
+      <figure class="ledger">
+        <div class="ledger-scroll" tabindex="0" role="region" aria-labelledby="ledger-1-caption">
+          <table>
+            <thead>
+              <tr>
+                <th scope="col">Run</th>
+                <th scope="col">Conditions</th>
+                <th scope="col" class="num">p50 (ms)</th>
+                <th scope="col" class="num">p95 (ms)</th>
+                <th scope="col">Date</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <th scope="row">ROW NAME</th>
+                <td>PLATFORM, CORPUS, BUILD</td>
+                <td class="num">0.00</td>
+                <td class="num">0.00</td>
+                <td>YYYY-MM-DD</td>
+              </tr>
+              <tr>
+                <th scope="row">ROW NAME</th>
+                <td>PLATFORM, CORPUS, BUILD</td>
+                <td class="num">0.00</td>
+                <td class="num">0.00</td>
+                <td>YYYY-MM-DD</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <figcaption id="ledger-1-caption">
+          Placeholder figures. A real ledger names its RESULTS file, commit and
+          machine here, and every private-fleet figure says it was measured on
+          a fleet a reader does not have.
+        </figcaption>
+      </figure>
+
+      <h2 id="a-note-in-the-margin">A note in the margin</h2>
+      <p>
+        One component, two lead words, one colour. A note is ours, in ink, and
+        the lead word does the work colour is not allowed to do.
+      </p>
+      <div class="note" role="note">
+        <p><strong>Note.</strong> Something the reader should know before the next paragraph, in one or two sentences.</p>
+      </div>
+      <div class="note" role="note">
+        <p><strong>Careful.</strong> Something that costs the reader if missed. The same box; the word is the difference.</p>
+      </div>
+
+      <h2 id="the-words">The words</h2>
+      <p>
+        A glossary is a definition list, stacked, the term in the 600 weight
+        and the definition in running text. A term with two spellings is two
+        terms on one definition. The concepts page owns the full list; a page
+        defines only the words it introduces.
+      </p>
+      <dl>
+        <dt>a book</dt>
+        <dd>A note: one markdown file about one subject, with a <em>Search for</em> line under its title.</dd>
+        <dt>the label</dt>
+        <dt><code>Search for</code></dt>
+        <dd>The line a person writes at the top of a note saying what questions it answers. The catalogue reads it; a note without one scores zero.</dd>
+      </dl>
+
+      <h2 id="the-reading-order">The reading order</h2>
+      <p>
+        On the docs index only. The inner navigation the band cannot hold: one
+        entry per page in reading order, a time beside each, reusing the
+        writing index's own list. Every other docs page carries its place in
+        the order in the foot line below instead.
+      </p>
+      <ul class="post-list">
+        <li>
+          <a href="/docs/concepts/">Concepts</a>
+          <p class="post-meta">Four minutes</p>
+          <p class="post-desc">ONE LINE SAYING WHAT THE PAGE COVERS.</p>
+        </li>
+        <li>
+          <a href="/docs/how-it-works/">How the Catalogue Ranks</a>
+          <p class="post-meta">Five minutes</p>
+          <p class="post-desc">ONE LINE SAYING WHAT THE PAGE COVERS.</p>
+        </li>
+      </ul>
+
+      <!-- The foot line. Previous and Next only where they exist; the two
+           standing links always. -->
+      <p class="doc-back">
+        Previous: <a href="/docs/PREVIOUS/">PREVIOUS TITLE</a> ·
+        Next: <a href="/docs/NEXT/">NEXT TITLE</a> ·
+        <a href="/docs/">All of the docs</a> ·
+        <a href="/">Back to the library</a>
+      </p>
+    </main>
+
+    <footer>
+      <p class="address-line">
+        <a href="/docs/">Docs</a> · <a href="/benchmarks/">Benchmarks</a> · <a href="mailto:hello@ulpia.io">hello@ulpia.io</a>
+      </p>
+    </footer>
+  </body>
+</html>

@@ -1,0 +1,1196 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Reference · Ulpia</title>
+    <meta name="description" content="Every verb, every JSON field, every check code and every file the tool reads, copied from the source rather than from prose that has drifted." />
+    <meta name="color-scheme" content="light dark" />
+    <meta name="theme-color" media="(prefers-color-scheme: light)" content="#F6F1E7" />
+    <meta name="theme-color" media="(prefers-color-scheme: dark)" content="#12100D" />
+    <link rel="canonical" href="https://ulpia.io/docs/reference/" />
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <meta property="og:title" content="Reference · Ulpia" />
+    <meta property="og:description" content="Every verb, every JSON field, every check code and every file the tool reads, copied from the source rather than from prose that has drifted." />
+    <meta property="og:url" content="https://ulpia.io/docs/reference/" />
+    <meta property="og:type" content="website" />
+    <script src="/theme.js"></script>
+    <link rel="stylesheet" href="/src/styles.css" />
+  </head>
+  <body>
+    <a class="skip" href="#main">Skip to content</a>
+    <header class="band">
+      <div class="band-inner">
+        <p class="wordmark"><a href="/">Ulpia</a></p>
+        <nav class="nav" aria-label="Sections">
+          <ul>
+            <li><a href="/docs/" aria-current="page">Docs</a></li>
+            <li><a href="/blog/">Writing</a></li>
+          </ul>
+        </nav>
+        <button type="button" class="lamp-toggle" aria-label="Color scheme: light, press to change">
+          <svg viewBox="0 0 28 28" width="28" height="28" aria-hidden="true" focusable="false">
+            <g class="glow">
+              <path class="ray ray-c" d="M 14 1.2 L 14 3.6" />
+              <path class="ray ray-l" d="M 8.6 2.6 L 10.1 4.3" />
+              <path class="ray ray-r" d="M 19.4 2.6 L 17.9 4.3" />
+              <path class="shade-fill" d="M 6 13.5 L 10.5 5.5 L 17.5 5.5 L 22 13.5 Z" />
+            </g>
+            <g class="lamp">
+              <path class="shade-line" d="M 6 13.5 L 10.5 5.5 L 17.5 5.5 L 22 13.5 Z" />
+              <path class="stem" d="M 12.6 13.5 C 11.9 14.3, 11.1 15.0, 11.1 16.1 C 11.1 17.6, 12.9 18.2, 12.9 19.5 C 12.9 20.6, 10.6 20.9, 10.6 22.2 L 17.4 22.2 C 17.4 20.9, 15.1 20.6, 15.1 19.5 C 15.1 18.2, 16.9 17.6, 16.9 16.1 C 16.9 15.0, 16.1 14.3, 15.4 13.5 Z" />
+              <path class="base" d="M 9 24.25 L 19 24.25" />
+              <g class="chain-group">
+                <path class="chain" d="M 19 14.35 L 19 16.35" />
+                <circle class="chain-pull" cx="19" cy="17.15" r="1.05" />
+              </g>
+            </g>
+          </svg>
+        </button>
+      </div>
+    </header>
+
+    <main class="doc" id="main" tabindex="-1">
+      <h1>Reference</h1>
+      <p class="doc-date">Last updated: 2 September 2026</p>
+
+      <nav class="contents" aria-labelledby="contents-title">
+        <p class="contents-title" id="contents-title">Contents</p>
+        <ol>
+          <li>
+            <a href="#the-eighteen-verbs">The eighteen verbs</a>
+            <ol>
+              <li><a href="#the-usage-block">The usage block</a></li>
+              <li><a href="#verb-by-verb">Verb by verb</a></li>
+              <li><a href="#shared-flags">Shared flags</a></li>
+            </ol>
+          </li>
+          <li>
+            <a href="#kb-route-json-field-by-field">kb route --json, field by field</a>
+            <ol>
+              <li><a href="#the-shape">The shape</a></li>
+              <li><a href="#the-top-level">The top level</a></li>
+              <li><a href="#gate-and-confidence">gate and confidence</a></li>
+              <li><a href="#agent">agent</a></li>
+              <li><a href="#miss">miss</a></li>
+              <li><a href="#results-and-passages">results and passages</a></li>
+            </ol>
+          </li>
+          <li><a href="#kb-remember-json">kb remember --json</a></li>
+          <li>
+            <a href="#the-mcp-tools">The MCP tools</a>
+            <ol>
+              <li><a href="#the-five-tools">The five tools</a></li>
+              <li><a href="#the-evidence-line">The EVIDENCE line</a></li>
+              <li><a href="#the-handshake">The handshake</a></li>
+            </ol>
+          </li>
+          <li>
+            <a href="#check-codes">Check codes</a>
+            <ol>
+              <li><a href="#the-codes">The codes</a></li>
+              <li><a href="#what-the-checks-skip">What the checks skip</a></li>
+            </ol>
+          </li>
+          <li>
+            <a href="#the-files-the-tool-reads-and-writes">The files the tool reads and writes</a>
+            <ol>
+              <li><a href="#beside-the-fleet-manifest">Beside the fleet manifest</a></li>
+              <li><a href="#inside-an-agent">Inside an agent</a></li>
+              <li><a href="#the-derived-files">The derived files</a></li>
+              <li><a href="#the-header-of-a-note">The header of a note</a></li>
+            </ol>
+          </li>
+        </ol>
+      </nav>
+
+      <p>
+        This is the catalogue's own card index. The four pages before it tell
+        the story; this one lists the verbs, their flags, the fields a program
+        reads, the codes the linter prints and the files on disk, each copied
+        from the source on 2 September 2026 rather than remembered. Where a
+        line had to be assembled instead of copied, the entry says so. Nobody
+        is expected to read it through.
+      </p>
+
+      <h2 id="the-eighteen-verbs">The eighteen verbs</h2>
+
+      <h3 id="the-usage-block">The usage block</h3>
+      <p>
+        What <code>kb --help</code> prints, minus its prose. The block carries
+        eighteen lines for seventeen verbs, <code>init</code> twice;
+        <code>answer</code> has no line in it and is assembled below.
+      </p>
+      <pre><code>kb check [path]... [--strict] [--all]
+kb index [path]... [--json] [--all]
+kb list [path]... [--base B] [--folder F] [--kind K] [--stage S] [--provenance P] [--json] [--all]
+kb route &lt;question&gt; [path]... [--top N] [--hybrid] [--json] [--all]
+kb remember &lt;claim&gt; [path]... [--all] [--json]
+kb init &lt;name&gt; [fleet-root]
+kb init --person [fleet-root]
+kb write &lt;agent&gt; &lt;slug&gt; [fleet-root] --keys &lt;a, b&gt; --summary &lt;one line&gt; [--folder F]
+kb fleet [path]... [--all]
+kb blocks [path] [--emit]
+kb eval &lt;gold.tsv&gt; [path]... [--top N] [--all] [--classify]
+kb commit &lt;path&gt;... -m &lt;message&gt;
+kb boot [path]... [--top N] [--all]
+kb promote [path]... [--top N] [--all] [--dry-run] [--max N] [--lock]
+kb ui [path]... [--port N] [--all]
+kb capture [path] [--session ID]
+kb serve [path]... [--top N] [--all]
+kb misses [path]... [--all] [--top N] [--json]</code></pre>
+
+      <h3 id="verb-by-verb">Verb by verb</h3>
+      <p>
+        Each entry is the usage line, what the verb does, and the one thing it
+        never does. The last sentence is the one to hold it to.
+      </p>
+      <dl>
+        <dt><code>kb route &lt;question&gt; [path]... [--top N] [--hybrid] [--json] [--all]</code></dt>
+        <dd>
+          Asks the catalogue which books a question should open. The question
+          is scored against every note's <em>Search for</em> line, the owner
+          agent is named, and the verdict is one of <code>hit</code>,
+          <code>guess</code> or <code>nothing</code>. <code>--hybrid</code>
+          fuses the keyword ranking with full text search over the chunks;
+          <code>--json</code> prints the whole answer as one line on stdout
+          and always fuses, so <code>--hybrid</code> adds nothing on top of it.
+          It never calls a model and never invents a file.
+        </dd>
+
+        <dt><code>kb answer "&lt;question&gt;" [path]... [--expanded | --complete]</code></dt>
+        <dd>
+          Assembled, not copied: <code>--help</code> carries no usage line for
+          this verb, so the line above is put together from the README's
+          example and from the dispatch in the source, which also reads
+          <code>--top N</code> and <code>--all</code>. It runs
+          <code>route</code>, then hands only the served passages to the
+          command named by <code>answerer =</code> in <code>fleet.txt</code>,
+          which must ground every claim in them or say plainly that they do
+          not hold the answer. The default reads the top five files in one
+          model call; <code>--expanded</code> reads up to twelve;
+          <code>--complete</code> reads the whole base in batches of ten and
+          prints its estimate before the first call. It never reaches the model
+          on a <code>nothing</code> verdict, and without an
+          <code>answerer</code> line it prints the reading list
+          <code>route</code> would have printed, except in
+          <code>--complete</code>, which is nothing but model calls and stops
+          instead.
+        </dd>
+
+        <dt><code>kb remember &lt;claim&gt; [path]... [--all] [--json]</code></dt>
+        <dd>
+          Measures a claim against what the library already holds and
+          proposes <code>ADD</code>, <code>UPDATE</code> or
+          <code>NOOP</code>, with the overlapping passage as evidence. The
+          measure is containment, the fraction of the claim's words already
+          present in one chunk: <code>NOOP</code> at 0.90 or above,
+          <code>UPDATE</code> at 0.55 or above, <code>ADD</code> below. It
+          writes nothing, and it never proposes <code>DELETE</code>, because
+          absence and falsehood look the same to a word count.
+        </dd>
+
+        <dt><code>kb write &lt;agent&gt; &lt;slug&gt; [fleet-root] --keys &lt;a, b&gt; --summary &lt;one line&gt; [--folder F]</code></dt>
+        <dd>
+          Reads the note body on stdin and writes the keys twice: into the
+          note's own <em>Search for</em> header, which is the only thing the
+          catalogue indexes, and into an entry in the agent's
+          <code>MAP.md</code>, which is a reading list for a person.
+          <code>--folder</code> defaults to <code>knowledge</code>,
+          <code>--provenance</code> to <code>agent</code> and
+          <code>--stage</code> to <code>derived</code>. It refuses without
+          keys, and there is no flag to skip them; it also refuses when the
+          agent has no <code>MAP.md</code>. It never leaves half a write
+          behind: a failed map entry deletes the note again.
+        </dd>
+
+        <dt><code>kb promote [path]... [--top N] [--all] [--dry-run] [--max N] [--lock]</code></dt>
+        <dd>
+          Reads each agent's <code>inbox/</code> and offers what it finds to
+          two promoters. The first proposes notes and never sees the base; the
+          second decides, three times through three different questions, and
+          never sees the first one's reasoning. Only a unanimous accept
+          writes, at stage <code>captured</code>, and a refusal is counted in
+          <code>kb-rejections.txt</code>. <code>--dry-run</code> decides
+          everything and writes nothing; <code>--max N</code> stops after N
+          proposals are admitted and leaves the rest of the deposit where it
+          is; <code>--lock</code> refuses to start while another run holds
+          <code>.kb-promote.lock</code>. It never writes on a split decision.
+        </dd>
+
+        <dt><code>kb check [path]... [--strict] [--all]</code></dt>
+        <dd>
+          Lints every base and reports what the conventions promise while
+          nothing was checking. The exit code is 1 when it finds errors, or
+          when <code>--strict</code> is given and it finds warnings. It fixes
+          nothing and touches no file. The codes are listed
+          <a href="#check-codes">below</a>.
+        </dd>
+
+        <dt><code>kb index [path]... [--json] [--all]</code></dt>
+        <dd>
+          Builds one SQLite file per base at <code>&lt;base&gt;/.kb/index.db</code>
+          from the markdown, content hashed so that an unchanged file costs
+          nothing on the next run. <code>--json</code> prints the index entries
+          as JSON instead of building the index. One walk classifies every file
+          it touches into three buckets that sum back to the files on disk, so
+          the totals line also carries <code>unreachable</code>, the files with
+          no <em>Search for</em> line, which is E02's own population and is
+          listed three deep with a pointer to the linter for the rest, and
+          <code>unsearchable by design</code>, the files exempt from carrying
+          one at all. A remainder with no name is how a deliberate exemption
+          comes to be read as a broken base. It never runs in the background,
+          and it holds nothing that cannot be rebuilt from the files.
+        </dd>
+
+        <dt><code>kb list [path]... [--base B] [--folder F] [--kind K] [--stage S] [--provenance P] [--json] [--all]</code></dt>
+        <dd>
+          Lists what the shelves hold, narrowed by facet, with nothing ranked.
+          It takes no question, so the answer carries no score, no floor and no
+          verdict: a filter has no ranking problem in it, and asking one of
+          <code>route</code> scores it against the floor and comes back as a
+          guess, which is the confusion this verb exists to end.
+          <code>--base</code> is one agent by its directory name;
+          <code>--folder</code> a directory and everything under it;
+          <code>--kind</code> the species read from the folder,
+          <code>memory</code>, <code>skills</code> or <code>tools</code>;
+          <code>--stage</code> one of <code>raw</code>, <code>captured</code>,
+          <code>distilled</code> or <code>derived</code>; and
+          <code>--provenance</code> one of <code>human</code>,
+          <code>agent</code> or <code>external</code>. The last two are read
+          from each file's own front matter rather than from the index, so a
+          note whose header changed an hour ago is listed as it stands and not
+          as the last <code>kb index</code> saw it. Facets combine with AND, and
+          a value outside its set is an error naming the legal set, exit code 2,
+          never an empty list: zero rows reads as a fact about the base rather
+          than as a typo. The walk is over the files and not over the index
+          entries, so a file no question can reach is a row like any other,
+          which is the whole deposit and every <code>README.md</code>. It never
+          ranks anything, and it never lists the private layer without
+          <code>--all</code>.
+        </dd>
+
+        <dt><code>kb eval &lt;gold.tsv&gt; [path]... [--top N] [--all] [--classify]</code></dt>
+        <dd>
+          Grades the catalogue against a gold file of questions and expected
+          answers, including the questions it is supposed to refuse.
+          <code>--classify</code> asks the command that chooses the agent,
+          named by <code>classifier =</code> in <code>fleet.txt</code>, about
+          every question, one model call each. It refuses to grade a gold file that names
+          files the fleet does not have, because grading against a stale gold
+          file reports a wrong number confidently.
+        </dd>
+
+        <dt><code>kb boot [path]... [--top N] [--all]</code></dt>
+        <dd>
+          The librarian at the door. On a <code>UserPromptSubmit</code> hook it
+          reads the message from stdin, routes it across the fleet, and prints
+          the owner's constitution to stdout, where the runtime injects it; the
+          constitution is emitted only when the routed agent changes, tracked
+          per session under <code>.kb/sessions/</code>. Below the gate it picks
+          nobody and emits the roster instead. It always exits 0, because exit
+          2 on that event erases the user's message and exit 1 shows them a
+          hook error.
+        </dd>
+
+        <dt><code>kb blocks [path] [--emit]</code></dt>
+        <dd>
+          Reads <code>blocks.txt</code> and reports each block's mode, files,
+          bytes and tokens, then what changing each one costs in tokens that
+          have to be prefilled again. <code>--emit</code> prints the assembled
+          resident constitution instead of the report. It never invents a
+          block that is not on disk.
+        </dd>
+
+        <dt><code>kb fleet [path]... [--all]</code></dt>
+        <dd>
+          Prints the fleet's name and roster, read from <code>fleet.txt</code>
+          and from each <code>agent.txt</code>; it is the same text
+          <code>kb_fleet</code> returns over MCP, so what a model sees and what
+          a person sees cannot drift apart. Identity is never derived from the
+          index.
+        </dd>
+
+        <dt><code>kb init &lt;name&gt; [fleet-root]</code></dt>
+        <dt><code>kb init --person [fleet-root]</code></dt>
+        <dd>
+          Generates a base in the shape the catalogue needs, under
+          <code>&lt;fleet-root&gt;/fleet/&lt;name&gt;</code>, served as it stands: no
+          repository is needed and none is created. <code>--person</code>
+          writes the person's base, which has no <code>agent.txt</code>, so
+          the catalogue reads it and can never choose it as the one who
+          answers. It never writes a word about the person; the skeleton is
+          empty on purpose.
+        </dd>
+
+        <dt><code>kb commit &lt;path&gt;... -m &lt;message&gt;</code></dt>
+        <dd>
+          Commits exactly the paths named, through
+          <code>git commit -- &lt;paths&gt;</code>, then reads the commit back and
+          prints what it left dirty. There is deliberately no flag meaning
+          everything. It refuses an empty path list, a blank message, and a
+          list that spans two repositories.
+        </dd>
+
+        <dt><code>kb serve [path]... [--top N] [--all]</code></dt>
+        <dd>
+          Speaks the Model Context Protocol over stdio, with five tools,
+          <code>kb_route</code>, <code>kb_retrieve</code>,
+          <code>kb_remember</code>, <code>kb_fleet</code> and
+          <code>kb_list</code>, all through the same <code>Memory</code>
+          contract the command line uses. It writes nothing to stdout that is
+          not protocol; every diagnostic goes to stderr. It never serves the private layer unless <code>--all</code>
+          says so.
+        </dd>
+
+        <dt><code>kb ui [path]... [--port N] [--all]</code></dt>
+        <dd>
+          The reading room: a local page over the same contract. It binds
+          <code>127.0.0.1</code> and nothing else, on port <code>4114</code>
+          unless <code>--port</code> says otherwise, and there is no flag for
+          any other address. It never serves a file discovery did not produce,
+          however the path is spelled.
+        </dd>
+
+        <dt><code>kb capture [path] [--session ID]</code></dt>
+        <dd>
+          Turns a session's record into a deposit: one markdown file in the
+          last routed agent's <code>inbox/</code>, raw and without a
+          <em>Search for</em> line, so the catalogue never names it and every
+          passage from it is labelled short memory. The session id comes from
+          <code>--session</code> or from the hook payload on stdin, the same
+          JSON <code>boot</code> reads. It runs no model, writes no
+          <em>Search for</em> line, and captures nothing from a session no
+          agent was routed in.
+        </dd>
+
+        <dt><code>kb misses [path]... [--all] [--top N] [--json]</code></dt>
+        <dd>
+          Reads <code>kb-misses.txt</code> back: every question the free stage
+          could not answer, most asked first, with its count, its dates and the
+          vocabulary the base offered back on the day. Beside each one it names
+          the files today's index nearly caught it with and the keys each of
+          those files declares, which is the half a log cannot hold: which file
+          came close depends on the base as it stands now, and that changes
+          every time a note is written. A file the text scorer reached at a
+          keyword score of <code>0.00</code> is the finding itself, because the
+          words are in the note and not on its <em>Search for</em> line, so the
+          repair is an alias line or another key rather than another note.
+          <code>--top N</code> bounds the candidates carried per logged
+          question, not how many questions are printed. It always prints the
+          path it read, because <code>KB_MISSES_PATH</code> can move the log and
+          two fleets pointed at one path share it, and an absent log exits 0: a
+          fleet nothing has missed against is healthy rather than broken. It
+          proposes and never applies, and there is deliberately no flag that
+          does: <code>kb-aliases.txt</code> is a record of real misses, and a
+          machine appending to it on evidence it produced itself closes that
+          loop with nobody in it.
+        </dd>
+      </dl>
+
+      <h3 id="shared-flags">Shared flags</h3>
+      <dl>
+        <dt><code>path</code></dt>
+        <dd>
+          The base to work on. Defaults to the current directory. A path may
+          also be a fleet root, a directory that is not itself a base but whose
+          immediate children are; both are accepted and neither is required.
+        </dd>
+        <dt><code>--top N</code></dt>
+        <dd>
+          How many candidates to carry. Default 5. <code>route</code>,
+          <code>boot</code>, <code>eval</code>, <code>promote</code>,
+          <code>serve</code> and <code>misses</code> all read it. On
+          <code>misses</code> it bounds the candidates carried per logged
+          question and not the number of questions printed.
+        </dd>
+        <dt><code>--all</code></dt>
+        <dd>
+          Include the private layer, and nothing else: the folders a base
+          declares with a <code>private =</code> line in
+          <code>agent.txt</code>, or <code>profile/</code>,
+          <code>projects/</code> and <code>records/</code> when it declares
+          nothing. <code>.</code> declares the whole base, and the person's
+          base is whole by name. Nothing outside the base is consulted, and no
+          repository is needed.
+        </dd>
+      </dl>
+
+      <h2 id="kb-route-json-field-by-field">kb route --json, field by field</h2>
+      <p>
+        One line of JSON on stdout, computed in one pass: the owner and the
+        verdict from the keyword ranking, the reading list from the fusion of
+        both scorers. Every score in it is rounded to six decimals, because
+        the keyword score is a 32-bit float and widening it would print
+        seventeen digits of precision it never had. When the base cannot be
+        opened, stdout carries <code>{"question": ..., "error": ...}</code>
+        and the exit code is 1.
+      </p>
+
+      <h3 id="the-shape">The shape</h3>
+      <p>
+        Types rather than values, so nothing here is an example that could go
+        stale. A vertical bar separates the values a field can take.
+      </p>
+      <pre><code>{
+  "question": string,
+  "verdict": "hit" | "guess" | "nothing",
+  "gate": {
+    "served": bool,
+    "ranked_by_text_only": bool,
+    "floor": number
+  },
+  "confidence": {
+    "agreement": 0 | 1 | 2,
+    "keyword_score": number,
+    "margin": number
+  },
+  "agent": null | {
+    "name": string,
+    "score": number,
+    "files": integer,
+    "margin": number | null,
+    "contenders": integer,
+    "totals": [ { "agent": string, "score": number } ]
+  },
+  "keyword_top": string | null,
+  "indexed": {
+    "entries": integer,
+    "agents": integer,
+    "aliases": integer
+  },
+  "unreachable": {
+    "files": integer,
+    "paths": [ string ],
+    "unindexed": integer,
+    "unindexed_paths": [ string ]
+  },
+  "skipped": [ string ],
+  "index_was_rebuilt": bool,
+  "suggestions": [ string ],
+  "miss": null | {
+    "question": string,
+    "looked_like": [ string ],
+    "date": string,
+    "log": string,
+    "recorded": bool,
+    "error": string | null
+  },
+  "results": [ {
+    "base": string,
+    "path": string,
+    "memory": "short" | "long",
+    "title": string,
+    "purpose": string,
+    "score": number,
+    "keyword_score": number,
+    "why": [ string ],
+    "matched": [ string ],
+    "passages": [ {
+      "heading_path": string,
+      "text": string,
+      "excerpt": string,
+      "provenance": string | null,
+      "stage": string | null
+    } ]
+  } ]
+}</code></pre>
+
+      <h3 id="the-top-level">The top level</h3>
+      <dl>
+        <dt><code>question</code></dt>
+        <dd>The question, as it was given.</dd>
+        <dt><code>verdict</code></dt>
+        <dd>
+          <code>hit</code>, <code>guess</code> or <code>nothing</code>: the
+          top file's keyword score against the floor for this fleet's size,
+          and never <code>hit</code> in a base with fewer than two entries.
+          The margin over the runner-up is reported under
+          <code>confidence</code> and does not gate. It answers whether the keyword scorer ranked anything
+          worth serving; it does not answer whether either scorer ranked
+          anything at all, which is what <code>gate</code> is for.
+        </dd>
+        <dt><code>keyword_top</code></dt>
+        <dd>
+          The file the keyword scorer ranked first, as <code>base/path</code>,
+          or <code>null</code> when it ranked nothing.
+        </dd>
+        <dt><code>indexed.entries</code></dt>
+        <dt><code>indexed.agents</code></dt>
+        <dt><code>indexed.aliases</code></dt>
+        <dd>
+          How many keyed entries, agents and alias lines were opened for this
+          answer. An entry is a note with a <em>Search for</em> line.
+        </dd>
+        <dt><code>unreachable.files</code></dt>
+        <dt><code>unreachable.paths</code></dt>
+        <dd>
+          How many files across the open bases the catalogue can build no
+          entry for, and the first eight of them as <code>base/path</code>. An
+          authoring problem: the file is on disk, a person can open and read
+          it, and it scores zero on every question
+          ever asked. It is the same population <code>kb check</code> reports
+          as E02, and nobody is required to run <code>kb check</code>.
+        </dd>
+        <dt><code>unreachable.unindexed</code></dt>
+        <dt><code>unreachable.unindexed_paths</code></dt>
+        <dd>
+          A different problem with a different repair: files on disk the
+          indexes hold no chunks for, which is a <code>kb index</code> that has
+          not run since they were written. Which scope produced the number
+          matters and is not obvious: an index synced without
+          <code>--all</code> and opened with it correctly reports every private
+          file as unindexed, and the reverse reports nothing at all, so two
+          runs can disagree while both are telling the truth. The counts are
+          exact and only the two arrays are capped at eight, because a short
+          list beside a count taken from the same short list understates the
+          problem by exactly as much as it was shortened.
+        </dd>
+        <dt><code>skipped</code></dt>
+        <dd>
+          Bases the open had to leave out, named here rather than only on
+          stderr, because a caller that reads stdout alone must not read an
+          empty result set as a base that does not cover the question. Empty
+          since the day git left the runtime: the one reason a base used to be
+          left out no longer exists, and the field stays because callers read
+          it.
+        </dd>
+        <dt><code>index_was_rebuilt</code></dt>
+        <dd>
+          <code>true</code> when an index built before the private column
+          existed was found and emptied on open. Run <code>kb index</code>
+          before relying on the passages.
+        </dd>
+        <dt><code>suggestions</code></dt>
+        <dd>
+          The vocabulary the base does know that looks like the words used,
+          by character trigram overlap; the same list
+          <code>miss.looked_like</code> carries. Empty when the answer was
+          served, and empty on a miss with no orthographic neighbour, which
+          is an honest answer.
+        </dd>
+      </dl>
+
+      <h3 id="gate-and-confidence">gate and confidence</h3>
+      <p>
+        Branch on <code>gate.served</code>, never on the length of
+        <code>results</code>. A refused answer still carries its candidates,
+        because the verdict comes from the keyword scorer and the results come
+        from both, so <code>"verdict": "nothing"</code> with a full array is
+        an ordinary outcome rather than a contradiction.
+      </p>
+      <dl>
+        <dt><code>gate.served</code></dt>
+        <dd>
+          Whether the answer is served: <code>false</code> exactly when the
+          verdict is <code>nothing</code>. The rule stated as a field, so a
+          caller does not have to re-derive it from a string.
+        </dd>
+        <dt><code>gate.ranked_by_text_only</code></dt>
+        <dd>
+          <code>true</code> when the answer was refused and
+          <code>results</code> is not empty: the text scorer ranked files the
+          keyword lines missed, which is a base whose labels need a word
+          rather than a base without the subject. <code>false</code> with an
+          empty <code>results</code> means nothing ranked anywhere.
+        </dd>
+        <dt><code>gate.floor</code></dt>
+        <dd>
+          What <code>confidence.keyword_score</code> was measured against, for
+          this fleet's size, never the calibration constant. A caller who
+          disagrees with the gate needs the threshold that actually applied.
+        </dd>
+        <dt><code>confidence.agreement</code></dt>
+        <dd>
+          How many of the two independent scorers ranked the top file: 0, 1
+          or 2. Reported and never used to gate.
+        </dd>
+        <dt><code>confidence.keyword_score</code></dt>
+        <dd>
+          The top file's raw keyword score. Zero when only the text scorer
+          found it.
+        </dd>
+        <dt><code>confidence.margin</code></dt>
+        <dd>
+          The top keyword score divided by the best runner-up's, and 1.0 when
+          nothing else scored, because standing alone is not the same as
+          winning.
+        </dd>
+      </dl>
+
+      <h3 id="agent">agent</h3>
+      <p>
+        <code>null</code> when no agent scored. Otherwise the owner the fold
+        chose, with the numbers a caller holding an incumbent would need to
+        argue with it.
+      </p>
+      <dl>
+        <dt><code>agent.name</code></dt>
+        <dd>The owner agent.</dd>
+        <dt><code>agent.score</code></dt>
+        <dd>The agent's total in the fold.</dd>
+        <dt><code>agent.files</code></dt>
+        <dd>
+          Since ADR-0031 this counts species with evidence, memory, skills or
+          tools, at most three per agent, and no longer files: fifty-nine
+          matching files and one matching file are the same one species.
+        </dd>
+        <dt><code>agent.margin</code></dt>
+        <dd>
+          Over the runner-up agent. <code>null</code> when only one agent
+          scored at all, which is JSON's encoding of infinity and means
+          maximum confidence rather than a missing field: no other base in the
+          fleet had anything to say.
+        </dd>
+        <dt><code>agent.contenders</code></dt>
+        <dd>How many agents scored anything.</dd>
+        <dt><code>agent.totals</code></dt>
+        <dd>
+          Every agent that scored, best first, each as
+          <code>{"agent": ..., "score": ...}</code>.
+        </dd>
+      </dl>
+
+      <h3 id="miss">miss</h3>
+      <p>
+        <code>null</code> when the answer was served. On a refusal it is the
+        recall loss itself, handed back rather than only logged, and it
+        repeats <code>question</code> and the suggestions on purpose: the
+        object exists to be copied whole into somebody else's store by a
+        caller that has nowhere of its own to write.
+      </p>
+      <dl>
+        <dt><code>miss.question</code></dt>
+        <dd>The question, again.</dd>
+        <dt><code>miss.looked_like</code></dt>
+        <dd>The vocabulary offered back, the same list as <code>suggestions</code>.</dd>
+        <dt><code>miss.date</code></dt>
+        <dd>The day it was seen, in the log's own format.</dd>
+        <dt><code>miss.log</code></dt>
+        <dd>Where the log was written, or where the attempt was made.</dd>
+        <dt><code>miss.recorded</code></dt>
+        <dd>
+          Whether the log holds this too. <code>false</code> means the caller
+          holds the only copy.
+        </dd>
+        <dt><code>miss.error</code></dt>
+        <dd>
+          Why the write failed, when it did, and <code>null</code> otherwise.
+          A failed write does not fail the query.
+        </dd>
+      </dl>
+
+      <h3 id="results-and-passages">results and passages</h3>
+      <p>
+        One entry per ranked file, best first. Two scores travel because they
+        answer different questions: fusion says which file to read first, and
+        the keyword score is the number the verdict was measured against.
+      </p>
+      <dl>
+        <dt><code>results[].base</code></dt>
+        <dt><code>results[].path</code></dt>
+        <dd>The agent and the path inside it.</dd>
+        <dt><code>results[].memory</code></dt>
+        <dd>
+          <code>short</code> or <code>long</code>. Short is the deposit,
+          <code>inbox/</code>: recent, unjudged, served on purpose and
+          labelled on purpose. A caller that wants only settled knowledge
+          filters on <code>long</code>.
+        </dd>
+        <dt><code>results[].title</code></dt>
+        <dt><code>results[].purpose</code></dt>
+        <dd>The note's title and its <em>Exists to</em> line.</dd>
+        <dt><code>results[].score</code></dt>
+        <dd>The fused score.</dd>
+        <dt><code>results[].keyword_score</code></dt>
+        <dd>The raw keyword sum for this file.</dd>
+        <dt><code>results[].why</code></dt>
+        <dd>Which scorer ranked it and where, one string per scorer.</dd>
+        <dt><code>results[].matched</code></dt>
+        <dd>
+          The query words that matched, so a bad ranking can be diagnosed
+          instead of guessed at.
+        </dd>
+        <dt><code>results[].passages[].heading_path</code></dt>
+        <dd>Where in the note the chunk sits, as <code>Title &gt; Section &gt; Subsection</code>.</dd>
+        <dt><code>results[].passages[].text</code></dt>
+        <dt><code>results[].passages[].excerpt</code></dt>
+        <dd>The chunk, and a shorter cut of it.</dd>
+        <dt><code>results[].passages[].provenance</code></dt>
+        <dt><code>results[].passages[].stage</code></dt>
+        <dd>
+          From the note's front matter, or <code>null</code> when the note
+          declares neither.
+        </dd>
+      </dl>
+
+      <h2 id="kb-remember-json">kb remember --json</h2>
+      <p>
+        The proposal as one line, for a caller that is not a person. It
+        measures overlap, proposes, writes nothing and needs no model, which
+        is what lets an agent with no writable filesystem ask whether a fact
+        is worth keeping, queue the answer, and apply it later on a machine
+        that has the files.
+      </p>
+      <pre><code>{
+  "claim": string,
+  "proposal": "ADD" | "UPDATE" | "NOOP",
+  "reason": string,
+  "evidence": [ {
+    "base": string,
+    "path": string,
+    "heading_path": string,
+    "excerpt": string,
+    "containment": number,
+    "shared": [ string ],
+    "missing": [ string ]
+  } ],
+  "notice": string
+}</code></pre>
+      <dl>
+        <dt><code>claim</code></dt>
+        <dd>The claim, as it was given.</dd>
+        <dt><code>proposal</code></dt>
+        <dd>
+          <code>ADD</code>, <code>UPDATE</code> or <code>NOOP</code>. There is
+          no fourth value.
+        </dd>
+        <dt><code>reason</code></dt>
+        <dd>One sentence saying what the measure found.</dd>
+        <dt><code>evidence[]</code></dt>
+        <dd>
+          The closest chunks, each with its <code>base</code>,
+          <code>path</code> and <code>heading_path</code>, an
+          <code>excerpt</code>, its <code>containment</code> (the fraction of
+          the claim's words present in that chunk, rounded to six decimals),
+          the words <code>shared</code> with the claim and the words still
+          <code>missing</code> from the base.
+        </dd>
+        <dt><code>notice</code></dt>
+        <dd>
+          The caveat the terminal prints, verbatim, so a model reading this
+          through another surface is told what a person is told: overlap is
+          measured, judgement is not, and <code>DELETE</code> is never
+          proposed.
+        </dd>
+      </dl>
+      <p>
+        When the base cannot be opened the error takes the same shape
+        <code>route</code> uses, <code>{"claim": ..., "error": ...}</code> on
+        stdout with exit code 1.
+      </p>
+
+      <h2 id="the-mcp-tools">The MCP tools</h2>
+      <p>
+        What <code>kb serve</code> lists under <code>tools/list</code>. Five
+        tools, none of which writes to the base, each returning one text part;
+        the one file a refusal appends to is <code>kb-misses.txt</code>. Every tool answers
+        through the same <code>Memory</code> contract the command line uses,
+        so a model and a person cannot get different answers to one question.
+      </p>
+
+      <h3 id="the-five-tools">The five tools</h3>
+      <dl>
+        <dt><code>kb_route</code></dt>
+        <dd>
+          <code>{ "question": string, "top": integer }</code>.
+          <code>question</code> is required; <code>top</code> is optional and
+          defaults to 5, or to the server's <code>--top</code>. Returns ranked
+          file paths with the words that matched and the EVIDENCE line, and no
+          file contents. On a miss it offers back the terms the base does know
+          that look like the words used, and says that comparison is spelling
+          rather than meaning.
+        </dd>
+        <dt><code>kb_retrieve</code></dt>
+        <dd>
+          The same two arguments. Returns the passages themselves, with the
+          heading path and the provenance of each, under the EVIDENCE line. A
+          passage from the deposit is marked
+          <code>[short memory: recent, not distilled, not yet in the library]</code>.
+        </dd>
+        <dt><code>kb_remember</code></dt>
+        <dd>
+          <code>{ "claim": string }</code>, required. Returns the proposal,
+          the reason and the evidence, closest first, and ends with the same
+          notice the command line prints. It writes nothing and decides
+          nothing.
+        </dd>
+        <dt><code>kb_fleet</code></dt>
+        <dd>
+          <code>{ }</code>, no arguments. Returns the fleet's name and role and
+          every agent with its role and directory, read from
+          <code>fleet.txt</code> and each <code>agent.txt</code>. It is a
+          lookup rather than a search, so it works on an empty library.
+        </dd>
+        <dt><code>kb_list</code></dt>
+        <dd>
+          <code>{ "base": string, "folder": string, "kind": string, "stage":
+          string, "provenance": string, "limit": integer }</code>, every one of
+          them optional: <code>required</code> is an empty array and there is
+          no <code>question</code> property, because this is not a search and
+          there is no ranking problem in a filter. An omitted facet means do
+          not filter on this rather than any particular value, and the named
+          ones combine with AND; a value outside its set comes back as a
+          protocol error naming the legal set, never as zero rows, which a
+          model would read as a fact about the base. Returns one line per file
+          with its facets in brackets, nothing scored and nothing refused.
+          <code>limit</code> defaults to 50 and the count of what was cut
+          travels with the cut, so a caller can tell a narrow filter from a
+          truncated one. It inherits the server's scope and states none of its
+          own, so the private layer is listed only when <code>kb serve</code>
+          was started with <code>--all</code>.
+        </dd>
+      </dl>
+
+      <h3 id="the-evidence-line">The EVIDENCE line</h3>
+      <p>
+        The line after the heading of every <code>kb_route</code> and
+        <code>kb_retrieve</code> answer that found anything, in the words every
+        other surface uses. Angle brackets stand for the numbers; the score
+        and the floor are printed to one decimal and the margin to two.
+      </p>
+      <pre><code>EVIDENCE: keyword score &lt;s&gt; against a floor of &lt;f&gt;; both|only one|neither of the two independent scorers ranked the top file; it leads the runner-up by &lt;m&gt;x. Verdict: ...</code></pre>
+      <p>
+        The verdict clause is one of three sentences: <code>something here
+        matches</code> for a hit; <code>a guess, too weak or too close to the
+        runner-up to tell from a coincidence of vocabulary</code> for a guess;
+        <code>nothing matched</code> for nothing. Agreement is reported and
+        never gates the verdict.
+      </p>
+
+      <h3 id="the-handshake">The handshake</h3>
+      <p>
+        The server is dual-era: it answers <code>initialize</code> when asked
+        and never requires it, and it echoes back whatever protocol version
+        the client named. When a legacy client names no version, the answer
+        names <code>2025-06-18</code>, the oldest widely deployed revision,
+        because naming a newer one at a client that does not know it is how a
+        handshake fails. The methods it answers are <code>initialize</code>,
+        <code>ping</code>, <code>tools/list</code> and
+        <code>tools/call</code>; a notification, a message with no id, gets no
+        reply, not even an error. Stdout belongs to the protocol and every
+        diagnostic goes to stderr.
+      </p>
+
+      <h2 id="check-codes">Check codes</h2>
+      <p>
+        What <code>kb check</code> prints, from the linter's own source. A
+        code beginning with E is an error and counts toward the exit code; a
+        code beginning with W is a warning and counts only under
+        <code>--strict</code>.
+      </p>
+
+      <h3 id="the-codes">The codes</h3>
+      <figure class="ledger ledger-fit">
+        <div class="ledger-scroll" tabindex="0" role="region" aria-labelledby="check-codes-caption">
+          <table>
+            <thead>
+              <tr>
+                <th scope="col">Code</th>
+                <th scope="col">What it catches</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <th scope="row"><code>E01</code> broken-link</th>
+                <td>A <code>[[link]]</code> with no file behind it. A link resolves inside its own base and nowhere else; when the note exists in another base, the message names that base and says to write the path.</td>
+              </tr>
+              <tr>
+                <th scope="row"><code>E02</code> not-indexed</th>
+                <td>A file with no <em>Search for</em> line, so the catalogue builds no entry for it and it scores zero on every question.</td>
+              </tr>
+              <tr>
+                <th scope="row"><code>E04</code> bad-provenance</th>
+                <td><code>provenance</code> or <code>stage</code> carries a value outside the legal set. Provenance is <code>human</code>, <code>agent</code> or <code>external</code>; stage is <code>raw</code>, <code>captured</code>, <code>distilled</code> or <code>derived</code>.</td>
+              </tr>
+              <tr>
+                <th scope="row"><code>W01</code> ambiguous-link</th>
+                <td>A <code>[[link]]</code> matching more than one file.</td>
+              </tr>
+              <tr>
+                <th scope="row"><code>W02</code> no-search-line</th>
+                <td>A map entry with no <em>Search for</em> line, where a map exists.</td>
+              </tr>
+              <tr>
+                <th scope="row"><code>W03</code> dash</th>
+                <td>An em dash or an en dash, which house style forbids. One report per line.</td>
+              </tr>
+              <tr>
+                <th scope="row"><code>W04</code> front-matter</th>
+                <td>Front matter declaring <code>source</code> or <code>type</code> with no <code>evidence_tier</code> or no <code>valid_for</code>.</td>
+              </tr>
+              <tr>
+                <th scope="row"><code>W05</code> no-provenance</th>
+                <td>Front matter with no <code>provenance</code> or no <code>stage</code>, so who wrote the note is unknown.</td>
+              </tr>
+              <tr>
+                <th scope="row"><code>W06</code> thin-keywords</th>
+                <td>A <em>Search for</em> line under twelve terms. The message asks for thirty, in both languages, including the words somebody types from inside the problem.</td>
+              </tr>
+              <tr>
+                <th scope="row"><code>W07</code> dead-key</th>
+                <td>A key that reduces to one word after stopwords, so it reaches neither the keyword index nor the phrase index and no question can find it.</td>
+              </tr>
+              <tr>
+                <th scope="row"><code>W08</code> unignored</th>
+                <td>A <code>.gitignore</code> is here and does not cover a folder the base declares private. A warning and never a refusal, because git is optional; skipped when the base is private as a whole.</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <figcaption id="check-codes-caption">
+          The eleven codes the linter emits, read from its source at commit
+          <code>ea43d1d</code> on 2 September 2026. E03 is not among them.
+        </figcaption>
+      </figure>
+      <div class="note" role="note">
+        <p><strong>Note.</strong> There is no E03. It demanded a map file at the root, which was right while the index was built from map entries; since a note carries its own keys, a base with no map indexes perfectly well, and the rule was deleted rather than left to print one error per base forever.</p>
+      </div>
+
+      <h3 id="what-the-checks-skip">What the checks skip</h3>
+      <p>
+        E02, W06 and W07 are asked of every file the index walks, not only of
+        the knowledge folder, and they skip the files nobody searches for:
+        <code>README.md</code>, <code>MAP.md</code>, <code>CLAUDE.md</code>,
+        <code>what-goes-here.md</code>, <code>MOVED.md</code>, and anything
+        under <code>inbox/</code>, <code>records/</code> or a
+        <code>calculation-log/</code> folder. The deposit is exempt from
+        carrying the line, not hidden by it: since ADR-0034 a passage from
+        <code>inbox/</code> is served at every surface with the short memory
+        label on, and the exemption only keeps E02 quiet about a line a
+        dropped file is not supposed to have. A daily record keyed like a note
+        would collapse the weight of every word it shares with the notes that
+        answer questions. That exemption is one predicate and it lives beside
+        the walk rather than in the linter, because two callers read it:
+        <code>kb check</code> reports the files it does not cover as E02, and
+        <code>kb index</code> counts the same set as unreachable. Measured on
+        the fleet this was written against, the exemption is nearly the whole
+        answer, 63 keyless files and every one of them exempt, so a count that
+        tested only for a missing <em>Search for</em> line would have printed
+        63 beside a linter reporting 0 and left a reader no way to tell which
+        of the two was lying.
+      </p>
+      <p>
+        Links inside fenced code blocks and inline code are ignored, because a
+        base that documents its own link convention writes
+        <code>[[file-name]]</code> in backticks and those are examples rather
+        than references. The <code>templates/</code> folder is exempt from
+        link checks for the same reason: its links are placeholders. W04, W05
+        and E04 are asked only of a note in the knowledge folder that opens
+        with front matter; a note with none gets no finding from them.
+      </p>
+      <p>
+        The linter does not judge whether a note is any good, and it has no
+        notion of staleness yet: <code>valid_for</code> is required on a
+        sourced note and nothing compares it to reality.
+      </p>
+
+      <h2 id="the-files-the-tool-reads-and-writes">The files the tool reads and writes</h2>
+      <p>
+        Every file is plain text, and every file is where the folder is:
+        nothing under a fleet carries an absolute path, so moving the folder
+        moves everything.
+      </p>
+
+      <h3 id="beside-the-fleet-manifest">Beside the fleet manifest</h3>
+      <dl>
+        <dt><code>fleet.txt</code></dt>
+        <dd>
+          The fleet's manifest, at the fleet root, as <code>key = value</code>
+          lines with <code>#</code> for comments. <code>name =</code> and
+          <code>role =</code> are what <code>kb fleet</code> prints for the
+          fleet itself. <code>classifier =</code>, <code>answerer =</code>,
+          <code>promoter =</code> and <code>reviewer =</code> each name a
+          command that reads a prompt on stdin and answers on stdout, its path
+          relative to the fleet root: the first chooses the agent at boot, the
+          answerer writes prose for <code>kb answer</code>, the promoter
+          proposes notes from the deposit and the reviewer decides on them.
+          Each line is optional and none is guessed at: without the first,
+          <code>kb boot</code> keeps the arithmetic's choice; without an
+          answerer, <code>kb answer</code> prints the reading list; without a
+          promoter or a reviewer, <code>kb promote</code> stops and names the
+          missing line.
+          <code>attach =</code> adds a base outside the fleet root;
+          <code>disable =</code> names a child directory that is not a base.
+        </dd>
+        <dt><code>kb-misses.txt</code></dt>
+        <dd>
+          The recall loss log, beside <code>fleet.txt</code> rather than in
+          <code>.kb/</code>, because the index is disposable and this is not.
+          One line per distinct question the catalogue could not answer:
+          count, first seen, last seen, then the question, with an indented
+          <code>looked like:</code> line recording what the base offered back.
+          Gitignored, because a question can be as private as an answer.
+          <code>KB_MISSES_PATH</code> names a file, not a directory, and moves
+          the log to a writable place; two fleets pointed at one path share one
+          log. <code>kb misses</code> reads it back and adds the half the file
+          cannot hold: which files today's index nearly caught each question
+          with, and the keys those files declare.
+        </dd>
+        <dt><code>kb-rejections.txt</code></dt>
+        <dd>
+          What <code>kb promote</code> refused, counted, with the reason and
+          the dates, beside <code>kb-misses.txt</code> and for the same reason.
+          The same proposal refused three times is a gap in the base rather
+          than a bad proposal. Gitignored, because a refusal quotes the note it
+          refused.
+        </dd>
+        <dt><code>.kb-promote.lock</code></dt>
+        <dd>
+          The marker one promotion run holds so that another does not start
+          over the same deposit. It exists for the minutes a run takes;
+          <code>--lock</code> refuses to start while it is held. It survives a
+          crash: a run within the hour refuses, and a later one takes the
+          marker over and says which run died holding it.
+        </dd>
+      </dl>
+
+      <h3 id="inside-an-agent">Inside an agent</h3>
+      <dl>
+        <dt><code>agent.txt</code></dt>
+        <dd>
+          The card the catalogue reads to name and route. <code>name =</code>
+          and <code>role =</code>; <code>private =</code>, one line of folders
+          separated by commas, a trailing slash optional, <code>.</code> for
+          the whole base, and the default of <code>profile/</code>,
+          <code>projects/</code> and <code>records/</code> when the line is
+          absent; <code>ends =</code>, where this agent stops, read by the
+          command that chooses the agent, because a roster of roles says what
+          each agent does and never what none of them does. A base with no <code>agent.txt</code>
+          is read and can never be elected, which is what makes the person's
+          base a base and not an agent.
+        </dd>
+        <dt><code>blocks.txt</code></dt>
+        <dd>
+          The constitution as labelled blocks, in stability order, most
+          stable first, because prefix caching reuses a prompt only up to the
+          first token that differs. A block is a <code>[label]</code> line
+          followed by one file per line; a block is resident unless its label
+          line ends in <code>on-demand</code>. The skeleton carries
+          <code>[identity]</code>, <code>[user]</code> pointing at
+          <code>../person/core.md</code>, <code>[map]</code>, and
+          <code>[session] on-demand</code>.
+        </dd>
+        <dt><code>kb-aliases.txt</code></dt>
+        <dd>
+          Optional, at the base root: <code>alias = canonical</code>, one per
+          line, <code>#</code> for comments. Expansion is additive, so the
+          original words always survive and a wrong line can add noise and
+          never remove signal. A line is added after a real question missed,
+          never before.
+        </dd>
+        <dt><code>MAP.md</code></dt>
+        <dd>
+          A reading list for a person, and a resident constitution block.
+          Optional to <code>kb check</code> and to the index, and never read
+          by the catalogue when it routes; required by <code>kb write</code>,
+          which refuses when the agent has none.
+        </dd>
+        <dt><code>inbox/</code></dt>
+        <dd>
+          The deposit, the short memory. Files a person drops, and one
+          <code>inbox/&lt;date&gt;-session-&lt;id&gt;.md</code> per captured session,
+          with <code>provenance: agent</code>, <code>stage: raw</code> and no
+          <em>Search for</em> line. Served and labelled short at every surface;
+          read by <code>kb promote</code>.
+        </dd>
+      </dl>
+
+      <h3 id="the-derived-files">The derived files</h3>
+      <p>
+        Everything under <code>.kb/</code> is derived and disposable. Delete
+        it and you have lost a rebuild, not a fact.
+      </p>
+      <dl>
+        <dt><code>.kb/index.db</code></dt>
+        <dd>
+          One SQLite file per base, and there is no flag to point it anywhere
+          else. Two tables, readable with any <code>sqlite3</code> binary.
+        </dd>
+      </dl>
+      <pre><code>CREATE TABLE IF NOT EXISTS files (
+    base        TEXT NOT NULL,
+    path        TEXT NOT NULL,
+    hash        TEXT NOT NULL,
+    provenance  TEXT,
+    stage       TEXT,
+    private     INTEGER NOT NULL DEFAULT 0,
+    PRIMARY KEY (base, path)
+);
+
+CREATE VIRTUAL TABLE IF NOT EXISTS chunks USING fts5(
+    base         UNINDEXED,
+    path         UNINDEXED,
+    heading_path,
+    text,
+    tokenize = 'unicode61 remove_diacritics 2'
+);</code></pre>
+      <p>
+        <code>hash</code> is a content hash, so an unchanged file is skipped
+        on the next index. <code>private</code> is 1 for a file inside the
+        base's declared private layer and 0 otherwise, two states and never a
+        third. An index built before that column existed is emptied on open
+        and <code>index_was_rebuilt</code> says so. The tokenizer folds accents,
+        which is what lets a Portuguese question find an English note.
+      </p>
+      <dl>
+        <dt><code>.kb/sessions/&lt;id&gt;</code></dt>
+        <dd>
+          The agent last routed in a session, so <code>kb boot</code> emits
+          the constitution only when it changes. Losing it costs one extra
+          injection.
+        </dd>
+        <dt><code>.kb/sessions/&lt;id&gt;.events</code></dt>
+        <dd>
+          What <code>kb boot</code> appends on every message: a
+          <code>refused</code> line with the question and the vocabulary
+          offered back, or a <code>routed</code> line with the agent.
+          <code>kb capture</code> reads it, writes the deposit, and deletes it
+          only after the deposit is on disk, so a crash between the two
+          captures again rather than losing the session.
+        </dd>
+      </dl>
+
+      <h3 id="the-header-of-a-note">The header of a note</h3>
+      <p>
+        Two labelled lines directly under the title, before the body. The
+        first is the label the catalogue matches; the second is the one line
+        the model that chooses the agent is shown in place of the file. The front matter above
+        them is what W04, W05 and E04 read.
+      </p>
+      <pre><code>---
+provenance: agent
+stage: derived
+---
+
+# The title
+
+**Search for:** `first key`, `second key`, `a phrase a real question uses`
+
+**Exists to:** say in one line what this file is for.</code></pre>
+      <p>
+        Both labels are read tolerantly: case does not matter, bold or plain,
+        comma or semicolon, backticks optional, and the Portuguese
+        <code>Buscar por:</code> and <code>Existe para:</code> are accepted.
+        Only what sits above the first section heading is read, which is what
+        keeps <code>MAP.md</code>, with one label per entry, from indexing
+        itself as a file holding every key in the base. A line excludes itself
+        from the text index; a heading would exclude everything after it, which
+        is why the label is a line and not a section.
+      </p>
+
+      <p class="doc-back">
+        Previous: <a href="/docs/cloud/">Somewhere That Is Not Your Machine</a> ·
+        Next: <a href="/docs/decisions/">What Was Done</a> ·
+        <a href="/docs/">All of the docs</a> ·
+        <a href="/">Back to the library</a>
+      </p>
+    </main>
+
+    <footer>
+      <p class="address-line">
+        <a href="/docs/">Docs</a> · <a href="/benchmarks/">Benchmarks</a> · <a href="mailto:hello@ulpia.io">hello@ulpia.io</a>
+      </p>
+    </footer>
+  </body>
+</html>

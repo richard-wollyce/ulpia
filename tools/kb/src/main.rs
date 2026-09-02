@@ -7,8 +7,8 @@
 
 use kb::checks::{Finding, Level};
 use kb::{
-    answer, base, blocks, boot, capture, checks, classify, commit, eval, index, init, json, mcp,
-    memory, promote, remember, store, ui, write,
+    answer, base, blocks, boot, capture, checks, classify, commit, eval, index, init, json, list,
+    mcp, memory, misses, promote, remember, store, ui, write,
 };
 use base::Base;
 use std::path::Path;
@@ -20,6 +20,7 @@ kb, a linter and router for file based knowledge bases
 usage:
     kb check [path]... [--strict] [--all]
     kb index [path]... [--json] [--all]
+    kb list [path]... [--base B] [--folder F] [--kind K] [--stage S] [--provenance P] [--json] [--all]
     kb route <question> [path]... [--top N] [--hybrid] [--json] [--all]
     kb remember <claim> [path]... [--all] [--json]
     kb init <name> [fleet-root]
@@ -34,6 +35,7 @@ usage:
     kb ui [path]... [--port N] [--all]
     kb capture [path] [--session ID]
     kb serve [path]... [--top N] [--all]
+    kb misses [path]... [--all] [--top N] [--json]
 
     path        base to work on, defaults to the current directory
     --emit      blocks: print the assembled resident constitution instead of the report
@@ -44,14 +46,35 @@ usage:
                 person's base is whole by name. Nothing else is consulted, and no
                 repository is needed (ADR-0034)
     --top N     how many candidates to carry, default 5. route, boot, eval,
-                promote and serve all read it
+                promote, serve and misses all read it
     --keys      write: the words a real question would use. Required, no way to skip
     --summary   write: one line saying what the note is about, for its `Exists to:`
                 header and for the map entry
-    --folder    write: where under the agent it lands, default knowledge
-    --provenance write: human, agent or external. Default agent
-    --stage     write: raw, distilled or derived. Default derived
+    --folder    write: where under the agent it lands, default knowledge.
+                list: a directory and everything under it
+    --provenance write: human, agent or external. Default agent.
+                list: narrow to one of them
+    --stage     write: raw, distilled or derived. Default derived.
+                list: narrow to raw, captured, distilled or derived
+    --base      list: one agent, by its directory name
+    --kind      list: the species read from the folder: memory, skills or tools
     -m          commit: the message. Required, and so is at least one path
+
+misses reads kb-misses.txt back: every question the free stage could not answer,
+most asked first, with the count, the dates and the vocabulary the base offered at
+the time. Beside each one it names the files today's index nearly caught it with,
+which is the half a log cannot hold, and prints the keys each of those files
+declares. A file the text scorer reached with a keyword score of zero is the whole
+finding: the words are in the note and not on its Search for line, so the fix is an
+alias line or another key rather than another note. It always prints the path it
+read, because KB_MISSES_PATH can move the log and two fleets pointed at one path
+share it. --top N is candidates carried per question, the same meaning it has for
+every other verb, and not how many questions to print.
+
+It proposes and never applies. There is deliberately no flag that applies one.
+kb-aliases.txt is a record of real misses rather than a dictionary, and a machine
+that appends to it on evidence it produced itself closes that loop with nobody in
+it. The step from proposing an alias to writing one is a person, on purpose.
 
 commit exists because more than one session writes these repositories at once.
 It commits exactly the paths you name and then reads the commit back to prove it,
@@ -161,8 +184,10 @@ exit code is 1 when check finds errors, or when --strict and it finds warnings.
 const LINES_SHOWN: usize = 3;
 
 /// Flags that consume the argument after them.
-const VALUE_FLAGS: &[&str] =
-    &["--top", "--keys", "--summary", "--folder", "--provenance", "--stage", "-m", "--port", "--max"];
+const VALUE_FLAGS: &[&str] = &[
+    "--top", "--keys", "--summary", "--folder", "--provenance", "--stage", "--base", "--kind",
+    "-m", "--port", "--max",
+];
 
 fn main() -> ExitCode {
     let args: Vec<String> = std::env::args().skip(1).collect();
@@ -185,6 +210,21 @@ fn main() -> ExitCode {
     match args[0].as_str() {
         "check" => cmd_check(&paths_or_default(&positional), all, strict),
         "index" => cmd_index(&paths_or_default(&positional), all, json),
+        "list" => match list::Filter::parse(
+            flag_value(&args, "--base").as_deref(),
+            flag_value(&args, "--folder").as_deref(),
+            flag_value(&args, "--kind").as_deref(),
+            flag_value(&args, "--stage").as_deref(),
+            flag_value(&args, "--provenance").as_deref(),
+        ) {
+            Ok(f) => cmd_list(&paths_or_default(&positional), all, &f, json),
+            Err(e) => {
+                // Exit 2, the code every other bad argument uses here, and the legal set
+                // named on stderr. An empty result set would have been exit 0 and a lie.
+                eprintln!("kb: {e}");
+                ExitCode::from(2)
+            }
+        },
         "route" => {
             if positional.is_empty() {
                 eprintln!("kb: route needs a question\n");
@@ -243,6 +283,7 @@ fn main() -> ExitCode {
             cmd_commit(&positional, &message)
         }
         "boot" => cmd_boot(&paths_or_default(&positional), all, top),
+        "misses" => cmd_misses(&paths_or_default(&positional), all, top, json),
         "capture" => {
             let paths = paths_or_default(&positional);
             cmd_capture(paths[0], flag_value(&args, "--session").as_deref())
@@ -577,7 +618,11 @@ fn cmd_index(paths: &[&str], all: bool, json: bool) -> ExitCode {
     }
 
     if json {
-        let entries: Vec<index::Entry> = bases.iter().flat_map(|(_, b)| index::build(b)).collect();
+        // **The shape stays a bare array on purpose.** Wrapping it in an object to carry
+        // the unreachable count would break every consumer named in `site/SPEC.md`, and the
+        // count has two other places to be printed.
+        let entries: Vec<index::Entry> =
+            bases.iter().flat_map(|(_, b)| index::build(b).entries).collect();
         print!("{}", index::to_json(&entries));
         return ExitCode::SUCCESS;
     }
@@ -588,9 +633,18 @@ fn cmd_index(paths: &[&str], all: bool, json: bool) -> ExitCode {
     // separate incidents in one week.
     let mut files = 0usize;
     let mut chunks = 0usize;
+    // What the walk could not build an entry for, and what it was never meant to. Counted
+    // here rather than left to `kb check`, because a file that scores zero on every question
+    // is silent everywhere else: it is on disk, it opens, and it reads fine.
+    let mut unreachable: Vec<String> = Vec::new();
+    let mut exempt = 0usize;
     for (root, base) in &bases {
         let name = label(base);
         let path = memory::index_path(root);
+
+        let built = index::build(base);
+        exempt += built.exempt;
+        unreachable.extend(built.unreachable.iter().map(|rel| format!("{name}/{rel}")));
 
         let mut store = match store::Store::open(&path) {
             Ok(s) => s,
@@ -602,8 +656,12 @@ fn cmd_index(paths: &[&str], all: bool, json: bool) -> ExitCode {
         match store.sync(base, &name) {
             Ok(r) => {
                 println!(
-                    "  {name:<10} {} reindexed, {} unchanged, {} removed, {} chunks",
-                    r.reindexed, r.unchanged, r.removed, r.chunks
+                    "  {name:<10} {} reindexed, {} unchanged, {} removed, {} chunks, {} unreachable",
+                    r.reindexed,
+                    r.unchanged,
+                    r.removed,
+                    r.chunks,
+                    built.unreachable.len()
                 );
                 chunks += r.chunks;
             }
@@ -615,7 +673,79 @@ fn cmd_index(paths: &[&str], all: bool, json: bool) -> ExitCode {
         files += base.files.len();
     }
 
-    println!("  total: {files} files, {chunks} chunks, {} indexes", bases.len());
+    // **`unsearchable by design` is on the line because the remainder needs a name.** A
+    // reader who subtracts the entries from the files is otherwise left with a gap and no
+    // way to tell a deliberate exemption from a defect: on this fleet every keyless file is
+    // exempt, so the two numbers are 0 and 63 and the wrong reading of one number would be
+    // that the base is broken.
+    println!(
+        "  total: {files} files, {chunks} chunks, {} indexes, {} unreachable, {exempt} unsearchable by design",
+        bases.len(),
+        unreachable.len()
+    );
+
+    if !unreachable.is_empty() {
+        // The first few, and a pointer rather than the whole list. `kb check` reports the
+        // same set as E02, file by file with the reason attached, and two outputs both
+        // claiming to be the authority is how they come to disagree.
+        for path in unreachable.iter().take(memory::Memory::PATHS_SHOWN) {
+            println!("    {path}");
+        }
+        if unreachable.len() > memory::Memory::PATHS_SHOWN {
+            println!("    ... and {} more", unreachable.len() - memory::Memory::PATHS_SHOWN);
+        }
+        println!("    no `Search for:` line, so no question reaches them. `kb check` names each one as E02");
+    }
+
+    ExitCode::SUCCESS
+}
+
+// ---------------------------------------------------------------------------
+// list
+// ---------------------------------------------------------------------------
+
+/// Lists what the bases hold, by facet, with nothing ranked.
+///
+/// **The verb exists because the other four all score a question against a floor.** A
+/// filter shaped ask carries no ranking problem, so putting it through `kb route` gets
+/// it compared to `SCORE_FLOOR` and returned as a `Guess`, and the reader cannot tell a
+/// base holding three matching files from a base holding none. There is no floor here
+/// and no verdict, because nothing was asked that a number could answer.
+///
+/// Opened through `Memory::open` exactly as `cmd_fleet` and `cmd_route` do, so the
+/// private layer is decided in one place for every surface.
+fn cmd_list(paths: &[&str], all: bool, filter: &list::Filter, as_json: bool) -> ExitCode {
+    let given: Vec<&Path> = paths.iter().map(Path::new).collect();
+    let memory = match memory::Memory::open(&given, all) {
+        Ok(m) => m,
+        Err(e) => {
+            eprintln!("kb: {e}");
+            return ExitCode::from(1);
+        }
+    };
+
+    let rows = match memory.list(filter) {
+        Ok(r) => r,
+        Err(e) => {
+            eprintln!("kb: {e}");
+            return ExitCode::from(1);
+        }
+    };
+
+    if as_json {
+        println!("{}", list::to_json(&rows).to_string());
+        return ExitCode::SUCCESS;
+    }
+
+    print!("{}", list::to_text(&rows));
+    // The count on its own line, always, including when it is zero. An empty listing
+    // with no line under it reads as a command that did not run, which is the reading
+    // `print_if_nothing_to_search` exists to prevent one surface over.
+    println!("
+{} files", rows.len());
+    if !all {
+        println!("  the private layer is not listed. --all includes it");
+    }
     ExitCode::SUCCESS
 }
 
@@ -646,6 +776,58 @@ fn print_suggestions(words: &[String]) {
     println!("  and never finds a translation.");
 }
 
+/// Where the shortfall sentences fold, matching the hand-wrapped literals around them.
+///
+/// Every other block on this terminal is wrapped by whoever typed it, at roughly this
+/// width, because those lines are string literals in the source. The shortfall sentences
+/// are built at runtime and were not, and `kb route` on a one entry base printed a 230
+/// character line straight off the edge of the window. Same defect as the near miss key
+/// list two changes ago, and caught the same way: by running it rather than by asserting
+/// on the string, which is happy either way.
+const SHORTFALL_WIDTH: usize = 72;
+
+/// Greedy word wrap. **Never splits a word**, so a path or a backticked verb comes out
+/// whole and overruns rather than arriving as two halves neither of which can be searched
+/// for or pasted.
+fn wrapped(text: &str, width: usize) -> Vec<String> {
+    let mut rows: Vec<String> = Vec::new();
+    for word in text.split_whitespace() {
+        match rows.last_mut() {
+            Some(row) if row.chars().count() + 1 + word.chars().count() <= width => {
+                row.push(' ');
+                row.push_str(word);
+            }
+            _ => rows.push(word.to_string()),
+        }
+    }
+    rows
+}
+
+/// The state the refusal above was refused from, under it.
+///
+/// **The refusal arrived at the wrong moment to be understood, and this is the moment.**
+/// A reader who is told only that nothing matched has no way to tell a fleet of one entry
+/// from a fleet of a thousand, a base whose notes carry no keys from one whose notes are
+/// fine and simply do not cover the subject. Those want opposite work, and the numbers
+/// that separate them were already computed and thrown away.
+///
+/// Prints nothing at all when there is nothing true to say, including the blank line: a
+/// gap under a refusal reads as a section that failed to render. The sentences are
+/// [`memory::Shortfall::lines`]'s, not this function's, so `mcp.rs` and `boot.rs` cannot
+/// drift from what a terminal says and a test can hold the wording.
+fn print_shortfall(memory: &memory::Memory, confidence: &memory::Confidence) {
+    let said = memory.shortfall(confidence).lines();
+    if said.is_empty() {
+        return;
+    }
+    println!();
+    for line in said {
+        for row in wrapped(&line, SHORTFALL_WIDTH) {
+            println!("  {row}");
+        }
+    }
+}
+
 /// Printed instead of a miss when there is nothing to search.
 ///
 /// Returns true when it handled the case, so the caller stops. See
@@ -661,6 +843,21 @@ fn print_if_nothing_to_search(memory: &memory::Memory) -> bool {
     println!("  MAP.md with a `Search for:` line naming the words a real question");
     println!("  would use, then run `kb index`. An entry without that line is an");
     println!("  entry nothing can reach.");
+    // **The diagnosis the paragraph above only gestures at.** A base can be empty in the
+    // sense that matters here while holding markdown somebody already wrote: no
+    // `Search for:` line means no entry, so the files are on disk and the library is
+    // still empty. Telling that reader to start writing files is telling them to do
+    // again what they have already done.
+    let keyless = memory.unreachable().len();
+    if keyless > 0 {
+        println!();
+        let (are, them) = match keyless {
+            1 => ("file is", "it"),
+            _ => ("files are", "them"),
+        };
+        println!("  {keyless} markdown {are} already here without that line, which is");
+        println!("  why there is nothing to search. `kb check` names {them}.");
+    }
     println!();
     println!("  `kb fleet` works regardless: identity is read from fleet.txt and");
     println!("  agent.txt, never from the index.");
@@ -731,6 +928,7 @@ fn cmd_route(
             if !print_if_nothing_to_search(&memory) {
                 println!("  nothing matched. Either the base does not cover it, or the");
                 println!("  Search for lines do not carry the words a real question uses.");
+                print_shortfall(&memory, &answer.confidence);
                 print_suggestions(looked_like);
             }
             return ExitCode::SUCCESS;
@@ -757,6 +955,7 @@ fn cmd_route(
             println!("  nothing matched, in either scorer. Either the base does not cover");
             println!("  it, or the Search for lines do not carry the words a real question");
             println!("  uses.");
+            print_shortfall(&memory, &answer.confidence);
             print_suggestions(looked_like);
         }
         return ExitCode::SUCCESS;
@@ -813,6 +1012,15 @@ fn cmd_route(
 ///   caller reading stdout alone has one field to check before reading `results: []`
 ///   as "the base does not cover this", which is the exact mistake a deployment used
 ///   to make when a bundle without `.git` served nothing.
+/// - `unreachable` says what the base holds and cannot reach, in two counts because they
+///   are two answers to one caller question and want opposite work. `files` is an
+///   authoring problem: a file with no `Search for:` line is on disk, readable, and scores
+///   zero on every question, and until now it was reported only through `kb check` E02,
+///   which nobody is required to run. `unindexed` is a `kb index` that never ran, which is
+///   the window the SessionEnd hook opens every time: it runs `kb capture`, detaches
+///   `kb promote`, and never indexes. It sits at the top level rather than inside
+///   `indexed`, because that object counts what worked and burying a failure inside a
+///   success is how it gets skipped.
 /// - `suggestions` carries what the miss path prints, so a caller can offer the words
 ///   the base does know instead of a dead end.
 /// - `miss` is the recall loss itself, whole, for a caller with nowhere to write. The
@@ -921,6 +1129,26 @@ fn route_payload(question: &str, memory: &memory::Memory, top: usize) -> json::V
     indexed.set("aliases", memory.alias_count().into());
     out.set("indexed", indexed);
 
+    // **Beside `gate`, not inside `indexed`.** The counts are exact and only the arrays are
+    // capped at `Memory::PATHS_SHOWN`: a capped count beside a capped list would understate
+    // the size of the problem by exactly as much as the list was shortened.
+    let paths = |all: &[&str]| {
+        json::Value::Arr(
+            all.iter()
+                .take(memory::Memory::PATHS_SHOWN)
+                .map(|p| (*p).into())
+                .collect(),
+        )
+    };
+    let cannot_reach = memory.unreachable();
+    let lagging = memory.unindexed();
+    let mut unreachable = json::Value::obj();
+    unreachable.set("files", cannot_reach.len().into());
+    unreachable.set("paths", paths(&cannot_reach));
+    unreachable.set("unindexed", lagging.len().into());
+    unreachable.set("unindexed_paths", paths(&lagging));
+    out.set("unreachable", unreachable);
+
     out.set(
         "skipped",
         json::Value::Arr(
@@ -1003,6 +1231,242 @@ fn open_error_as_json(input_field: &str, input: &str, error: &str) -> json::Valu
 fn route_as_json(question: &str, memory: &memory::Memory, top: usize) -> ExitCode {
     println!("{}", route_payload(question, memory, top).to_string());
     ExitCode::SUCCESS
+}
+
+/// `kb misses`: the recall loss log, read back with what nearly caught each question.
+///
+/// **Reads the log from `Memory::opened.first()` and not from `paths[0]`.** That is
+/// exactly where [`memory::Memory::recall_loss`] writes it, and a reader that recomputed
+/// the root from the argument list would be reading a different file the moment the path
+/// list is defaulted, reordered, or a fleet root is expanded into its agents.
+///
+/// Exit 0 when there is no log: a fleet nothing has missed against is healthy, not
+/// broken. Exit 1 only when the base cannot be opened or the log cannot be read.
+fn cmd_misses(paths: &[&str], all: bool, top: usize, as_json: bool) -> ExitCode {
+    let given: Vec<&Path> = paths.iter().map(Path::new).collect();
+    let memory = match memory::Memory::open(&given, all) {
+        Ok(m) => m,
+        Err(e) => {
+            eprintln!("kb: {e}");
+            return ExitCode::from(1);
+        }
+    };
+    // **The same warning `cmd_route` prints, for a sharper reason here.** An emptied
+    // index makes every near miss list empty, which reads as "nothing nearly matched
+    // this question" when the truth is "there is nothing to match against". That would
+    // send a reader off to write alias lines for a problem that is an unrun `kb index`.
+    if memory.index_was_rebuilt {
+        eprintln!("kb: an index predated the private column (ADR-0034) and was emptied. Run `kb index`.");
+    }
+
+    let root = memory.opened.first().cloned().unwrap_or_default();
+    let log = misses::path_in(&root);
+    let lost = match misses::load(&log) {
+        Ok(l) => l,
+        Err(e) => {
+            eprintln!("kb: {e}");
+            return ExitCode::from(1);
+        }
+    };
+
+    if as_json {
+        println!("{}", misses_payload(&log, &lost, &memory, top).to_string());
+        return ExitCode::SUCCESS;
+    }
+
+    // Printed whether or not anything was found. A reader told "nothing was lost"
+    // without being told which file was consulted cannot check the claim, and
+    // `KB_MISSES_PATH` makes that a real question rather than a pedantic one.
+    println!("log:      {}", log.display());
+    println!(
+        "indexed:  {} entries across {} agents, floor {:.2}",
+        memory.entry_count(),
+        memory.agents.len(),
+        memory.floor()
+    );
+
+    if lost.is_empty() {
+        println!();
+        println!("  nothing has missed here. Either no question has reached this base and");
+        println!("  failed, or the log lives somewhere else: KB_MISSES_PATH moves it.");
+        return ExitCode::SUCCESS;
+    }
+
+    let asks: u32 = lost.iter().map(|m| m.count).sum();
+    println!("lost:     {} distinct questions, {asks} asks", lost.len());
+
+    let floor = memory.floor();
+    for m in &lost {
+        print_miss(m, &memory.near_misses(&m.question, top), floor);
+    }
+
+    println!();
+    println!("  Write the alias line, or add the key to that file's `Search for:` line,");
+    println!("  then delete the question from the log. This verb will not do it for you:");
+    println!("  kb-aliases.txt is a record of real misses, not a dictionary.");
+
+    ExitCode::SUCCESS
+}
+
+/// One logged question and what nearly caught it, on a terminal.
+///
+/// Split out of [`cmd_misses`] so the loop stays one line, the same shape
+/// [`print_suggestions`] and [`format_group`] have. Prints and decides nothing.
+fn print_miss(m: &misses::Miss, near: &[memory::NearMiss], floor: f32) {
+    println!();
+    let dates = if m.first == m.last {
+        m.first.clone()
+    } else {
+        format!("{} to {}", m.first, m.last)
+    };
+    println!("  {:>3}x  {dates}  {}", m.count, m.question);
+
+    if !m.looked_like.is_empty() {
+        println!("        looked like: {}", m.looked_like.join(", "));
+    }
+
+    if near.is_empty() {
+        // **Says what was observed and stops.** This line used to conclude "this is
+        // coverage, not keys", and that does not follow: an empty near-miss list means
+        // the text scorer ranked nothing either, which is true both of a base that does
+        // not cover the subject and of a base that covers it in words this question did
+        // not use. Nothing here can tell those apart, so nothing here claims to. Run it
+        // against `examples/demo` and the old sentence prints for `quem aprova um
+        // deploi`, a typo of a question the base answers.
+        println!("        no file was ranked by either scorer, so there is nothing to point at.");
+        return;
+    }
+
+    println!("        under this corpus floor of {floor:.2} today:");
+    for n in near {
+        let title = if n.title.is_empty() { String::new() } else { format!("  {}", n.title) };
+        println!(
+            "          {}/{}  keyword {:.2}  {}{title}",
+            n.base,
+            n.rel,
+            n.keyword_score,
+            n.why.join(" + ")
+        );
+        println!("            {}", keys_line(&n.keys));
+    }
+}
+
+/// How many of a file's keys the terminal shows before it gives up and counts.
+///
+/// **Measured on the real fleet, not chosen.** The first run of this verb against
+/// `fleet/` printed one note's 70 keys as a single unwrapped line, three times in one
+/// screen, and the file path and score they were attached to scrolled out of reach. The
+/// keys are here so a reader can see what the file thinks it is about; a dump is
+/// something they have to read past. Same size and same reasoning as
+/// [`memory::Memory::SUGGEST_LIMIT`], kept separate because that one bounds what the
+/// contract returns and this one bounds what a terminal prints.
+const KEYS_SHOWN: usize = 8;
+
+/// The keys a near miss carries, shortened for a terminal and honest about it.
+///
+/// Pure, so the cap can be tested without capturing stdout, which is the only reason it
+/// is not three lines inside [`print_miss`].
+///
+/// **The count is exact and only the list is short**, the rule
+/// [`memory::Memory::PATHS_SHOWN`] states: a truncated list with nothing saying it was
+/// truncated understates the problem by exactly as much as it was truncated. `kb misses
+/// --json` caps nothing, because a program can hold seventy strings and a caller
+/// comparing keys against a question needs all of them.
+///
+/// Empty is printed rather than skipped, because empty is the finding: the index holds
+/// no entry for the file, so the text scorer reached something the keyword scorer can
+/// never see, and the work there is a `Search for:` line rather than an alias.
+fn keys_line(keys: &[String]) -> String {
+    if keys.is_empty() {
+        return "keys: none. The index holds no entry for this file.".to_string();
+    }
+    let shown = keys.iter().take(KEYS_SHOWN).cloned().collect::<Vec<_>>().join(", ");
+    if keys.len() > KEYS_SHOWN {
+        format!("keys: {shown}, and {} more", keys.len() - KEYS_SHOWN)
+    } else {
+        format!("keys: {shown}")
+    }
+}
+
+/// The body of `kb misses --json`, as a value rather than as a line of stdout.
+///
+/// Split from the command for the reason [`route_payload`] is: a function that prints
+/// can be read by a person and by nothing else, so the shape an integrator parses would
+/// have no test under it.
+///
+/// `exists` is separate from an empty `misses` array on purpose. A log that was never
+/// written and a log somebody has emptied by acting on it are the same array and two
+/// different facts, and only one of them means the recording is wired up at all.
+fn misses_payload(
+    log: &Path,
+    lost: &[misses::Miss],
+    memory: &memory::Memory,
+    top: usize,
+) -> json::Value {
+    let mut out = json::Value::obj();
+    out.set("log", log.display().to_string().into());
+    out.set("exists", log.exists().into());
+    out.set("floor", score(memory.floor() as f64));
+
+    let mut indexed = json::Value::obj();
+    indexed.set("entries", memory.entry_count().into());
+    indexed.set("agents", memory.agents.len().into());
+    out.set("indexed", indexed);
+
+    // Distinct questions and total asks are two sizes of one problem: how much there is
+    // to fix, and what leaving it unfixed is costing.
+    out.set("total_questions", lost.len().into());
+    out.set("total_asks", lost.iter().map(|m| m.count as usize).sum::<usize>().into());
+
+    out.set(
+        "misses",
+        json::Value::Arr(
+            lost.iter()
+                .map(|m| {
+                    let mut one = json::Value::obj();
+                    one.set("count", (m.count as usize).into());
+                    one.set("first", m.first.as_str().into());
+                    one.set("last", m.last.as_str().into());
+                    one.set("question", m.question.as_str().into());
+                    one.set(
+                        "looked_like",
+                        json::Value::Arr(
+                            m.looked_like.iter().map(|w| w.as_str().into()).collect(),
+                        ),
+                    );
+                    one.set(
+                        "near",
+                        json::Value::Arr(
+                            memory
+                                .near_misses(&m.question, top)
+                                .iter()
+                                .map(near_as_json)
+                                .collect(),
+                        ),
+                    );
+                    one
+                })
+                .collect(),
+        ),
+    );
+
+    out
+}
+
+/// One candidate the gate refused, and the keys it carries instead.
+///
+/// `path` rather than `rel`, so a caller reading this beside `route --json` finds the
+/// field where the other payload put it. The score goes through [`score`] for the same
+/// reason every other one does: an `f32` widened to `f64` prints precision it never had.
+fn near_as_json(n: &memory::NearMiss) -> json::Value {
+    let mut out = json::Value::obj();
+    out.set("base", n.base.as_str().into());
+    out.set("path", n.rel.as_str().into());
+    out.set("title", n.title.as_str().into());
+    out.set("keyword_score", score(n.keyword_score as f64));
+    out.set("why", json::Value::Arr(n.why.iter().map(|w| w.as_str().into()).collect()));
+    out.set("keys", json::Value::Arr(n.keys.iter().map(|k| k.as_str().into()).collect()));
+    out
 }
 
 /// Every score in the JSON goes through here, rounded to six decimals.
@@ -1209,12 +1673,6 @@ fn cmd_answer_complete(question: &str, memory: &memory::Memory, root: &Path) -> 
     }
 }
 
-/// `kb promote`: the deposit becomes knowledge, or it does not and says why.
-///
-/// The whole design is in `promote.rs`. What lives here is the reporting, and it reports
-/// refusals as loudly as writes: a promotion run whose output is only what it wrote is a
-/// run that looks successful when it accepted everything.
-
 /// `kb answer`: retrieval's findings, written up by the manifest's answerer.
 ///
 /// The command is three refusals wrapped around one model call, in this order: no
@@ -1250,10 +1708,20 @@ fn cmd_answer(question: &str, paths: &[&str], all: bool, top: usize, mode: answe
     if !answer::worth_asking(&a.confidence, &a.found) {
         // The same refusal `kb route` gives, with the same suggestions: absence is an
         // answer, and it costs zero model calls.
-        println!("nothing in the library matched. Either it does not cover this, or the");
-        println!("Search for lines do not carry the words the question used.");
-        if !looked_like.is_empty() {
-            println!("  it does know: {}", looked_like.join(", "));
+        //
+        // **The empty base guard was missing here alone.** `cmd_route` and both MCP tools
+        // ask `is_empty` first; this path did not, so a fresh `kb init` asking its first
+        // question was told its phrasing did not match keyword lines that do not exist.
+        // That is the exact sentence measured wrong on 2026-08-17 and fixed on every
+        // other surface, still printing here because this refusal was written separately
+        // from the one it copies.
+        if !print_if_nothing_to_search(&memory) {
+            println!("nothing in the library matched. Either it does not cover this, or the");
+            println!("Search for lines do not carry the words the question used.");
+            print_shortfall(&memory, &a.confidence);
+            if !looked_like.is_empty() {
+                println!("  it does know: {}", looked_like.join(", "));
+            }
         }
         return ExitCode::SUCCESS;
     }
@@ -1297,6 +1765,11 @@ fn cmd_answer(question: &str, paths: &[&str], all: bool, top: usize, mode: answe
     }
 }
 
+/// `kb promote`: the deposit becomes knowledge, or it does not and says why.
+///
+/// The whole design is in `promote.rs`. What lives here is the reporting, and it reports
+/// refusals as loudly as writes: a promotion run whose output is only what it wrote is a
+/// run that looks successful when it accepted everything.
 fn cmd_promote(
     paths: &[&str],
     all: bool,
@@ -1966,13 +2439,10 @@ fn cmd_remember(claim: &str, paths: &[&str], all: bool, as_json: bool) -> ExitCo
 // Reporting
 // ---------------------------------------------------------------------------
 
+/// The name printed beside a base's numbers, which has to be the name stamped on its
+/// entries. It was the same six lines as `index::build`'s copy until one of them moved.
 fn label(base: &Base) -> String {
-    base.root
-        .canonicalize()
-        .unwrap_or_else(|_| base.root.clone())
-        .file_name()
-        .map(|n| n.to_string_lossy().to_string())
-        .unwrap_or_else(|| base.root.display().to_string())
+    index::base_name(&base.root)
 }
 
 struct Group<'a> {
@@ -2280,6 +2750,44 @@ with a body"];
         }
     }
 
+    /// The premise of `kb list`, pinned where a caller can actually observe it.
+    ///
+    /// There is no ranking question, so there is no number to argue with and nothing to
+    /// branch on. `route_payload` carries `score`, `gate`, `verdict`, `keyword_score`
+    /// and `matched` because a caller has to decide whether to trust a ranking; a
+    /// listing answers a filter, and a score on it would be a number computed against
+    /// no question at all. The facets are asserted present in the same test, because a
+    /// payload that carries nothing also carries no score.
+    #[test]
+    fn a_listing_payload_carries_no_score_no_gate_and_no_verdict() {
+        let (_, memory) = indexed_fleet("listing", &one_note_the_keyword_scorer_can_reach());
+        let rows = memory.list(&list::Filter::default()).expect("lists");
+        let out = list::to_json(&rows);
+
+        let items = match &out {
+            json::Value::Arr(a) => a.clone(),
+            other => panic!("a listing is an array of files: {other:?}"),
+        };
+        assert!(!items.is_empty(), "the fixture has files: {}", out.to_string());
+
+        for row in &items {
+            for absent in ["score", "gate", "verdict", "keyword_score", "matched", "why"] {
+                assert!(
+                    row.get(absent).is_none(),
+                    "{absent} is a ranking answer and nothing here was ranked: {}",
+                    out.to_string()
+                );
+            }
+            for present in ["base", "path", "kind", "folder", "layer", "private"] {
+                assert!(
+                    row.get(present).is_some(),
+                    "{present} left the payload: {}",
+                    out.to_string()
+                );
+            }
+        }
+    }
+
     /// The contract, listed by name. A field that leaves the payload breaks a caller
     /// silently, because a missing key and a key holding `null` read the same way in
     /// most languages, so the field list is pinned rather than described.
@@ -2296,6 +2804,7 @@ with a body"];
             "agent",
             "keyword_top",
             "indexed",
+            "unreachable",
             "skipped",
             "index_was_rebuilt",
             "suggestions",
@@ -2653,6 +3162,33 @@ with a body"];
     }
 
     /// **Found by running it, not by the tests above.** Moving the recording inside
+    /// **Found by running it, not by asserting on it.** The shortfall sentences are the
+    /// only block on this terminal built at runtime rather than typed as a literal, so
+    /// they were the only block nobody had wrapped, and the first real run printed one 230
+    /// characters wide. A test on the string is happy either way, which is why this one is
+    /// about the shape and not the words.
+    #[test]
+    fn a_runtime_sentence_folds_like_the_literals_around_it() {
+        let long = "The library holds 1 entry across 1 agent in all, and under 2 entries \
+                    nothing can be a hit whatever it scores.";
+        let rows = wrapped(long, SHORTFALL_WIDTH);
+
+        assert!(rows.len() > 1, "a 130 character sentence is more than one row: {rows:?}");
+        for row in &rows {
+            assert!(row.chars().count() <= SHORTFALL_WIDTH, "over the width: {row:?}");
+        }
+        assert_eq!(
+            rows.join(" ").split_whitespace().collect::<Vec<_>>(),
+            long.split_whitespace().collect::<Vec<_>>(),
+            "every word survives, in order and unsplit"
+        );
+
+        // A word longer than the width overruns rather than being cut in two: half a path
+        // is a string nobody can search for or paste.
+        let path = "probe/knowledge/a-very-long-file-name-that-exceeds-the-width-on-its-own.md";
+        assert_eq!(wrapped(path, 20), vec![path.to_string()]);
+    }
+
     /// `print_suggestions` left it riding on a branch that asks a different question:
     /// the hybrid terminal path prints the miss message only when the fused list is
     /// empty, so a refusal over passages it went on to print recorded nothing. The
@@ -2722,5 +3258,222 @@ with a body"];
 
         let written = std::fs::read_to_string(&log).expect("the miss log was written");
         assert!(written.contains("rollback sem downtime"), "{written}");
+    }
+
+    fn arr_len(v: &json::Value, path: [&str; 2]) -> usize {
+        match v.get(path[0]).and_then(|o| o.get(path[1])) {
+            Some(json::Value::Arr(a)) => a.len(),
+            other => panic!("{}.{} is not an array: {other:?}", path[0], path[1]),
+        }
+    }
+
+    /// **A base that holds files it cannot reach says so to a caller, not only to whoever
+    /// runs `kb check`.**
+    ///
+    /// The two counts sit in one object because they are two answers to one question, what
+    /// is in this base that I cannot reach, and they call for opposite work: `files` is an
+    /// authoring problem and `unindexed` is a `kb index` that never ran.
+    #[test]
+    fn the_route_payload_says_what_the_base_cannot_reach() {
+        let mut notes: Vec<(&str, String)> = one_note_the_keyword_scorer_can_reach();
+        notes.push(("knowledge/orphan.md", "# Orphan\n\nno keys at all.\n".into()));
+        let (_, memory) = indexed_fleet("unreachable", &notes);
+
+        let out = route_payload("como faco rollback de um deploy sem downtime", &memory, 4);
+        let u = out.get("unreachable").expect("unreachable left the payload");
+        for field in ["files", "paths", "unindexed", "unindexed_paths"] {
+            assert!(u.get(field).is_some(), "unreachable.{field} is missing: {}", out.to_string());
+        }
+
+        assert_eq!(num_of(&out, ["unreachable", "files"]), memory.unreachable().len() as f64);
+        assert_eq!(num_of(&out, ["unreachable", "files"]), 1.0, "{}", out.to_string());
+        assert_eq!(arr_len(&out, ["unreachable", "paths"]), 1);
+        assert_eq!(
+            num_of(&out, ["unreachable", "unindexed"]),
+            memory.unindexed().len() as f64
+        );
+        assert_eq!(
+            num_of(&out, ["unreachable", "unindexed"]),
+            0.0,
+            "the fixture syncs before it opens, so nothing is lagging"
+        );
+    }
+
+    /// A capped array beside a capped count is a payload that lies about the size of the
+    /// problem. The count is always exact; only the list of paths is shortened.
+    #[test]
+    fn the_count_stays_exact_when_the_path_list_is_capped() {
+        let names: Vec<String> =
+            (0..12).map(|i| format!("knowledge/orphan-{i}.md")).collect();
+        let mut notes: Vec<(&str, String)> = one_note_the_keyword_scorer_can_reach();
+        for name in &names {
+            notes.push((name.as_str(), "# Orphan\n\nno keys at all.\n".into()));
+        }
+        let (_, memory) = indexed_fleet("capped", &notes);
+
+        let out = route_payload("como faco rollback de um deploy sem downtime", &memory, 4);
+        assert_eq!(num_of(&out, ["unreachable", "files"]), 12.0, "{}", out.to_string());
+        assert_eq!(
+            arr_len(&out, ["unreachable", "paths"]),
+            memory::Memory::PATHS_SHOWN,
+            "the list is capped"
+        );
+    }
+    // -----------------------------------------------------------------------
+    // `kb misses`, the reader over the recall loss log
+    // -----------------------------------------------------------------------
+
+    /// **The reason the verb exists, end to end.** F-02: the base holds the answer
+    /// and only its keys are wrong.
+    ///
+    /// The striped note's keys, title and purpose are about an animal and its body is
+    /// about rollbacks, so "rollback sem downtime" is refused by the gate, recorded as
+    /// a recall loss, and still reached by the text scorer. What the log cannot hold is
+    /// which file that was, because that depends on the base as it stands today rather
+    /// than on the question that was lost.
+    ///
+    /// A `keyword_score` of 0.0 beside a `text #N` is the whole finding: the words are
+    /// in the file and not on its `Search for:` line, so the work is an alias line or
+    /// another key, not a new note. The keys come back so the reader can see which
+    /// words are there instead.
+    #[test]
+    fn the_file_whose_body_matched_is_named_with_the_keys_that_did_not() {
+        let (root, memory) = indexed_fleet("misses-verb", &one_note_only_the_text_scorer_can_reach());
+
+        let refused = route_payload("rollback sem downtime", &memory, 4);
+        assert_eq!(text_of(&refused, "verdict"), "nothing", "{}", refused.to_string());
+
+        let log = kb::misses::path_in(&root);
+        let lost = misses::load(&log).expect("the log the refusal just wrote");
+        let out = misses_payload(&log, &lost, &memory, 4);
+
+        let questions = match out.get("misses") {
+            Some(json::Value::Arr(a)) => a.clone(),
+            other => panic!("misses is not an array: {other:?}"),
+        };
+        assert_eq!(questions.len(), 1, "{}", out.to_string());
+        assert_eq!(text_of(&questions[0], "question"), "rollback sem downtime");
+
+        let near = match questions[0].get("near") {
+            Some(json::Value::Arr(a)) => a.clone(),
+            other => panic!("near is not an array: {other:?}"),
+        };
+        assert!(!near.is_empty(), "the text scorer reached the note: {}", out.to_string());
+        assert_eq!(text_of(&near[0], "path"), "knowledge/striped.md", "{}", out.to_string());
+        assert_eq!(
+            near[0].get("keyword_score"),
+            Some(&json::Value::Num(0.0)),
+            "the keyword scorer never saw it: {}",
+            out.to_string()
+        );
+        match near[0].get("why") {
+            Some(json::Value::Arr(w)) => assert!(
+                w.iter().any(|s| matches!(s, json::Value::Str(t) if t.starts_with("text #"))),
+                "only the text scorer voted: {}",
+                out.to_string()
+            ),
+            other => panic!("why is not an array: {other:?}"),
+        }
+        match near[0].get("keys") {
+            Some(json::Value::Arr(k)) => assert_eq!(
+                k.clone(),
+                vec![
+                    json::Value::Str("zebra".into()),
+                    json::Value::Str("quagga".into())
+                ],
+                "the line the reader edits: {}",
+                out.to_string()
+            ),
+            other => panic!("keys is not an array: {other:?}"),
+        }
+    }
+
+    /// Nothing lost is exit 0 and a named file, not an error and not silence.
+    ///
+    /// The path matters more than it looks: `KB_MISSES_PATH` can move the log
+    /// anywhere, so a reader that reports nothing without saying where it looked is
+    /// unfalsifiable, and two fleets pointed at one path share one log.
+    #[test]
+    fn a_fleet_that_has_missed_nothing_exits_zero_and_says_which_file_it_looked_in() {
+        let (root, memory) = indexed_fleet("misses-empty", &one_note_the_keyword_scorer_can_reach());
+        let log = kb::misses::path_in(&root);
+        assert!(!log.exists(), "nothing has missed against this fleet");
+
+        let out = misses_payload(&log, &[], &memory, 4);
+        assert_eq!(text_of(&out, "log"), log.display().to_string(), "{}", out.to_string());
+        assert_eq!(out.get("exists"), Some(&json::Value::Bool(false)), "{}", out.to_string());
+        assert_eq!(len_of(&out, "misses"), 0, "{}", out.to_string());
+
+        let path = root.to_str().expect("a utf-8 scratch path");
+        assert_eq!(
+            format!("{:?}", cmd_misses(&[path], true, 4, true)),
+            format!("{:?}", ExitCode::SUCCESS),
+            "a healthy fleet is not a failure"
+        );
+    }
+
+    /// **Found by running it, not by the tests above.** On the real fleet one near miss
+    /// carried 70 keys and printed them as a single line wider than any terminal, three
+    /// times over, which buries the one thing the verb exists to show.
+    ///
+    /// The rule is `Memory::PATHS_SHOWN`'s: the count stays exact and only the list is
+    /// shortened, because a short list with no count beside it understates the problem by
+    /// exactly as much as it was shortened. The JSON is not capped: a program can hold
+    /// seventy strings, and a caller diffing keys against a question needs all of them.
+    #[test]
+    fn a_terminal_line_shows_a_shortlist_of_keys_and_says_how_many_it_left_out() {
+        let many: Vec<String> = (0..70).map(|i| format!("k{i}")).collect();
+        let line = keys_line(&many);
+        assert!(line.contains("k0"), "{line}");
+        assert!(
+            !line.contains(&format!("k{}", KEYS_SHOWN)),
+            "the list stops at the cap: {line}"
+        );
+        assert!(
+            line.contains(&format!("{} more", 70 - KEYS_SHOWN)),
+            "the count is exact even though the list is not: {line}"
+        );
+
+        let few: Vec<String> = vec!["zebra".into(), "quagga".into()];
+        let short = keys_line(&few);
+        assert!(short.contains("zebra, quagga"), "{short}");
+        assert!(!short.contains("more"), "nothing was left out: {short}");
+
+        // Empty is a finding and not a blank: no index entry means the keyword scorer
+        // cannot see the file at all, so the work is a `Search for:` line.
+        assert!(keys_line(&[]).contains("none"), "{}", keys_line(&[]));
+
+        // And the payload a program reads keeps every one of them.
+        let near = memory::NearMiss {
+            base: "probe".into(),
+            rel: "knowledge/striped.md".into(),
+            title: String::new(),
+            keyword_score: 0.0,
+            why: vec!["text #1".into()],
+            keys: many.clone(),
+        };
+        match near_as_json(&near).get("keys") {
+            Some(json::Value::Arr(k)) => assert_eq!(k.len(), 70, "the JSON is not capped"),
+            other => panic!("keys is not an array: {other:?}"),
+        }
+    }
+
+    /// The deliberate missing step, made executable rather than left in prose.
+    ///
+    /// A verb that proposes an alias sits one step from a verb that writes one, and
+    /// `kb-aliases.txt` is a record of misses rather than a dictionary: a machine that
+    /// appends to it on evidence it also generated closes that loop with nobody in it.
+    /// A decision recorded only in a doc comment is a decision the next change deletes
+    /// without noticing it was one, so the flag's absence and the reason for it are
+    /// both asserted.
+    #[test]
+    fn there_is_no_way_to_apply_a_suggestion_from_this_verb() {
+        assert!(!USAGE.contains("--apply"), "the flag is not offered anywhere a person reads");
+        assert!(!VALUE_FLAGS.contains(&"--apply"), "nor parsed");
+        assert!(
+            USAGE.contains("There is deliberately no flag that applies one."),
+            "the reason travels with the absence:
+{USAGE}"
+        );
     }
 }
