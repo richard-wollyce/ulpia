@@ -403,13 +403,14 @@ and does not care.** That is the reason retrieval lives here rather than in the 
 the passages travel in the prompt, with a local model nothing leaves the machine, and both read the
 same code.
 
-Three tools, all read only:
+Four tools, all read only:
 
 | Tool | Returns |
 |---|---|
 | `kb_route` | Ranked file paths with the words that matched. Cheap, no file contents |
-| `kb_retrieve` | The passages themselves, with heading path and provenance |
+| `kb_retrieve` | The passages themselves, with heading path, provenance and the short memory label |
 | `kb_remember` | The ADD / UPDATE / NOOP proposal and its evidence. **Writes nothing** |
+| `kb_fleet` | The roster: the fleet's name and role, and every agent with theirs. Read from the manifests, never from the index |
 
 There is no write tool yet, deliberately. A write reached by a model is a different security surface
 and gets built on purpose rather than while the retrieval side is still warm.
@@ -572,14 +573,19 @@ Exit code is 1 when there are errors, or when `--strict` and there are warnings.
 | Code | Level | What it catches |
 |------|-------|-----------------|
 | E01  | error | A `[[link]]` with no file behind it |
-| E02  | error | A note in the knowledge folder with no entry in the map. A file nobody can find does not exist |
-| E03  | error | No map file at the root |
+| E02  | error | A file with no `Search for:` line, so the router builds no entry for it. A file nobody can find does not exist |
+| E04  | error | `provenance` or `stage` carries a value outside the legal set |
 | W01  | warn  | A `[[link]]` matching more than one file, so it is ambiguous |
-| W02  | warn  | A map entry with no `Search for:` line, so grep cannot route to it |
+| W02  | warn  | A map entry with no `Search for:` line, where a map exists |
 | W03  | warn  | An em dash or en dash, which house style forbids |
 | W04  | warn  | A note declaring a source with no `evidence_tier` or `valid_for` |
 | W05  | warn  | A note with no `provenance` or no `stage`, so who wrote it is unknown |
-| E04  | error | `provenance` or `stage` carries a value outside the legal set |
+| W06  | warn  | A `Search for:` line too short to be found by a real question |
+| W07  | warn  | A key that reaches neither the keyword nor the phrase index, because it collapses to nothing after stopwords |
+| W08  | warn  | A `.gitignore` is here and misses a folder the base declares private |
+
+E03, no map file, is gone with the reason it existed: the index walks files since ADR-0028 and a map
+is a reading list for people, so a base without one indexes perfectly well.
 
 Links inside fenced blocks and inline code are ignored, because a base that documents its own link
 convention writes `[[file-name]]` in backticks and those are examples, not references. The
