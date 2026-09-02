@@ -30,8 +30,16 @@ jobs:
           [ -f "$KB.exe" ] && KB="$KB.exe"
           "$KB" check --all examples/demo
           "$KB" eval examples/demo/gold.tsv examples/demo --all | tee eval.out
-          grep -q "10/10" eval.out
-          grep -q "abstained on 3/3" eval.out
+          # The lines asserted are the ones the front page quotes, so a wording change
+          # here is a front page change and fails loudly rather than drifting. The
+          # abstention line split into three columns on 2026-08-30 (F-05: refusing and
+          # hedging stopped sharing a number), and the floor learned to scale with the
+          # corpus on 2026-09-02 (ADR-0036), which is what makes routes 10/10 and zero
+          # demotions true on eleven entries.
+          grep -q "keyword 10/10" eval.out
+          grep -q "routes  10/10" eval.out
+          grep -q "demoted 0/10" eval.out
+          grep -q "refused 3, hedged 0, answered 0" eval.out
 
       # The JSON contract is what a program calls, so it is checked by parsing rather
       # than by reading. A shape nothing parses is a string that happens to have braces
