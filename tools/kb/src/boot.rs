@@ -295,16 +295,35 @@ pub fn brief(memory: &Memory, root: &Path, req: &Request, top: usize) -> Briefin
             };
         }
 
+        // **The parenthetical that used to be here read as "you nearly cleared it", on the
+        // path where nothing was measured at all.** It printed `(top keyword score 0.0,
+        // floor 6.9)` on every refusal, and a `Verdict::Nothing` arrives with a score of
+        // exactly zero because `index::route` keeps a hit only above zero: no term matched
+        // any key, so the floor was never reached and naming it sent the reader to
+        // recalibrate a threshold that did nothing. `Shortfall::lines` makes that branch
+        // once, for every surface, and names the floor only where it truly refused
+        // something, which on this path is the classifier's `Guess`.
+        //
+        // **Capped at two sentences, and the cap is the point.** `brief` runs on
+        // `UserPromptSubmit`, so whatever is here is injected into the model's context on
+        // every message the fleet cannot place: two sentences are two sentences forever.
+        // The roster stays last, and the instruction not to assume an agent stays above
+        // the remedies, because a refusal that leads with what to fix invites the model to
+        // answer anyway rather than say the fleet has no owner for this, which is the one
+        // thing this briefing exists to make it say.
+        let said = memory.shortfall(&answer.confidence).lines();
+        let state = match said.is_empty() {
+            true => String::new(),
+            false => format!("{}\n\n", said.into_iter().take(2).collect::<Vec<_>>().join(" ")),
+        };
         return Briefing {
             agent: None,
             switched: false,
             text: format!(
-                "VESTA: routed this message and found no owner (top keyword score {:.1}, \
-                 floor {:.1}).\n\n\
+                "VESTA: routed this message and found no owner.\n\n\
                  Do not assume an agent. Either ask which one this belongs to, or answer \
-                 as the fleet's librarian and say the base does not appear to cover it.\n\n{}",
-                answer.confidence.keyword_score,
-                answer.confidence.floor,
+                 as the fleet's librarian and say the base does not appear to cover \
+                 it.\n\n{state}{}",
                 roster(memory)
             ),
         };
@@ -534,6 +553,47 @@ mod tests {
         let record = crate::capture::read(&root, "s-loss");
         assert_eq!(record.refused.len(), 1, "and it is in the session's record: {record:?}");
         assert_eq!(record.refused[0].0, "qual a taxa de juros do trimestre");
+    }
+
+    /// **The refusal that costs the most and explained the least.**
+    ///
+    /// `brief` runs on `UserPromptSubmit`, so this briefing goes into a model's context on
+    /// every message the fleet cannot place. It used to print a fixed `(top keyword score
+    /// 0.0, floor 6.9)`, which reads as *you nearly cleared it* on the one path where
+    /// nothing was measured against the floor at all. ADR-0035's case is exactly this
+    /// fixture: a fleet too small to clear the floor never routes, so it never captures,
+    /// so it stays too small. The briefing is where that loop is visible, so it is where
+    /// the size belongs.
+    #[test]
+    fn a_briefing_with_no_owner_names_the_size_of_the_fleet_it_refused_from() {
+        let root = std::env::temp_dir().join(format!("kb-boot-shortfall-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&root);
+        let agent = root.join("fleet").join("probe");
+        std::fs::create_dir_all(agent.join("knowledge")).expect("scratch");
+        std::fs::write(agent.join("agent.txt"), "name = Probe\nrole = testing\n").expect("agent");
+        std::fs::write(
+            agent.join("knowledge").join("zebra.md"),
+            "# Zebra\n\n**Search for:** `zebra`, `quagga`\n\n**Exists to:** hold one animal\n",
+        )
+        .expect("note");
+        let memory = Memory::open(&[root.as_path()], true).expect("opens");
+
+        let req = Request {
+            prompt: "qual a taxa de juros do trimestre".into(),
+            session: "s-shortfall".into(),
+            cwd: None,
+        };
+        let brief = brief(&memory, &root, &req, 5);
+
+        assert!(brief.agent.is_none(), "the fixture is the found-no-owner branch");
+        assert!(brief.text.starts_with("VESTA:"), "{}", brief.text);
+        assert!(brief.text.contains("The fleet:"), "the roster is still last: {}", brief.text);
+        assert!(brief.text.contains('1'), "it names the fleet it refused from: {}", brief.text);
+        assert!(
+            !brief.text.contains("floor"),
+            "nothing scored, so nothing lost to the floor: {}",
+            brief.text
+        );
     }
 
     #[test]

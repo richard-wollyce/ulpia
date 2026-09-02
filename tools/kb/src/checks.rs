@@ -372,7 +372,7 @@ fn check_ignores(base: &Base, findings: &mut Vec<Finding>) {
 /// router can see the file, and `check_note` asks whether a note it CAN see carries the
 /// provenance the evidence rules require.
 fn check_reachable(file: &MdFile, findings: &mut Vec<Finding>) {
-    if is_exempt(file) {
+    if crate::index::is_exempt(&file.rel) {
         return;
     }
 
@@ -451,39 +451,6 @@ fn check_reachable(file: &MdFile, findings: &mut Vec<Finding>) {
         }
     }
 
-}
-
-/// Files nothing should ever search for, in three classes whose reasons are not interchangeable.
-///
-/// **Orientation files** are found by standing in the directory they describe, never by a
-/// question. Three names, because one name was doing three jobs across thirteen files and a
-/// reader could not tell which they had opened: `README.md` is a base's front door,
-/// `what-goes-here.md` is a folder legend read by whoever is about to drop a file in, and
-/// `MOVED.md` is a signpost that shouts because it has to catch somebody who arrived expecting
-/// content. `MAP.md` is a reading list for a person and `CLAUDE.md` is injected by the runtime,
-/// so neither is ever retrieved.
-///
-/// **`inbox/` is a quarantine and its invisibility is the feature.** Material lands there
-/// unreviewed, and a base that answers from unreviewed material is the failure this repository
-/// is built against. It becomes findable when somebody promotes it, which is the deliberate act
-/// ADR-0016 exists to protect.
-///
-/// **`records/` is an append-only log**, one near-identical file per day. Keying them would put
-/// the same vocabulary on dozens of files and collapse the idf of every word they share, which
-/// charges the files that answer questions to benefit files that answer lookups. Looking
-/// something up by date is a different job from asking a question and wants its own mechanism.
-fn is_exempt(file: &MdFile) -> bool {
-    let name = file.rel.to_lowercase();
-    let orientation = name.ends_with("readme.md")
-        || name.ends_with("what-goes-here.md")
-        || name.ends_with("moved.md")
-        || name.ends_with("map.md")
-        || name.ends_with("claude.md");
-
-    let in_dir =
-        |dir: &str| name.starts_with(&format!("{dir}/")) || name.contains(&format!("/{dir}/"));
-
-    orientation || in_dir("inbox") || in_dir("records") || name.contains("calculation-log/")
 }
 
 fn check_note(_base: &Base, file: &MdFile, findings: &mut Vec<Finding>) {
@@ -707,5 +674,58 @@ mod tests {
     fn portuguese_search_line_counts() {
         let text = "- **[[nota]]** faz uma coisa.\n  Buscar por: `palavra`.\n";
         assert!(map_entries(text)[0].has_search_line);
+    }
+
+    fn md(rel: &str, text: &str) -> MdFile {
+        MdFile {
+            rel: rel.into(),
+            stem: rel.rsplit('/').next().unwrap().trim_end_matches(".md").into(),
+            text: text.into(),
+            private: false,
+        }
+    }
+
+    fn four_files() -> Base {
+        Base {
+            root: std::path::PathBuf::from("probe"),
+            map: None,
+            knowledge_dir: Some("knowledge".into()),
+            files: vec![
+                md("knowledge/keyed.md", "# Keyed\n\n**Search for:** `alpha`, `beta`\n"),
+                md("knowledge/keyless.md", "# Keyless\n\njust prose.\n"),
+                md("README.md", "# Readme\n\nthe front door.\n"),
+                md("inbox/2026-09-01-session-x.md", "# Deposit\n\nwhat a session left.\n"),
+            ],
+            unreadable: Vec::new(),
+            aliases: Vec::new(),
+        }
+    }
+
+    /// **One predicate, read from one place, or the two outputs answer the same question
+    /// with two numbers.**
+    ///
+    /// E02 and the unreachable count `kb index` prints ask whether the router can build an
+    /// entry for a file, and the exemption is most of that answer: measured on this fleet,
+    /// all 63 keyless files are exempt by name and E02 reports zero. A count that tested
+    /// only for an empty keyword list would have shipped printing 63 against the linter's
+    /// 0, and a reader would have had no way to know which of the two was lying.
+    #[test]
+    fn the_index_and_the_linter_agree_about_which_files_are_unreachable() {
+        let base = four_files();
+
+        let linter: std::collections::BTreeSet<String> = run(&base)
+            .into_iter()
+            .filter(|f| f.code == "E02")
+            .map(|f| f.file)
+            .collect();
+        let index: std::collections::BTreeSet<String> =
+            crate::index::build(&base).unreachable.into_iter().collect();
+
+        assert_eq!(linter, index, "the index and the linter disagree");
+        assert_eq!(
+            linter,
+            std::collections::BTreeSet::from(["knowledge/keyless.md".to_string()]),
+            "the keyless note is the only defect: README and inbox/ are exempt"
+        );
     }
 }

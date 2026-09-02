@@ -523,6 +523,32 @@ impl Store {
         Ok(kept)
     }
 
+    /// Every path this index holds chunks for.
+    ///
+    /// **The other half of a subtraction that needs two lists and has both already.**
+    /// `base.rs` walks the files and hands the same list to `index::build` and to `sync`,
+    /// and `sync` records what it chunked; files on disk minus these is what the last
+    /// `kb index` never saw. The case that makes it worth carrying is the SessionEnd hook,
+    /// which runs `kb capture`, detaches `kb promote` and never runs `kb index`, so the
+    /// deposit the system writes for itself lands in exactly that window.
+    ///
+    /// `sync` already runs this query inside its transaction for the stale sweep and cannot
+    /// lend it out, because that one reads in the middle of a write.
+    ///
+    /// **No `base` parameter, deliberately**, following `counts` above: one index per agent
+    /// means every row in the table belongs to this agent, and taking a name would re-key
+    /// the answer on `Agent.name`, which is `"."` when a base is opened as `.` and would
+    /// report the entire base as missing from its own index.
+    pub fn indexed_paths(&self) -> R<Vec<String>> {
+        let mut stmt = self.conn.prepare("SELECT path FROM files")?;
+        let rows = stmt.query_map([], |row| row.get::<_, String>(0))?;
+        let mut out = Vec::new();
+        for row in rows {
+            out.push(row?);
+        }
+        Ok(out)
+    }
+
     pub fn counts(&self) -> R<(i64, i64)> {
         let files: i64 = self.conn.query_row("SELECT COUNT(*) FROM files", [], |r| r.get(0))?;
         let chunks: i64 = self.conn.query_row("SELECT COUNT(*) FROM chunks", [], |r| r.get(0))?;
@@ -853,5 +879,67 @@ mod tests {
         assert!(q.contains("\"calorie\""));
         assert!(q.contains("\"floor\""));
         assert!(q.contains("\"piso\""), "the original survives too");
+    }
+
+    /// **The map is not missing from the index, it was never offered to it.**
+    ///
+    /// `sync` skips the map on purpose, because it is the keyword scorer's corpus and
+    /// indexing it here would put the same words in front of both scorers. Anything that
+    /// subtracts these paths from the files on disk has to know that, or every base reports
+    /// a permanent lag of one, and a number that is never zero is a number people learn to
+    /// scroll past.
+    #[test]
+    fn the_index_names_the_paths_it_holds_and_never_the_map() {
+        let dir = scratch("indexed-paths");
+        let mut store = Store::open(&dir.join("i.db")).expect("open");
+
+        let mut base = base_with(
+            &dir,
+            vec![
+                md("MAP.md", "# MAP\n\n- **[[note]]** a thing.\n  Search for: `thing`.\n", false),
+                md("knowledge/note.md", "# Note\n\nthe body of the note.\n", false),
+            ],
+        );
+        base.map = Some("MAP.md".into());
+        store.sync(&base, "zed").expect("sync");
+
+        assert_eq!(
+            store.indexed_paths().expect("paths"),
+            vec!["knowledge/note.md".to_string()]
+        );
+    }
+
+    /// The lag primitive, at the level where it is a fact rather than a diagnosis: the
+    /// store names what it chunked, and a file written after the last sync is not in it.
+    /// This is the half that separates "the store forgot" from "the walk skipped", which
+    /// are two different problems wanting two different fixes.
+    #[test]
+    fn a_file_written_after_the_last_sync_is_missing_from_the_indexed_paths() {
+        let dir = scratch("indexed-paths-lag");
+        let mut store = Store::open(&dir.join("i.db")).expect("open");
+
+        let before = base_with(&dir, vec![md("knowledge/old.md", "# Old\n\nthe body.\n", false)]);
+        store.sync(&before, "zed").expect("sync");
+
+        // The deposit lands after the sync and nothing runs `kb index`. That is the
+        // SessionEnd window, seen from the store.
+        let after = base_with(
+            &dir,
+            vec![
+                md("knowledge/old.md", "# Old\n\nthe body.\n", false),
+                md("inbox/2026-09-01-session-abc.md", "# Session abc\n\nwhat it left.\n", false),
+            ],
+        );
+
+        let indexed: std::collections::HashSet<String> =
+            store.indexed_paths().expect("paths").into_iter().collect();
+        let lag: Vec<&str> = after
+            .files
+            .iter()
+            .map(|f| f.rel.as_str())
+            .filter(|rel| !indexed.contains(*rel))
+            .collect();
+
+        assert_eq!(lag, vec!["inbox/2026-09-01-session-abc.md"]);
     }
 }

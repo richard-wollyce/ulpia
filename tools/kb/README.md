@@ -18,6 +18,7 @@ repository uses.
 ```
 kb check [path]... [--strict] [--all]
 kb index [path]... [--json] [--all]
+kb list [path]... [--base B] [--folder F] [--kind K] [--stage S] [--provenance P] [--json] [--all]
 kb route <question> [path]... [--top N] [--hybrid] [--json]
 ```
 
@@ -35,7 +36,7 @@ plainly when nothing matched rather than returning a confident guess.
 
 ## What is in the box, and the pain each piece answers
 
-Sixteen verbs. Each exists because something went wrong without it, and the table says what.
+Eighteen verbs. Each exists because something went wrong without it, and the table says what.
 A verb whose pain you do not have is a verb you do not need to learn.
 
 | Verb | The pain | What it does | What it never does |
@@ -46,16 +47,18 @@ A verb whose pain you do not have is a verb you do not need to learn.
 | `write` | A note without its keyword line is a note nothing can find, and people forget the line | Writes the note with its `Search for:` header and its map entry in one step, and refuses without keys | Writes half: a failed map entry deletes the note again |
 | `promote` | Raw material piles up in an inbox and nobody distils it | Two promoters, three questions, unanimity: the first proposes notes without seeing the base, the second decides without seeing the first's reasoning. Writes at stage `captured` | Writes on a split decision. Starts over another run's lock when `--lock` is given |
 | `check` | A broken link, a missing keyword line, an em dash: each one is invisible until it costs an hour | Lints every base: E01 broken link, E02 not indexed, W06 thin keywords, and the house rules | Fixes anything. Touches a file |
-| `index` | Full text search needs an index, and an index that drifts from the files lies | Builds one SQLite file per base from the markdown, content hashed so unchanged files cost nothing | Holds anything that cannot be rebuilt from the files. Runs in the background |
+| `index` | Full text search needs an index, and an index that drifts from the files lies | Builds one SQLite file per base from the markdown, content hashed so unchanged files cost nothing, and counts what it could build no entry for: the files no question can reach, and the ones exempt by name | Holds anything that cannot be rebuilt from the files. Runs in the background |
+| `list` | A filter question has no ranking problem in it, so scoring it against a floor answers a guess | Lists the files a base holds, narrowed by base, folder, species, stage or provenance, with no score and no verdict | Rank anything. Take a question. Hide a file because no question can reach it |
 | `eval` | "Does retrieval work?" answered by feel | Grades the router against a gold file of questions and expected answers, including questions it is supposed to refuse, and prints hit, guess and refusal rates | Grades a gold file that names files the fleet does not have |
 | `boot` | Every session starts as nobody, and picking an agent by reading a conditional woke the wrong one | On a hook, routes the incoming message across the fleet, picks the owner, and injects that agent's constitution before the model reads anything | Picks an agent when no base covers the message. It says so instead |
 | `blocks` | A constitution is several files, and assembling them by hand drifts | Assembles the resident blocks in order and reports what is missing | Invents a block that is not on disk |
 | `fleet` | "Who is in this fleet and what does each one do?" | Reads `fleet.txt` and every `agent.txt`, and prints the roster | Reads the index. Identity is never derived from retrieval |
 | `init` | An agent created by hand is missing the one file that makes it findable | Generates a base with the shape the router needs, or a person base with the questions a fleet must answer about its human | Writes a word about the person. The skeleton is empty on purpose |
 | `commit` | Two sessions writing one repository, and `git add -A` sweeping a stranger's work into your message | Commits exactly the paths named, then reads the commit back and prints what it left dirty | Offers a flag meaning everything |
-| `serve` | Other people's runtimes need the same answers, not a port of the pipeline | Speaks MCP over stdio: `kb_route`, `kb_retrieve`, `kb_remember`, `kb_fleet`, all through the same `Memory` the CLI uses | Writes to stdout anything that is not protocol. Serves a base the caller did not name |
+| `serve` | Other people's runtimes need the same answers, not a port of the pipeline | Speaks MCP over stdio: `kb_route`, `kb_retrieve`, `kb_remember`, `kb_fleet`, `kb_list`, all through the same `Memory` the CLI uses | Writes to stdout anything that is not protocol. Serves a base the caller did not name |
 | `ui` | Reading a base through a terminal is reading a library through a keyhole | A local reading room over the same contract: shelves, books, broken citations shown rather than hidden | Serves a file discovery did not produce, however the path is spelled |
 | `capture` | A session ends and everything it could not answer ends with it | Turns the session's record, appended by `boot` on every message, into one raw file in the last routed agent's `inbox/`: the refused questions with the vocabulary offered back, and where the conversation went. Then `promote` reads it | Runs a model. Writes a `Search for:` line, so the router never names a raw session as an answer. Captures a session no agent was routed in |
+| `misses` | The log records what was asked and could not be answered, and stops there. The file that nearly held the answer, and the key it was missing, is the half nobody can look up | Reads `kb-misses.txt` back, most asked first, and beside each question names the files today's index nearly caught it with, the keys each of those files declares, and the path it read | Write anything. It proposes the alias line and a person adds it |
 
 ### How the pieces make two memories
 
@@ -63,7 +66,7 @@ The verbs above are one system, and the shape of it is two memories with a filte
 
 | | Where it lives | What feeds it | What reads it |
 |---|---|---|---|
-| **Short memory**, fresh and unjudged | `inbox/` in each agent, plus `kb-misses.txt`, the questions the base could not answer | Files a person drops, and `capture` at session end: what the session refused and where it went, without a model | `promote`, and every question, labelled short |
+| **Short memory**, fresh and unjudged | `inbox/` in each agent, plus `kb-misses.txt`, the questions the base could not answer | Files a person drops, and `capture` at session end: what the session refused and where it went, without a model | `promote`, `misses`, and every question, labelled short |
 | **The filter** | `promote`, with `remember` as its measure | The short memory | Nobody. It writes or it refuses |
 | **Long memory**, the library | `knowledge/` in each agent, with a `Search for:` line on every note | `write`, `promote`, and a person editing markdown | `route`, `answer`, `boot`, `serve`, `ui`, every question anybody asks |
 
@@ -101,6 +104,7 @@ always fuses and `--hybrid` adds nothing on top of it.
              "contenders": 1, "totals": [{ "agent": "zed", "score": 0.0328 }] },
   "keyword_top": "zed/knowledge/deploy-checklist.md",
   "indexed": { "entries": 11, "agents": 3, "aliases": 0 },
+  "unreachable": { "files": 0, "paths": [], "unindexed": 0, "unindexed_paths": [] },
   "skipped": [],
   "index_was_rebuilt": false,
   "suggestions": [],
@@ -114,7 +118,7 @@ always fuses and `--hybrid` adds nothing on top of it.
 }
 ```
 
-Five things in there will bite a caller that assumes otherwise, so they are stated rather than
+Several things in there will bite a caller that assumes otherwise, so they are stated rather than
 discovered:
 
 - **`verdict` is `hit`, `guess` or `nothing`**, measured against a keyword floor of 17.5 that is
@@ -134,6 +138,14 @@ discovered:
   read it, and it is where a future reason to leave a base out will be named. A caller reading stdout
   alone should still check it rather than conclude from an empty `results` that nothing covers the
   question.
+- **`unreachable` says what the fleet holds and cannot reach, in two counts because they are two
+  problems wanting opposite work.** `files` is an authoring problem: a note nobody wrote a
+  `Search for:` line for is on disk, it opens, it reads fine, and it scores zero on every question
+  ever asked, and the only place that was ever reported is `kb check` E02, which nobody is required
+  to run. `unindexed` is a `kb index` that has not run since those files were written, which is the
+  window the SessionEnd hook opens every time: it captures, it detaches a promotion, and it never
+  indexes. `paths` and `unindexed_paths` carry at most eight each while the counts beside them stay
+  exact, so a caller can tell a short list from a small problem.
 - **`results[].memory` is `short` or `long`.** `short` is the deposit, `inbox/`: recent, unjudged,
   not yet in the library, served on purpose and labelled on purpose so a model leaning on it does so
   knowing what it holds. A caller that wants only settled knowledge filters on `long`.
@@ -403,7 +415,7 @@ and does not care.** That is the reason retrieval lives here rather than in the 
 the passages travel in the prompt, with a local model nothing leaves the machine, and both read the
 same code.
 
-Four tools, all read only:
+Five tools, all read only:
 
 | Tool | Returns |
 |---|---|
@@ -411,6 +423,7 @@ Four tools, all read only:
 | `kb_retrieve` | The passages themselves, with heading path, provenance and the short memory label |
 | `kb_remember` | The ADD / UPDATE / NOOP proposal and its evidence. **Writes nothing** |
 | `kb_fleet` | The roster: the fleet's name and role, and every agent with theirs. Read from the manifests, never from the index |
+| `kb_list` | The files themselves, narrowed by facet. **Not a search and it takes no question**: no score, no floor, no verdict, because nothing was ranked |
 
 There is no write tool yet, deliberately. A write reached by a model is a different security surface
 and gets built on purpose rather than while the retrieval side is still warm.
@@ -547,6 +560,93 @@ the same artifact then runs `kb check --all examples/demo` inside `amazonlinux:2
 catches is invisible until the deploy: a glibc build goes green in CI, uploads, and dies on the host
 with a missing symbol version. A portability claim nothing executes is a rumour.
 
+### What survives a lost machine
+
+**`kb` does not copy your files anywhere, and it is not going to.** Sync is conflict resolution,
+causality, clock skew and delete propagation, none of which is a knowledge base problem, and building
+it here would produce a worse Syncthing. Use rsync, restic, robocopy, Syncthing, or whatever you
+already trust.
+
+What no copier can answer for you is the other two thirds of the question, and those are the parts
+this tool knows: **which files must survive, and whether the copy you made is still a base.** Both
+are decided in [ADR-0037](../../decisions/0037-what-survives-a-lost-machine.md).
+
+**The set, stated so a script can follow it.** Take the fleet root and everything under it, then
+subtract exactly three patterns:
+
+| Subtract | Why it is not in the set |
+|---|---|
+| `.kb/`, one per base, at any depth | The derived index. Delete it and you have lost a rebuild, not a fact. `kb index` regenerates it from the markdown beside it |
+| `.kb-promote.lock`, at the fleet root | The running-now marker. It survives a crash on purpose so the next run can see that one died, which is a fact about that machine and a lie on any other |
+| `kb-misses.txt.lock`, beside the log | The same thing one file over: the marker held while the recall loss log merges |
+
+**Everything else is in**, and these four are the ones people leave out:
+
+- **`profile/`, `projects/`, `records/`**, plus anything a base names in its own `private =` line,
+  plus the whole of `person/`. The private layer. It is gitignored by design, and **nothing anywhere
+  else holds a copy of it.**
+- **`kb-misses.txt`**, or wherever `KB_MISSES_PATH` points. Every line is a real question the base
+  could not answer, counted. No rebuild produces it and no reindex recovers it.
+- **`kb-rejections.txt`**. The same species: what the promoter refused, and why. A repeated refusal
+  is a gap in the base, and nothing else records it.
+- **`kb-aliases.txt`** at each base root. Small enough to skip for being small. Every line in it was
+  paid for by a real question that missed.
+
+**So do not use a git push as your backup.** The ignore files this project ships are a publication
+rule, and a correct one: the private layer is gitignored because it is nobody's to publish. Read
+backwards it is not a backup rule, it is the exact complement of one. A push carries the notes and
+leaves behind the four things above.
+
+**Then verify it, because a backup nobody restored is not a backup.** A checksum proves the bytes
+arrived. It does not prove the copy is a base, and that is a stronger claim you can check in two
+commands:
+
+```
+kb check --all  /path/to/restored/copy
+kb eval  /path/to/restored/copy/gold.tsv /path/to/restored/copy --all
+```
+
+`kb check` opens the copy as a fleet and resolves every `[[link]]` against what is actually there, so
+a file that did not arrive is an E01 and a file truncated past its header is an E02. `kb eval` then
+asks the gold set's real questions of the copy and grades where they land, which exercises the index
+build, the scorer, the fold and the confidence gate against known answers. **`--all` on both lines is
+load bearing**: without it the private layer is never opened, and the private layer is the part git
+did not have.
+
+*Run, on 2026-09-02: `examples/demo` copied to a scratch path outside any repository with every
+`.kb/` left behind, 18 files. `kb check --all` clean on all three bases, private layer included.
+`kb eval` graded FILE 10/10, AGENT 10/10, and held all three refusals.*
+
+**What the exclusion is worth, measured on this fleet the same day.** Dropping `.kb/` takes the copy
+from 35.3 MB to 24.0 MB, which is 32 percent and not the order of magnitude it looks like: the index
+is 4.3 times the markdown it derives from, and most of a fleet by weight is inbox payload rather than
+notes. What the exclusion really buys is that you never copy an 11 MB binary file that changes
+whenever a note does. Restoring it costs one command: 290 files and 2,720 chunks reindexed in **1.97
+seconds**.
+
+**Three destinations, and the trade is yours to make.**
+
+1. **Another disk on the same desk.** No third party. Survives the failure that actually happens,
+   which is one disk dying. Does not survive theft, fire, or anything that walks a mounted volume.
+2. **Another machine you own, over the LAN.** No third party, and it survives a dead machine, but
+   only if the two sit in different places. Two boxes on one desk share a building, a power supply
+   and a burglar.
+3. **A cloud bucket, encrypted before it leaves.** The only one that survives the building, and the
+   only one where **the encryption is not a setting.** `profile/`, `projects/` and `records/` are in
+   the set by the rule above. Uploading them unencrypted puts a person's profile, projects and
+   records in plaintext on somebody else's server, which is the custody position this whole tool
+   exists to refuse. Encrypted, the provider holds bytes it cannot read, and that is a different
+   relationship.
+
+Only the third survives the building. Only the third involves a third party. **There is no
+destination that does both**, and which failure you should insure against depends on what your
+`profile/` holds, which this tool does not know. So this section names the trade and stops there.
+
+**`kb backup --list` and `kb backup --verify` are the shape ADR-0037 chose for the two answerable
+halves**, printing the paths one per line for piping into any of the tools above, and opening a copy
+to run the check. **Neither is built yet.** Until they are, the rule is the table above and the
+verification is the two commands above, which is what the verbs will run.
+
 ### The alias table
 
 An optional `kb-aliases.txt` at the base root, one `alias = canonical` per line, `#` for comments.
@@ -560,6 +660,14 @@ table is really about **the distance between how someone asks and how a file was
 
 Only add a line after a real question missed. It is a record of misses, not a dictionary, and a
 dictionary is what makes it unmaintainable.
+
+`kb misses` is how you find the ones worth a line. It reads `kb-misses.txt` back, most asked first,
+and beside each question names the files today's index nearly caught it with and the keys each of
+those files declares. A file the text scorer reached at keyword score `0.00` is the whole finding:
+the words are in the note and not on its `Search for:` line, so the fix is a line here or another
+key rather than another note. It proposes and never applies, and there is deliberately no flag that
+does: a machine appending to this file on evidence it produced itself closes that loop with nobody
+in it.
 
 - `--strict` counts warnings toward the exit code, which is what a commit hook wants.
 - `--all` includes files git does not track. By default only tracked files are checked, because the

@@ -534,16 +534,19 @@ These are population numbers from published guidelines, not a prescription.</cod
       <h2 id="from-claude-code-and-claude-desktop">From Claude Code and Claude Desktop</h2>
       <p>
         <code>kb serve .</code> speaks the Model Context Protocol over stdio.
-        Four tools, none of which writes to the library: <code>kb_route</code> (a question, and
+        Five tools, none of which writes to the library: <code>kb_route</code> (a question, and
         optionally <code>top</code>), <code>kb_retrieve</code> (the same two),
-        <code>kb_remember</code> (a claim) and <code>kb_fleet</code>, which
-        takes nothing. The first returns ranked paths with the words that
+        <code>kb_remember</code> (a claim), <code>kb_fleet</code>, which
+        takes nothing, and <code>kb_list</code>, whose facets are every one of
+        them optional. The first returns ranked paths with the words that
         matched and no file contents; the second returns the passages
         themselves with their heading path and provenance; the third measures a
         claim against the base and proposes ADD, UPDATE or NOOP with its
         evidence, writes nothing and never proposes DELETE; the fourth is the
         roster read from <code>fleet.txt</code> and each <code>agent.txt</code>,
-        not a search. One file is written all the same, and
+        not a search; the fifth lists what the shelves hold, narrowed by base,
+        folder, species, stage or provenance, and it takes no question, so
+        nothing it returns carries a score or a verdict. One file is written all the same, and
         <a href="https://github.com/richard-wollyce/ulpia/blob/main/tools/kb/src/mcp.rs">the source</a>
         says that hiding it was a mistake: a refusal from <code>kb_route</code> or
         <code>kb_retrieve</code> appends the question and the terms offered

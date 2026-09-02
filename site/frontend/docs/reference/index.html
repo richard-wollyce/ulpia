@@ -58,7 +58,7 @@
         <p class="contents-title" id="contents-title">Contents</p>
         <ol>
           <li>
-            <a href="#the-sixteen-verbs">The sixteen verbs</a>
+            <a href="#the-eighteen-verbs">The eighteen verbs</a>
             <ol>
               <li><a href="#the-usage-block">The usage block</a></li>
               <li><a href="#verb-by-verb">Verb by verb</a></li>
@@ -80,7 +80,7 @@
           <li>
             <a href="#the-mcp-tools">The MCP tools</a>
             <ol>
-              <li><a href="#the-four-tools">The four tools</a></li>
+              <li><a href="#the-five-tools">The five tools</a></li>
               <li><a href="#the-evidence-line">The EVIDENCE line</a></li>
               <li><a href="#the-handshake">The handshake</a></li>
             </ol>
@@ -108,21 +108,22 @@
         This is the catalogue's own card index. The four pages before it tell
         the story; this one lists the verbs, their flags, the fields a program
         reads, the codes the linter prints and the files on disk, each copied
-        from the source at commit <code>ea43d1d</code> on 2 September 2026
-        rather than remembered. Where a line had to be assembled instead of
-        copied, the entry says so. Nobody is expected to read it through.
+        from the source on 2 September 2026 rather than remembered. Where a
+        line had to be assembled instead of copied, the entry says so. Nobody
+        is expected to read it through.
       </p>
 
-      <h2 id="the-sixteen-verbs">The sixteen verbs</h2>
+      <h2 id="the-eighteen-verbs">The eighteen verbs</h2>
 
       <h3 id="the-usage-block">The usage block</h3>
       <p>
         What <code>kb --help</code> prints, minus its prose. The block carries
-        sixteen lines for fifteen verbs, <code>init</code> twice;
+        eighteen lines for seventeen verbs, <code>init</code> twice;
         <code>answer</code> has no line in it and is assembled below.
       </p>
       <pre><code>kb check [path]... [--strict] [--all]
 kb index [path]... [--json] [--all]
+kb list [path]... [--base B] [--folder F] [--kind K] [--stage S] [--provenance P] [--json] [--all]
 kb route &lt;question&gt; [path]... [--top N] [--hybrid] [--json] [--all]
 kb remember &lt;claim&gt; [path]... [--all] [--json]
 kb init &lt;name&gt; [fleet-root]
@@ -136,7 +137,8 @@ kb boot [path]... [--top N] [--all]
 kb promote [path]... [--top N] [--all] [--dry-run] [--max N] [--lock]
 kb ui [path]... [--port N] [--all]
 kb capture [path] [--session ID]
-kb serve [path]... [--top N] [--all]</code></pre>
+kb serve [path]... [--top N] [--all]
+kb misses [path]... [--all] [--top N] [--json]</code></pre>
 
       <h3 id="verb-by-verb">Verb by verb</h3>
       <p>
@@ -230,9 +232,42 @@ kb serve [path]... [--top N] [--all]</code></pre>
           Builds one SQLite file per base at <code>&lt;base&gt;/.kb/index.db</code>
           from the markdown, content hashed so that an unchanged file costs
           nothing on the next run. <code>--json</code> prints the index entries
-          as JSON instead of building the index. It never runs in the
-          background, and it holds nothing that cannot be rebuilt from the
-          files.
+          as JSON instead of building the index. One walk classifies every file
+          it touches into three buckets that sum back to the files on disk, so
+          the totals line also carries <code>unreachable</code>, the files with
+          no <em>Search for</em> line, which is E02's own population and is
+          listed three deep with a pointer to the linter for the rest, and
+          <code>unsearchable by design</code>, the files exempt from carrying
+          one at all. A remainder with no name is how a deliberate exemption
+          comes to be read as a broken base. It never runs in the background,
+          and it holds nothing that cannot be rebuilt from the files.
+        </dd>
+
+        <dt><code>kb list [path]... [--base B] [--folder F] [--kind K] [--stage S] [--provenance P] [--json] [--all]</code></dt>
+        <dd>
+          Lists what the shelves hold, narrowed by facet, with nothing ranked.
+          It takes no question, so the answer carries no score, no floor and no
+          verdict: a filter has no ranking problem in it, and asking one of
+          <code>route</code> scores it against the floor and comes back as a
+          guess, which is the confusion this verb exists to end.
+          <code>--base</code> is one agent by its directory name;
+          <code>--folder</code> a directory and everything under it;
+          <code>--kind</code> the species read from the folder,
+          <code>memory</code>, <code>skills</code> or <code>tools</code>;
+          <code>--stage</code> one of <code>raw</code>, <code>captured</code>,
+          <code>distilled</code> or <code>derived</code>; and
+          <code>--provenance</code> one of <code>human</code>,
+          <code>agent</code> or <code>external</code>. The last two are read
+          from each file's own front matter rather than from the index, so a
+          note whose header changed an hour ago is listed as it stands and not
+          as the last <code>kb index</code> saw it. Facets combine with AND, and
+          a value outside its set is an error naming the legal set, exit code 2,
+          never an empty list: zero rows reads as a fact about the base rather
+          than as a typo. The walk is over the files and not over the index
+          entries, so a file no question can reach is a row like any other,
+          which is the whole deposit and every <code>README.md</code>. It never
+          ranks anything, and it never lists the private layer without
+          <code>--all</code>.
         </dd>
 
         <dt><code>kb eval &lt;gold.tsv&gt; [path]... [--top N] [--all] [--classify]</code></dt>
@@ -299,12 +334,12 @@ kb serve [path]... [--top N] [--all]</code></pre>
 
         <dt><code>kb serve [path]... [--top N] [--all]</code></dt>
         <dd>
-          Speaks the Model Context Protocol over stdio, with four tools,
+          Speaks the Model Context Protocol over stdio, with five tools,
           <code>kb_route</code>, <code>kb_retrieve</code>,
-          <code>kb_remember</code> and <code>kb_fleet</code>, all through the
-          same <code>Memory</code> contract the command line uses. It writes
-          nothing to stdout that is not protocol; every diagnostic goes to
-          stderr. It never serves the private layer unless <code>--all</code>
+          <code>kb_remember</code>, <code>kb_fleet</code> and
+          <code>kb_list</code>, all through the same <code>Memory</code>
+          contract the command line uses. It writes nothing to stdout that is
+          not protocol; every diagnostic goes to stderr. It never serves the private layer unless <code>--all</code>
           says so.
         </dd>
 
@@ -328,6 +363,29 @@ kb serve [path]... [--top N] [--all]</code></pre>
           <em>Search for</em> line, and captures nothing from a session no
           agent was routed in.
         </dd>
+
+        <dt><code>kb misses [path]... [--all] [--top N] [--json]</code></dt>
+        <dd>
+          Reads <code>kb-misses.txt</code> back: every question the free stage
+          could not answer, most asked first, with its count, its dates and the
+          vocabulary the base offered back on the day. Beside each one it names
+          the files today's index nearly caught it with and the keys each of
+          those files declares, which is the half a log cannot hold: which file
+          came close depends on the base as it stands now, and that changes
+          every time a note is written. A file the text scorer reached at a
+          keyword score of <code>0.00</code> is the finding itself, because the
+          words are in the note and not on its <em>Search for</em> line, so the
+          repair is an alias line or another key rather than another note.
+          <code>--top N</code> bounds the candidates carried per logged
+          question, not how many questions are printed. It always prints the
+          path it read, because <code>KB_MISSES_PATH</code> can move the log and
+          two fleets pointed at one path share it, and an absent log exits 0: a
+          fleet nothing has missed against is healthy rather than broken. It
+          proposes and never applies, and there is deliberately no flag that
+          does: <code>kb-aliases.txt</code> is a record of real misses, and a
+          machine appending to it on evidence it produced itself closes that
+          loop with nobody in it.
+        </dd>
       </dl>
 
       <h3 id="shared-flags">Shared flags</h3>
@@ -341,8 +399,10 @@ kb serve [path]... [--top N] [--all]</code></pre>
         <dt><code>--top N</code></dt>
         <dd>
           How many candidates to carry. Default 5. <code>route</code>,
-          <code>boot</code>, <code>eval</code>, <code>promote</code> and
-          <code>serve</code> all read it.
+          <code>boot</code>, <code>eval</code>, <code>promote</code>,
+          <code>serve</code> and <code>misses</code> all read it. On
+          <code>misses</code> it bounds the candidates carried per logged
+          question and not the number of questions printed.
         </dd>
         <dt><code>--all</code></dt>
         <dd>
@@ -398,6 +458,12 @@ kb serve [path]... [--top N] [--all]</code></pre>
     "entries": integer,
     "agents": integer,
     "aliases": integer
+  },
+  "unreachable": {
+    "files": integer,
+    "paths": [ string ],
+    "unindexed": integer,
+    "unindexed_paths": [ string ]
   },
   "skipped": [ string ],
   "index_was_rebuilt": bool,
@@ -455,6 +521,30 @@ kb serve [path]... [--top N] [--all]</code></pre>
         <dd>
           How many keyed entries, agents and alias lines were opened for this
           answer. An entry is a note with a <em>Search for</em> line.
+        </dd>
+        <dt><code>unreachable.files</code></dt>
+        <dt><code>unreachable.paths</code></dt>
+        <dd>
+          How many files across the open bases the catalogue can build no
+          entry for, and the first eight of them as <code>base/path</code>. An
+          authoring problem: the file is on disk, a person can open and read
+          it, and it scores zero on every question
+          ever asked. It is the same population <code>kb check</code> reports
+          as E02, and nobody is required to run <code>kb check</code>.
+        </dd>
+        <dt><code>unreachable.unindexed</code></dt>
+        <dt><code>unreachable.unindexed_paths</code></dt>
+        <dd>
+          A different problem with a different repair: files on disk the
+          indexes hold no chunks for, which is a <code>kb index</code> that has
+          not run since they were written. Which scope produced the number
+          matters and is not obvious: an index synced without
+          <code>--all</code> and opened with it correctly reports every private
+          file as unindexed, and the reverse reports nothing at all, so two
+          runs can disagree while both are telling the truth. The counts are
+          exact and only the two arrays are capped at eight, because a short
+          list beside a count taken from the same short list understates the
+          problem by exactly as much as it was shortened.
         </dd>
         <dt><code>skipped</code></dt>
         <dd>
@@ -692,14 +782,14 @@ kb serve [path]... [--top N] [--all]</code></pre>
 
       <h2 id="the-mcp-tools">The MCP tools</h2>
       <p>
-        What <code>kb serve</code> lists under <code>tools/list</code>. Four
+        What <code>kb serve</code> lists under <code>tools/list</code>. Five
         tools, none of which writes to the base, each returning one text part;
         the one file a refusal appends to is <code>kb-misses.txt</code>. Every tool answers
         through the same <code>Memory</code> contract the command line uses,
         so a model and a person cannot get different answers to one question.
       </p>
 
-      <h3 id="the-four-tools">The four tools</h3>
+      <h3 id="the-five-tools">The five tools</h3>
       <dl>
         <dt><code>kb_route</code></dt>
         <dd>
@@ -731,6 +821,24 @@ kb serve [path]... [--top N] [--all]</code></pre>
           every agent with its role and directory, read from
           <code>fleet.txt</code> and each <code>agent.txt</code>. It is a
           lookup rather than a search, so it works on an empty library.
+        </dd>
+        <dt><code>kb_list</code></dt>
+        <dd>
+          <code>{ "base": string, "folder": string, "kind": string, "stage":
+          string, "provenance": string, "limit": integer }</code>, every one of
+          them optional: <code>required</code> is an empty array and there is
+          no <code>question</code> property, because this is not a search and
+          there is no ranking problem in a filter. An omitted facet means do
+          not filter on this rather than any particular value, and the named
+          ones combine with AND; a value outside its set comes back as a
+          protocol error naming the legal set, never as zero rows, which a
+          model would read as a fact about the base. Returns one line per file
+          with its facets in brackets, nothing scored and nothing refused.
+          <code>limit</code> defaults to 50 and the count of what was cut
+          travels with the cut, so a caller can tell a narrow filter from a
+          truncated one. It inherits the server's scope and states none of its
+          own, so the private layer is listed only when <code>kb serve</code>
+          was started with <code>--all</code>.
         </dd>
       </dl>
 
@@ -846,10 +954,21 @@ kb serve [path]... [--top N] [--all]</code></pre>
         <code>README.md</code>, <code>MAP.md</code>, <code>CLAUDE.md</code>,
         <code>what-goes-here.md</code>, <code>MOVED.md</code>, and anything
         under <code>inbox/</code>, <code>records/</code> or a
-        <code>calculation-log/</code> folder. The deposit's invisibility to
-        the catalogue is the feature, and a daily record keyed like a note
+        <code>calculation-log/</code> folder. The deposit is exempt from
+        carrying the line, not hidden by it: since ADR-0034 a passage from
+        <code>inbox/</code> is served at every surface with the short memory
+        label on, and the exemption only keeps E02 quiet about a line a
+        dropped file is not supposed to have. A daily record keyed like a note
         would collapse the weight of every word it shares with the notes that
-        answer questions.
+        answer questions. That exemption is one predicate and it lives beside
+        the walk rather than in the linter, because two callers read it:
+        <code>kb check</code> reports the files it does not cover as E02, and
+        <code>kb index</code> counts the same set as unreachable. Measured on
+        the fleet this was written against, the exemption is nearly the whole
+        answer, 63 keyless files and every one of them exempt, so a count that
+        tested only for a missing <em>Search for</em> line would have printed
+        63 beside a linter reporting 0 and left a reader no way to tell which
+        of the two was lying.
       </p>
       <p>
         Links inside fenced code blocks and inline code are ignored, because a
@@ -904,7 +1023,9 @@ kb serve [path]... [--top N] [--all]</code></pre>
           Gitignored, because a question can be as private as an answer.
           <code>KB_MISSES_PATH</code> names a file, not a directory, and moves
           the log to a writable place; two fleets pointed at one path share one
-          log.
+          log. <code>kb misses</code> reads it back and adds the half the file
+          cannot hold: which files today's index nearly caught each question
+          with, and the keys those files declare.
         </dd>
         <dt><code>kb-rejections.txt</code></dt>
         <dd>

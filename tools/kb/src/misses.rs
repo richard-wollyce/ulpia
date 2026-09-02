@@ -50,6 +50,12 @@ const HEADER: &str = "\
 # Not committed anywhere. These are real questions asked by a real person.
 ";
 
+/// One line of the log, as the writer wrote it and as the reader reads it back.
+///
+/// `Debug` and nothing else. The struct is the log's schema: a derive is cheap, but a
+/// change to these fields changes what [`render`] writes and what every log already on
+/// disk can be read back as.
+#[derive(Debug)]
 pub struct Miss {
     pub count: u32,
     pub first: String,
@@ -159,7 +165,13 @@ impl Drop for Guard {
 /// Read, merge, write on every miss rather than append. It costs a whole file
 /// rewrite, which at the size this reaches is microseconds, and it buys a file that
 /// is always sorted, always deduplicated and always readable by a human with `cat`.
-/// **The file is the interface**, so no subcommand exists to render it.
+///
+/// **The file stays the interface for what was lost.** `kb misses` reads it back and
+/// does not replace it: everything the log holds, a person can already see with `cat`,
+/// and the reader exists for the half the file cannot hold. Which file nearly caught
+/// the question, and with which keys, is a fact about the base **as it stands now**,
+/// so it changes every time a note is written and cannot be recorded beside a question
+/// that was asked last month.
 pub fn record(
     root: &Path,
     question: &str,
@@ -220,9 +232,65 @@ pub fn record(
     }
 }
 
+/// Most asked first, then alphabetical so a file with no new misses in it produces no
+/// diff.
+///
+/// **One comparator, because the writer and the reader are two copies of one order.**
+/// The expression lived inline in [`render`] and nothing read the file back, so there
+/// was nothing to drift from. `load` has to reproduce the file's own order exactly:
+/// the count is the worklist, so the order is the payload, and a second copy of this
+/// expression is how two orders appear.
+fn by_priority(a: &Miss, b: &Miss) -> std::cmp::Ordering {
+    b.count.cmp(&a.count).then(a.question.cmp(&b.question))
+}
+
+/// The log's text, back as the misses that made it, in the file's own priority order.
+///
+/// Pure, so the parse can be tested without touching the filesystem or
+/// `KB_MISSES_PATH`: see the note on `an_override_moves_the_log_and_an_empty_one_does_not`
+/// for why a process wide variable inside a parallel test suite is a race rather than a
+/// setup step.
+///
+/// **The sort is not tidying.** [`parse`] returns a `BTreeMap` keyed on the lowercased
+/// question, which is the right key for merging on write and the wrong order on read:
+/// `into_values()` alone hands back an alphabetical list and silently destroys the one
+/// property the file exists to carry, which is that the most asked question comes first.
+pub fn ranked(text: &str) -> Vec<Miss> {
+    let mut all: Vec<Miss> = parse(text).into_values().collect();
+    all.sort_by(by_priority);
+    all
+}
+
+/// The log on disk, or an empty list when nobody has missed anything yet.
+///
+/// **An absent file is `Ok(Vec::new())` and not an error.** A fleet nothing has missed
+/// against is not a failure, and `kb misses` runs from a terminal beside a hook that may
+/// never have fired. The caller distinguishes the two by asking whether the path exists,
+/// which is why it is handed the path rather than a root. Every other io failure comes
+/// back as a `String`, the same shape [`record`] returns.
+///
+/// **Print the path you read.** [`MISSES_PATH_ENV`] can point this at a file beside no
+/// fleet at all, and two fleets pointed at one path share one log, so a reader that
+/// reports questions without naming the file they came from is reporting something
+/// nobody can check.
+///
+/// One lossy edge, stated because it is deliberate and not fixed here: [`parse`] keys on
+/// `question.to_lowercase()` and inserts, so a hand edited log carrying two casings of
+/// one question keeps only the last of them. That is correct merging for `record`, whose
+/// job is to count a question once however it was typed, and it is a read that loses a
+/// line. Fixing it would change what `record` merges, which changes the number both of
+/// ADR-0006's and ADR-0013's revisit triggers are measured against.
+pub fn load(log: &Path) -> Result<Vec<Miss>, String> {
+    match std::fs::read_to_string(log) {
+        Ok(text) => Ok(ranked(&text)),
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(Vec::new()),
+        Err(e) => Err(format!("could not read {}: {e}", log.display())),
+    }
+}
+
 fn render(seen: &BTreeMap<String, Miss>) -> String {
     let mut all: Vec<&Miss> = seen.values().collect();
-    all.sort_by(|a, b| b.count.cmp(&a.count).then(a.question.cmp(&b.question)));
+    all.sort_by(|a, b| by_priority(a, b));
 
     let mut out = String::from(HEADER);
     for m in all {
@@ -405,28 +473,33 @@ mod tests {
     fn two_writers_recording_at_once_lose_nothing() {
         let dir = scratch("concurrent");
         let rounds = 20;
-        let a = {
+        // **Counts what succeeded, not what was attempted, and the difference is the
+        // whole guarantee.** The first version of this test asserted a count of exactly
+        // `rounds` per question, which made it a test of the timeout as well as of the
+        // lock: `LOCK_WAIT` is 500ms, and under the full suite running in parallel two
+        // threads contending twenty times each can exceed it, so the test failed in the
+        // suite and passed alone. That is the worst kind of test, because it teaches
+        // people to re-run rather than to read.
+        //
+        // A writer that gives up is not a lost update. It returns `Err`, the caller is
+        // told, and the evidence is not silently gone: that is the lock behaving. What
+        // must never happen is a write that returned `Ok` and is not in the file. So the
+        // count asserted is the number of successes, which makes this a test of the
+        // merge and of nothing else.
+        let run = |question: &'static str| {
             let dir = dir.clone();
             std::thread::spawn(move || {
-                for _ in 0..rounds {
-                    record(&dir, "pergunta de a", &[], "2026-09-01").expect("a");
-                }
+                (0..rounds).filter(|_| record(&dir, question, &[], "2026-09-01").is_ok()).count()
             })
         };
-        let b = {
-            let dir = dir.clone();
-            std::thread::spawn(move || {
-                for _ in 0..rounds {
-                    record(&dir, "pergunta de b", &[], "2026-09-01").expect("b");
-                }
-            })
-        };
-        a.join().expect("thread a");
-        b.join().expect("thread b");
+        let a = run("pergunta de a");
+        let b = run("pergunta de b");
+        let (ok_a, ok_b) = (a.join().expect("thread a"), b.join().expect("thread b"));
 
         let text = std::fs::read_to_string(path_in(&dir)).expect("read");
-        assert!(text.contains(&format!("{rounds:<4} 2026-09-01 2026-09-01 pergunta de a")), "{text}");
-        assert!(text.contains(&format!("{rounds:<4} 2026-09-01 2026-09-01 pergunta de b")), "{text}");
+        assert!(ok_a > 0 && ok_b > 0, "both writers got in at least once: {ok_a}, {ok_b}");
+        assert!(text.contains(&format!("{ok_a:<4} 2026-09-01 2026-09-01 pergunta de a")), "{text}");
+        assert!(text.contains(&format!("{ok_b:<4} 2026-09-01 2026-09-01 pergunta de b")), "{text}");
         assert!(!lock_path(&path_in(&dir)).exists(), "the marker is gone when nobody holds it");
     }
 
@@ -517,6 +590,89 @@ mod tests {
 
     /// A question containing whatever a person types must come back unchanged, and
     /// the count field must not be confused by spacing inside it.
+    // -----------------------------------------------------------------------
+    // Reading the log back
+    //
+    // The writer had tests and the reader had none, because there was no reader.
+    // These pin the four properties `kb misses` depends on: the round trip, the
+    // order, the absent file, and the header.
+    // -----------------------------------------------------------------------
+
+    /// [`load`] is the inverse of [`record`], on all five fields.
+    ///
+    /// The two that break quietly are the indented `looked like:` line, which a
+    /// reader that only splits on whitespace drops on the floor, and the question's
+    /// own internal spacing, which a reader that normalises silently turns into a
+    /// different question from the one a person typed. Both are the class of bug
+    /// `three_fields_then_rest` was written for, from the other direction.
+    #[test]
+    fn a_log_the_writer_produced_reads_back_as_the_misses_that_made_it() {
+        let dir = scratch("readback");
+        record(&dir, "protocolo  de  ingestao", &["ingest a source".into()], "2026-08-17")
+            .expect("write");
+        record(&dir, "protocolo  de  ingestao", &["ingest a source".into()], "2026-08-18")
+            .expect("write");
+        record(&dir, "quanto de disco livre", &[], "2026-08-18").expect("write");
+
+        let all = load(&path_in(&dir)).expect("the log reads back");
+        assert_eq!(all.len(), 2, "two distinct questions: {all:?}");
+
+        let top = &all[0];
+        assert_eq!(top.count, 2, "{top:?}");
+        assert_eq!(top.first, "2026-08-17", "{top:?}");
+        assert_eq!(top.last, "2026-08-18", "{top:?}");
+        assert_eq!(top.question, "protocolo  de  ingestao", "the spacing a person typed: {top:?}");
+        assert_eq!(top.looked_like, vec!["ingest a source".to_string()], "{top:?}");
+    }
+
+    /// Most asked first survives the read.
+    ///
+    /// This is the test the obvious implementation fails. [`parse`] returns a
+    /// `BTreeMap` keyed on the lowercased question, so `parse(text).into_values()`
+    /// hands back **alphabetical** order and puts "asked once" in front of a question
+    /// that missed twice. The count is the worklist, so the order is the payload.
+    #[test]
+    fn the_reader_keeps_the_files_priority_order_and_not_the_maps() {
+        let dir = scratch("read-order");
+        record(&dir, "asked once", &[], "2026-08-17").expect("write");
+        record(&dir, "asked twice", &[], "2026-08-17").expect("write");
+        record(&dir, "asked twice", &[], "2026-08-17").expect("write");
+
+        let all = load(&path_in(&dir)).expect("read");
+        assert_eq!(all[0].question, "asked twice", "most asked first, not alphabetical: {all:?}");
+        assert_eq!(all[1].question, "asked once", "{all:?}");
+    }
+
+    /// A fleet nobody has missed against is not a failure.
+    ///
+    /// `kb misses` is run from a terminal beside a hook that may never have fired, so
+    /// an absent log has to exit 0 and say nothing was lost. An `Err` here would make
+    /// the healthy case look like a broken one.
+    #[test]
+    fn a_log_that_was_never_written_reads_as_no_misses_rather_than_an_error() {
+        let dir = scratch("never-written");
+        let all = load(&path_in(&dir)).expect("no log is not an error");
+        assert!(all.is_empty(), "{all:?}");
+    }
+
+    /// The header is not data, and it looks enough like data to be tried.
+    ///
+    /// `# One line per distinct question: count, first seen, last seen, then the
+    /// question.` is three whitespace separated fields followed by text, which is
+    /// exactly the shape [`three_fields_then_rest`] accepts. Only the comment skip
+    /// keeps it out, so the skip is pinned here rather than trusted.
+    #[test]
+    fn the_shipped_header_is_not_read_as_a_miss() {
+        assert!(ranked(HEADER).is_empty(), "the header is comments and blank lines");
+
+        let with_one = format!("{HEADER}
+1    2026-08-17 2026-08-17 uma pergunta perdida
+");
+        let all = ranked(&with_one);
+        assert_eq!(all.len(), 1, "{all:?}");
+        assert_eq!(all[0].question, "uma pergunta perdida", "{all:?}");
+    }
+
     #[test]
     fn a_question_with_odd_spacing_round_trips() {
         let dir = scratch("odd");
