@@ -500,6 +500,8 @@ fn api_route(state: &State, question: &str) -> Value {
     }
 
     let answer = state.memory.ask(question, 5);
+    // The reading room asked and never counted. ADR-0035, same line as every other surface.
+    let _ = state.memory.recall_loss(question, &answer.confidence);
 
     out.set(
         "verdict",
@@ -893,6 +895,19 @@ mod tests {
         .expect("note");
         std::fs::write(agent.join("agent.txt"), "name = Probe\nrole = testing\n").expect("agent");
         State::open(&[dir.as_path()], true).expect("opens")
+    }
+
+    /// The reading room asked and never counted, ADR-0035. Same one line as every
+    /// other surface, tested because the last time a surface was "obviously" covered it
+    /// was found by running four of them over one question and reading 1, 1, 2, 3.
+    #[test]
+    fn a_refused_question_in_the_reading_room_is_counted() {
+        let state = scratch_state("loss");
+        let root = state.bases.first().map(|(_, b)| b.root.clone()).expect("one base");
+        let fleet = root.parent().and_then(|p| p.parent()).expect("the scratch root");
+        let _ = api_route(&state, "qual a taxa de juros do trimestre");
+        let log = std::fs::read_to_string(crate::misses::path_in(fleet)).expect("counted");
+        assert!(log.contains("qual a taxa de juros do trimestre"), "{log}");
     }
 
     /// The security property the whole endpoint rests on: a path that discovery did

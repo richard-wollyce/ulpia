@@ -184,7 +184,7 @@ pub fn note(fleet: &Path, agent: &str, slug: &str, spec: &Note) -> Result<Writte
 
 /// The agent's directory, accepting both shapes ADR-0011 and ADR-0008 leave open:
 /// a fleet with agents under it, or a base addressed directly.
-fn agent_root(fleet: &Path, agent: &str) -> PathBuf {
+pub(crate) fn agent_root(fleet: &Path, agent: &str) -> PathBuf {
     let under_agents = fleet.join("fleet").join(agent);
     if under_agents.is_dir() {
         return under_agents;

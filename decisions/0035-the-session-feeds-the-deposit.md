@@ -10,7 +10,7 @@ stage: derived
 **Exists to:** What writes into the short memory at the end of a session, why it writes without a model first, why the trigger stays the idle hook rather than a clock, and the two surfaces that record no recall loss and must.
 
 - **Date:** 2026-09-01
-- **Status:** proposed
+- **Status:** accepted 2026-09-01, implemented the same day
 - **Scope:** fleet
 - **Deciders:** Richard, Zed
 - **Builds on:** [[0030-two-promoters-and-the-second-is-not-a-second-opinion]], which names
@@ -104,6 +104,46 @@ person at a terminal and a serve process, and is not fine for a hook.
 So the order is: a lock or an append-only shape for the miss log first, then `boot` and
 `ui` call `recall_loss` like everything else. The capture file in option A is written by the
 same hook and has the same problem, which is why they are one record.
+
+## What changed, 2026-09-01
+
+In the order the record itself demanded.
+
+1. **The miss log takes a marker while it merges.** `misses::record` holds a `create_new`
+   lock file beside the log for the read, merge and write, with a 500 ms wait and a 30 s
+   staleness rule, the same shape as `promote::Lock` and smaller. Tested with two threads
+   recording twenty times each: both counts exact, marker gone afterwards. A live marker
+   is respected and the caller is told; a stale one is stepped over.
+2. **`kb boot` and `kb ui` count their losses.** One line each, through `Memory::recall_loss`
+   like the other six surfaces, each with a test that drives a refused question through
+   the surface and reads the log.
+3. **The session's record.** `boot` appends to `.kb/sessions/<id>.events` on every message:
+   `refused` with the question and the vocabulary offered, `routed` with the agent. Under
+   `.kb/` because it is a working file and losing it costs one session's capture.
+4. **`kb capture`.** Reads the record, writes `inbox/<date>-session-<id>.md` in the last
+   routed agent's base, `provenance: agent`, `stage: raw`, no `Search for:` line, then
+   deletes the record. The deposit is written before the record is deleted, so a crash
+   between the two captures again rather than losing the session. A session no agent was
+   routed in is not captured, the record is kept, and the reason is printed. The session
+   id comes from `--session` or from the hook payload on stdin, the same JSON `boot` reads.
+5. **The hook.** `promote-on-idle.sh` runs `kb capture` synchronously before the detached
+   `kb promote`, so what this session refused is in front of the promoters this run.
+6. **Run, not reasoned.** Two `boot` calls with real hook payloads against a scratch fleet,
+   one hit and one refusal; the record held both lines; `capture` with the session id on
+   stdin wrote the deposit into the routed agent's inbox; `kb route` over the same fleet
+   then surfaced the deposit with `memory: "short"`; a second capture reported nothing to
+   capture. 280 tests, from 272.
+
+   **The first run of that flow captured nothing, and the reason is worth keeping.** The
+   scratch fleet held one note, so the idf of every key was `ln(1 + 1/2)` and the best
+   possible score for a four key question was 11.4 against a floor of 17.5. No message
+   routed, no agent owned the session, and `capture` refused with the sentence it was built
+   to print. A fleet too small to clear the floor never routes and therefore never captures;
+   the refusals still reach `kb-misses.txt`, which does not need an owner. Four notes made
+   the floor reachable and the flow ran as written.
+
+What is still option B, and waits for a junk rate: the model's own outputs and the person's
+prose. What waits for a flag: `kb remember` proposals, which do not know their session.
 
 ## Revisit trigger
 

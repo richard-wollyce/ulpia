@@ -74,14 +74,24 @@ pub fn parse_request(stdin: &str) -> Option<Request> {
 /// disposable by ADR-0003. Losing it costs one extra constitution injection, which is the
 /// correct blast radius for a cache.
 fn session_file(root: &Path, session: &str) -> PathBuf {
-    // The session id comes from outside, so it is not allowed to be a path. Anything that
-    // is not plainly alphanumeric becomes an underscore, which makes traversal
-    // impossible rather than unlikely.
-    let safe: String = session
+    root.join(".kb").join("sessions").join(safe_session(session))
+}
+
+/// The session id, made safe to be a file name.
+///
+/// The id comes from outside, so it is not allowed to be a path. Anything that is not
+/// plainly alphanumeric becomes an underscore, which makes traversal impossible rather
+/// than unlikely. Public because `capture` names its files by the same id and must not
+/// grow a second opinion about what is safe.
+pub fn safe_session(session: &str) -> String {
+    session
         .chars()
         .map(|c| if c.is_ascii_alphanumeric() || c == '-' { c } else { '_' })
-        .collect();
-    root.join(".kb").join("sessions").join(safe)
+        .collect()
+}
+
+pub fn last_agent_of(root: &Path, session: &str) -> Option<String> {
+    last_agent(root, session)
 }
 
 fn last_agent(root: &Path, session: &str) -> Option<String> {
@@ -165,6 +175,17 @@ pub fn brief(memory: &Memory, root: &Path, req: &Request, top: usize) -> Briefin
     // Everything downstream scores `asked` rather than the raw prompt, so an envelope
     // appended to a real question cannot contribute its vocabulary to the ranking.
     let answer = memory.ask(&asked, top);
+
+    // **This surface counted nothing, and it is the one every message passes through.**
+    // Six other surfaces asked the contract whether the question was a recall loss;
+    // this one asked `ask` and moved on, so the most frequent refusal there is entered
+    // no log. It was deferred until the log could take two writers at once, because a
+    // hook runs under the concurrency ADR-0021 describes; `misses::record` now holds a
+    // marker while it merges. The loss also goes into the session's own record, which
+    // is what `kb capture` turns into a deposit at session end. ADR-0035.
+    if let Some(loss) = memory.recall_loss(&asked, &answer.confidence) {
+        crate::capture::note_refused(root, &req.session, &loss.question, &loss.looked_like);
+    }
 
     // **Retrieval is code; choosing who answers is a judgement.** ADR-0013 said so and
     // this is where it finally holds: the deterministic sum is now the fallback, and a
@@ -312,6 +333,9 @@ pub fn brief(memory: &Memory, root: &Path, req: &Request, top: usize) -> Briefin
 
     let switched = previous.as_deref() != Some(agent.as_str());
     remember_agent(root, &req.session, &agent);
+    // Into the session's record as well, so the deposit `kb capture` writes at session
+    // end lands with whoever had the conversation last and can say where it went.
+    crate::capture::note_routed(root, &req.session, &agent);
 
     let files: Vec<String> = answer
         .found
@@ -478,6 +502,38 @@ mod tests {
         let evil = session_file(root, "../../../../etc/passwd");
         assert!(evil.starts_with("C:/fleet/.kb/sessions"), "stays inside: {}", evil.display());
         assert!(!evil.to_string_lossy().contains(".."));
+    }
+
+    /// **The surface every message passes through counted no recall loss.** ADR-0035.
+    /// A refused question through `brief` now lands in the miss log like every other
+    /// surface, and in the session's own record, which is what becomes the deposit.
+    #[test]
+    fn a_refused_message_is_counted_and_goes_into_the_sessions_record() {
+        let root = std::env::temp_dir().join(format!("kb-boot-loss-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&root);
+        let agent = root.join("fleet").join("probe");
+        std::fs::create_dir_all(agent.join("knowledge")).expect("scratch");
+        std::fs::write(agent.join("agent.txt"), "name = Probe\nrole = testing\n").expect("agent");
+        std::fs::write(
+            agent.join("knowledge").join("zebra.md"),
+            "# Zebra\n\n**Search for:** `zebra`, `quagga`\n\n**Exists to:** hold one animal\n",
+        )
+        .expect("note");
+        let memory = Memory::open(&[root.as_path()], true).expect("opens");
+
+        let req = Request {
+            prompt: "qual a taxa de juros do trimestre".into(),
+            session: "s-loss".into(),
+            cwd: None,
+        };
+        let _ = brief(&memory, &root, &req, 5);
+
+        let log = std::fs::read_to_string(crate::misses::path_in(&root)).expect("the loss was counted");
+        assert!(log.contains("qual a taxa de juros do trimestre"), "{log}");
+
+        let record = crate::capture::read(&root, "s-loss");
+        assert_eq!(record.refused.len(), 1, "and it is in the session's record: {record:?}");
+        assert_eq!(record.refused[0].0, "qual a taxa de juros do trimestre");
     }
 
     #[test]

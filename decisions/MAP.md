@@ -443,8 +443,9 @@
   records/`. The deposit is served and every passage from it is labelled short memory, so the
   model decides consciously. Git stays as an optional tool for whoever versions a fleet.
 
-- **[[0035-the-session-feeds-the-deposit]]** 🟡 proposed 2026-09-01.
-  **Nothing writes into the short memory, and two surfaces record no recall loss.** ADR-0030
-  named session capture as its unbuilt half. `kb boot` and `kb ui` call `ask` and never
-  `recall_loss`, so the surface every message passes through counts nothing. What a session
-  leaves in the deposit, without a model, and why the trigger stays the idle hook.
+- **[[0035-the-session-feeds-the-deposit]]** 🟢 accepted 2026-09-01.
+  **The session writes into the short memory, and every surface counts its losses.** ADR-0030
+  named session capture as its unbuilt half. `kb boot` records what each message refused and
+  where it was routed; `kb capture` turns that into a raw deposit in the last routed agent's
+  inbox at session end, before `promote` reads it. No model. The miss log holds a marker
+  while it merges, which is what let the boot hook write to it. Why the trigger stays idle.

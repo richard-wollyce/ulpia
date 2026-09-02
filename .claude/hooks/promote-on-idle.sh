@@ -76,6 +76,19 @@ if ! "$KB" --help 2>/dev/null | grep -q -- "--lock"; then
   echo "            Rebuild tools/kb and install it. Nothing was read or written." >>"$LOG"
   exit 0
 fi
+if ! "$KB" --help 2>/dev/null | grep -q "kb capture"; then
+  echo "kb capture: this build predates capture, so the session was not captured." >>"$LOG"
+  echo "            Rebuild tools/kb and install it. Promotion still runs below." >>"$LOG"
+fi
+
+# The session's record becomes a deposit before promotion looks at the inbox, so what this
+# session refused is in front of the promoters this run and not the next one. Synchronous,
+# because it is a file read and a file write with no model behind it, and it has to finish
+# before the detached promote below starts reading the folder it writes into. The session
+# id rides in from the environment, and when that is unset the payload on stdin names it,
+# the same JSON kb boot reads. Never fails the exit: a capture that could not happen is a
+# sentence in the log, not an error in somebody's terminal. ADR-0035.
+"$KB" capture "$ROOT" --session "${CLAUDE_SESSION_ID:-}" >>"$LOG" 2>&1 || true
 
 # --lock, because sessions end together and two runs over one deposit both propose the same
 #   note before either has written it. The duplication lens cannot catch that: it is shown

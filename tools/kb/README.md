@@ -35,7 +35,7 @@ plainly when nothing matched rather than returning a confident guess.
 
 ## What is in the box, and the pain each piece answers
 
-Fifteen verbs. Each exists because something went wrong without it, and the table says what.
+Sixteen verbs. Each exists because something went wrong without it, and the table says what.
 A verb whose pain you do not have is a verb you do not need to learn.
 
 | Verb | The pain | What it does | What it never does |
@@ -55,6 +55,7 @@ A verb whose pain you do not have is a verb you do not need to learn.
 | `commit` | Two sessions writing one repository, and `git add -A` sweeping a stranger's work into your message | Commits exactly the paths named, then reads the commit back and prints what it left dirty | Offers a flag meaning everything |
 | `serve` | Other people's runtimes need the same answers, not a port of the pipeline | Speaks MCP over stdio: `kb_route`, `kb_retrieve`, `kb_remember`, `kb_fleet`, all through the same `Memory` the CLI uses | Writes to stdout anything that is not protocol. Serves a base the caller did not name |
 | `ui` | Reading a base through a terminal is reading a library through a keyhole | A local reading room over the same contract: shelves, books, broken citations shown rather than hidden | Serves a file discovery did not produce, however the path is spelled |
+| `capture` | A session ends and everything it could not answer ends with it | Turns the session's record, appended by `boot` on every message, into one raw file in the last routed agent's `inbox/`: the refused questions with the vocabulary offered back, and where the conversation went. Then `promote` reads it | Runs a model. Writes a `Search for:` line, so the router never names a raw session as an answer. Captures a session no agent was routed in |
 
 ### How the pieces make two memories
 
@@ -62,7 +63,7 @@ The verbs above are one system, and the shape of it is two memories with a filte
 
 | | Where it lives | What feeds it | What reads it |
 |---|---|---|---|
-| **Short memory**, fresh and unjudged | `inbox/` in each agent, plus `kb-misses.txt`, the questions the base could not answer | Files a person drops, and, once session capture is built, what a session produced | `promote` |
+| **Short memory**, fresh and unjudged | `inbox/` in each agent, plus `kb-misses.txt`, the questions the base could not answer | Files a person drops, and `capture` at session end: what the session refused and where it went, without a model | `promote`, and every question, labelled short |
 | **The filter** | `promote`, with `remember` as its measure | The short memory | Nobody. It writes or it refuses |
 | **Long memory**, the library | `knowledge/` in each agent, with a `Search for:` line on every note | `write`, `promote`, and a person editing markdown | `route`, `answer`, `boot`, `serve`, `ui`, every question anybody asks |
 

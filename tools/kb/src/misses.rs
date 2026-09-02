@@ -88,6 +88,72 @@ pub fn path_in(root: &Path) -> PathBuf {
     path_for(root, std::env::var(MISSES_PATH_ENV).ok().as_deref())
 }
 
+/// The marker beside the log while one writer has it. Follows the log, so an override
+/// moves both.
+fn lock_path(log: &Path) -> PathBuf {
+    let mut p = log.as_os_str().to_owned();
+    p.push(".lock");
+    PathBuf::from(p)
+}
+
+/// How long to wait for another writer before giving up, and how old a marker has to
+/// be before it is debris. A record is one read and one write of a small file, so a
+/// writer that holds the marker for longer than a few seconds is a writer that died.
+const LOCK_WAIT: std::time::Duration = std::time::Duration::from_millis(500);
+const LOCK_STALE: std::time::Duration = std::time::Duration::from_secs(30);
+
+/// Held while the log is read, merged and rewritten. Dropping it releases it.
+///
+/// **Why a lock, and why now.** `record` is read, merge, write, and it was fine while
+/// the writers were a person at a terminal and one serve process. ADR-0035 puts it on
+/// the boot hook, which runs on every message of every session, and two sessions that
+/// end a message in the same instant both read the file, both merge their line, and the
+/// one that writes second erases the first. The mechanism is `create_new`, `O_EXCL` on
+/// Unix and `CREATE_NEW` on Windows: the file system decides the race, so two processes
+/// cannot both believe they made the marker. Same shape as `promote::Lock`, smaller,
+/// because a record is milliseconds and a promotion is minutes.
+struct Guard(PathBuf);
+
+impl Guard {
+    fn take(log: &Path) -> Result<Guard, String> {
+        let path = lock_path(log);
+        let started = std::time::Instant::now();
+        loop {
+            match std::fs::OpenOptions::new().write(true).create_new(true).open(&path) {
+                Ok(_) => return Ok(Guard(path)),
+                Err(e) if e.kind() != std::io::ErrorKind::AlreadyExists => {
+                    return Err(format!("could not take {}: {e}", path.display()));
+                }
+                Err(_) => {}
+            }
+            // Somebody died holding it: a marker older than any live record could be.
+            let stale = std::fs::metadata(&path)
+                .and_then(|m| m.modified())
+                .ok()
+                .and_then(|t| t.elapsed().ok())
+                .is_some_and(|age| age > LOCK_STALE);
+            if stale {
+                let _ = std::fs::remove_file(&path);
+                continue;
+            }
+            if started.elapsed() > LOCK_WAIT {
+                return Err(format!(
+                    "another writer held {} for longer than {}ms",
+                    path.display(),
+                    LOCK_WAIT.as_millis()
+                ));
+            }
+            std::thread::sleep(std::time::Duration::from_millis(5));
+        }
+    }
+}
+
+impl Drop for Guard {
+    fn drop(&mut self) {
+        let _ = std::fs::remove_file(&self.0);
+    }
+}
+
 /// Adds one miss, or bumps the one already there, and rewrites the file sorted.
 ///
 /// Read, merge, write on every miss rather than append. It costs a whole file
@@ -106,6 +172,9 @@ pub fn record(
     }
 
     let path = path_in(root);
+    // Taken before the read, because a merge over a stale read is exactly the lost
+    // update the lock exists to prevent. Released when this function returns.
+    let _held = Guard::take(&path)?;
     let mut seen = parse(&std::fs::read_to_string(&path).unwrap_or_default());
 
     let key = question.to_lowercase();
@@ -326,6 +395,60 @@ mod tests {
         let outcome = record(&dir, "uma pergunta perdida", &[], "2026-08-30");
         let reason = outcome.expect_err("writing into a directory cannot succeed");
         assert!(!reason.is_empty(), "the caller is handed something it can print");
+    }
+
+    /// Two writers, one file, no lost update. Without the lock this loses lines:
+    /// read, merge, write, and the second writer's read predates the first writer's
+    /// write. The counts have to come out exact, which is the property the boot hook
+    /// needs before it is allowed to record on every message.
+    #[test]
+    fn two_writers_recording_at_once_lose_nothing() {
+        let dir = scratch("concurrent");
+        let rounds = 20;
+        let a = {
+            let dir = dir.clone();
+            std::thread::spawn(move || {
+                for _ in 0..rounds {
+                    record(&dir, "pergunta de a", &[], "2026-09-01").expect("a");
+                }
+            })
+        };
+        let b = {
+            let dir = dir.clone();
+            std::thread::spawn(move || {
+                for _ in 0..rounds {
+                    record(&dir, "pergunta de b", &[], "2026-09-01").expect("b");
+                }
+            })
+        };
+        a.join().expect("thread a");
+        b.join().expect("thread b");
+
+        let text = std::fs::read_to_string(path_in(&dir)).expect("read");
+        assert!(text.contains(&format!("{rounds:<4} 2026-09-01 2026-09-01 pergunta de a")), "{text}");
+        assert!(text.contains(&format!("{rounds:<4} 2026-09-01 2026-09-01 pergunta de b")), "{text}");
+        assert!(!lock_path(&path_in(&dir)).exists(), "the marker is gone when nobody holds it");
+    }
+
+    /// A marker somebody died holding is debris, and debris does not switch the log off
+    /// forever. A fresh marker is respected and the caller is told, with the reason.
+    #[test]
+    fn a_stale_marker_is_stepped_over_and_a_live_one_is_respected() {
+        let dir = scratch("markers");
+        let log = path_in(&dir);
+        let marker = lock_path(&log);
+
+        std::fs::write(&marker, "pid 4242\n").expect("plant");
+        let reason = record(&dir, "bloqueada", &[], "2026-09-01").expect_err("a live marker wins");
+        assert!(reason.contains("another writer held"), "{reason}");
+
+        // Now make it old enough to be debris.
+        let old = std::time::SystemTime::now() - LOCK_STALE - std::time::Duration::from_secs(5);
+        let f = std::fs::OpenOptions::new().write(true).open(&marker).expect("open");
+        f.set_modified(old).expect("backdate");
+        drop(f);
+        record(&dir, "liberada", &[], "2026-09-01").expect("a stale marker is stepped over");
+        assert!(std::fs::read_to_string(&log).expect("read").contains("liberada"));
     }
 
     #[test]

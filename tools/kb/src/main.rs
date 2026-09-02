@@ -7,8 +7,8 @@
 
 use kb::checks::{Finding, Level};
 use kb::{
-    answer, base, blocks, boot, checks, classify, commit, eval, index, init, json, mcp, memory,
-    promote, remember, store, ui, write,
+    answer, base, blocks, boot, capture, checks, classify, commit, eval, index, init, json, mcp,
+    memory, promote, remember, store, ui, write,
 };
 use base::Base;
 use std::path::Path;
@@ -32,6 +32,7 @@ usage:
     kb boot [path]... [--top N] [--all]
     kb promote [path]... [--top N] [--all] [--dry-run] [--max N] [--lock]
     kb ui [path]... [--port N] [--all]
+    kb capture [path] [--session ID]
     kb serve [path]... [--top N] [--all]
 
     path        base to work on, defaults to the current directory
@@ -73,6 +74,15 @@ passages and say plainly when they do not hold the answer. A `nothing` verdict n
 reaches the model, and without the manifest line the command prints the reading list
 `kb route` would have printed. The model sits after the verdict, never inside
 retrieval, so ADR-0018 stands.
+
+capture turns a session's record into a deposit. kb boot appends to the record on every
+message: the questions the base refused and the agents it routed to. At session end,
+capture writes that as one markdown file into the last routed agent's inbox/, raw and
+without a Search for line, so the router never names it and every passage from it is
+labelled short memory. Then promote reads it. No model runs. The session id comes from
+--session, or from the hook payload on stdin, the same JSON kb boot reads. A session
+that was never routed to an agent is not captured, and the record is kept: a deposit
+with no owner is a question filed in a base that never saw it.
 
 promote reads each agent's inbox/ and offers what it finds to two promoters. The first
 proposes notes and never sees the base; the second decides, three times through three
@@ -233,6 +243,10 @@ fn main() -> ExitCode {
             cmd_commit(&positional, &message)
         }
         "boot" => cmd_boot(&paths_or_default(&positional), all, top),
+        "capture" => {
+            let paths = paths_or_default(&positional);
+            cmd_capture(paths[0], flag_value(&args, "--session").as_deref())
+        }
         "answer" => {
             if positional.is_empty() {
                 eprintln!("kb: answer needs a question\n");
@@ -1444,6 +1458,50 @@ fn cmd_boot(paths: &[&str], all: bool, top: usize) -> ExitCode {
     let briefing = boot::brief(&memory, root, &req, top);
     print!("{}", briefing.text);
     ExitCode::SUCCESS
+}
+
+// ---------------------------------------------------------------------------
+// capture
+// ---------------------------------------------------------------------------
+
+/// `kb capture`: the session's record into the deposit. ADR-0035.
+///
+/// Prints one sentence about what it did, because it runs from a hook nobody watches
+/// and a feature that fails silently there is a feature that is off within a week.
+fn cmd_capture(root: &str, session: Option<&str>) -> ExitCode {
+    use std::io::Read;
+
+    // The flag wins. Without it, the hook payload on stdin names the session, exactly
+    // as `kb boot` reads it, so the same hook can call both without plumbing.
+    let session = match session.map(str::trim).filter(|s| !s.is_empty()) {
+        Some(s) => s.to_string(),
+        None => {
+            let mut stdin = String::new();
+            let _ = std::io::stdin().read_to_string(&mut stdin);
+            match boot::parse_request(&stdin) {
+                Some(req) if req.session != "unknown" => req.session,
+                _ => {
+                    eprintln!("kb capture: no session named. Pass --session, or the hook payload on stdin.");
+                    return ExitCode::from(2);
+                }
+            }
+        }
+    };
+
+    match capture::write_deposit(Path::new(root), &session, &kb::misses::today()) {
+        Ok(capture::Outcome::Written(path)) => {
+            println!("captured session {session} into {}", path.display());
+            ExitCode::SUCCESS
+        }
+        Ok(capture::Outcome::Nothing(why)) => {
+            println!("nothing captured for session {session}: {why}");
+            ExitCode::SUCCESS
+        }
+        Err(e) => {
+            eprintln!("kb capture: {e}");
+            ExitCode::from(1)
+        }
+    }
 }
 
 // ---------------------------------------------------------------------------

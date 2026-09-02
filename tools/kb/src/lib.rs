@@ -15,6 +15,7 @@
 pub mod base;
 pub mod blocks;
 pub mod boot;
+pub mod capture;
 pub mod checks;
 pub mod classify;
 pub mod commit;
