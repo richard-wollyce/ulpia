@@ -44,6 +44,18 @@
    * plate kept a rule whose foundation had gone. The machine's voice is quoted
    * in the page's own material, the way a book sets a quotation in its own
    * type rather than pasting in a photograph. */
+  /* The ambient field. Paper livery: red is the accent here and gold is
+   * illegal, so the field is warm paper with the faintest rose. */
+  --field-1: #ead9a8;
+  --field-2: #e6dcc6;
+  --field-3: #a63325;
+  --field-4: #dacfc0;
+  --field-alpha: 0.42;
+  --field-accent-alpha: 0.14;
+  --field-vignette: rgba(36, 29, 22, 0.055);
+  --grain-opacity: 0.055;
+  --grain-blend: multiply;
+
   --plate: #ede5d5;
   --plate-ink: #241d16; /* 13.28:1 */
   --plate-ink-2: #5a5044; /* 6.29:1 */
@@ -92,6 +104,17 @@
     --chrome-rule: #55452b;
     --lamp-glow: #c9a860; /* in the dark the glow is legible light, 8.37:1 */
     /* the plate in dark: every value unchanged since Richard approved it */
+    /* Cover livery: gold is legal here and red is not. */
+    --field-1: #c9a860;
+    --field-2: #a88c4e;
+    --field-3: #6b5a2f;
+    --field-4: #3d3320;
+    --field-alpha: 0.30;
+    --field-accent-alpha: 0.30;
+    --field-vignette: rgba(0, 0, 0, 0.38);
+    --grain-opacity: 0.05;
+    --grain-blend: overlay;
+
     --plate: #211b16;
     --plate-ink: #ede3d2; /* 13.40:1 */
     --plate-ink-2: #ac9c87; /* 6.37:1 */
@@ -113,6 +136,17 @@
   --chrome-ink: #c9a860;
   --chrome-rule: #55452b;
   --lamp-glow: #c9a860;
+  /* Cover livery: gold is legal here and red is not. */
+  --field-1: #c9a860;
+  --field-2: #a88c4e;
+  --field-3: #6b5a2f;
+  --field-4: #3d3320;
+  --field-alpha: 0.30;
+  --field-accent-alpha: 0.30;
+  --field-vignette: rgba(0, 0, 0, 0.38);
+  --grain-opacity: 0.05;
+  --grain-blend: overlay;
+
   --plate: #211b16;
   --plate-ink: #ede3d2;
   --plate-ink-2: #ac9c87;
@@ -144,7 +178,9 @@ details {
 }
 
 body {
-  background: var(--ground);
+  /* The ground moves to html so the field's pseudo-elements, which sit at
+   * z-index -1, paint above it and below every page's content. */
+  background: 0 0;
   color: var(--ink);
   font-family: "EB Garamond", Georgia, "Times New Roman", serif;
   font-size: var(--size-body);
@@ -2033,4 +2069,115 @@ kbd {
   max-width: 100%;
   height: auto;
   border: 1px solid var(--rule);
+}
+
+
+/* ============================================================================
+ * The ambient field, on every page.
+ *
+ * Four fixed layers behind the whole document, built entirely from
+ * pseudo-elements so one file reaches all sixteen pages and every page written
+ * after this one, with no markup to add and nothing for a second session
+ * editing HTML to collide with.
+ *
+ *   html::before   two soft lights, drifting on a 41 second clock
+ *   html::after    two more, on a 59 second clock
+ *   body::before   the vignette, which keeps the corners off the reading column
+ *   body::after    the grain
+ *
+ * Nothing here paints per frame. The only animated property is transform, so
+ * the work stays on the compositor and a full-viewport layer costs no layout
+ * and no paint while it moves. The two clocks are mutually prime, so the
+ * composite repeats every 41 x 59 = 2419 seconds, about forty minutes, which is
+ * longer than anyone reads one page. ease-in-out with alternate means each
+ * turnaround decelerates into a stop, so there is no seam where a loop
+ * restarts, and the seam is what gives a looping background away.
+ *
+ * Ground law 1 holds: gold appears only on the cover livery, red only on paper.
+ * ==========================================================================*/
+
+html {
+  background: var(--ground);
+}
+
+html::before,
+html::after,
+body::before,
+body::after {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+}
+
+html::before,
+html::after {
+  will-change: transform;
+}
+
+html::before {
+  opacity: var(--field-alpha);
+  background:
+    radial-gradient(38vmax 38vmax at 8% 4%, var(--field-1) 0%, transparent 62%),
+    radial-gradient(32vmax 32vmax at 96% 26%, var(--field-2) 0%, transparent 60%);
+  animation: field-a 41s ease-in-out infinite alternate;
+}
+
+html::after {
+  opacity: var(--field-accent-alpha);
+  background:
+    radial-gradient(30vmax 30vmax at 22% 92%, var(--field-3) 0%, transparent 64%),
+    radial-gradient(26vmax 26vmax at 68% 64%, var(--field-4) 0%, transparent 58%);
+  animation: field-b 59s ease-in-out infinite alternate;
+}
+
+@keyframes field-a {
+  from { transform: translate3d(0, 0, 0) scale(1); }
+  to   { transform: translate3d(6vmax, 4vmax, 0) scale(1.14); }
+}
+
+@keyframes field-b {
+  from { transform: translate3d(0, 0, 0) scale(1.08); }
+  to   { transform: translate3d(-7vmax, -5vmax, 0) scale(0.94); }
+}
+
+body::before {
+  background: radial-gradient(
+    ellipse 120% 100% at 50% 40%,
+    transparent 42%,
+    var(--field-vignette) 100%
+  );
+}
+
+/* One inlined feTurbulence, tiled at 220px. It does not animate: grain that
+ * shimmers over body text is television static, and this field sits under every
+ * page of a site people come to read. */
+body::after {
+  opacity: var(--grain-opacity);
+  mix-blend-mode: var(--grain-blend);
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='220' height='220'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='220' height='220' filter='url(%23n)'/%3E%3C/svg%3E");
+  background-size: 220px 220px;
+}
+
+/* The floor. Under reduce the field holds one composed frame: the colour stays,
+ * the motion goes. Print drops the whole thing. */
+@media (prefers-reduced-motion: reduce) {
+  html::before {
+    animation: none;
+    transform: translate3d(3vmax, 2vmax, 0) scale(1.07);
+  }
+  html::after {
+    animation: none;
+    transform: translate3d(-4vmax, -3vmax, 0) scale(1.01);
+  }
+}
+
+@media print {
+  html::before,
+  html::after,
+  body::before,
+  body::after {
+    display: none;
+  }
 }
