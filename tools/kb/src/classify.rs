@@ -338,7 +338,7 @@ fn variable_tail(
          fit is a coincidence of vocabulary, and one scorer alone is the case this system \
          reports as a guess rather than an answer.\n",
         confidence.keyword_score,
-        crate::memory::SCORE_FLOOR,
+        confidence.floor,
         match confidence.agreement {
             2 => "Both",
             1 => "Only one",
@@ -646,6 +646,7 @@ mod tests {
                 agreement: 2,
                 keyword_score: 40.0,
                 margin: 2.0,
+                floor: crate::memory::SCORE_FLOOR,
             },
             // A realistic species table, so the budget below is measured against the tail
             // as it actually ships and not against a version with the block missing.

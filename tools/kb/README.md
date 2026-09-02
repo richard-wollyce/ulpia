@@ -206,6 +206,39 @@ A file contributes to the fusion **once**, at the rank of its best chunk. Scorin
 turns the ranking into "which file has the most matching pieces", which is a different question and
 usually the wrong one.
 
+### The floor, term by term
+
+The verdict is a comparison: the top file's keyword score against a floor. Both sides are made of the
+same pieces, so here they are, named, because a threshold nobody can read is a threshold nobody can
+argue with.
+
+| Term | What it is |
+|---|---|
+| **N** | How many entries the fleet has. An entry is a note with a `Search for:` line |
+| **df** | Document frequency: how many entries carry a given key |
+| **idf** | `ln(1 + N / (1 + df))`. The weight of a key. A key on one note in a thousand weighs 6.2; a key on every note weighs almost nothing. Standard arithmetic for "how much does this word say about which file" |
+| **idf_unique(N)** | idf for a key exactly one note carries: `ln(1 + N/2)`. The heaviest a single key can be at this size. 0.41 at one entry, 1.10 at four, 1.87 at eleven, 4.74 at 226 |
+| **W_KEYWORD** | 6.0. One matched key is worth `6 × idf` |
+| **keyword score** | The sum over every key the question matched, plus smaller terms for title and whole phrase matches. Printed beside each file by `kb route` |
+| **SCORE_FLOOR** | 17.5, measured on a fleet of **226** entries and moved twice by `kb eval` |
+| **floor_for(N)** | `0.616 × 6 × idf_unique(N)`, where 0.616 is `17.5 / (6 × idf_unique(226))`. The same floor, restated as "62% of what one unique key scores here", and carried to every other size in that unit. It is 17.5 at 226 entries to the last decimal, 6.9 at eleven, 4.1 at four, 26.4 at a thousand |
+
+**Why it scales.** idf grows with N, because rarity needs a corpus to be rare in. A fixed 17.5 therefore
+meant three unique keys on a base of four entries, one on the base it was measured on, and half a key
+on a thousand: a word in fifty files cleared it alone. Measured on the demo before the change, a base
+of two to four entries got not one `hit` on its own gold questions. After: every size from two up
+routes every gold question to the right file, the three refusals hold at every size, and the abstention
+benchmark's refusal figure did not move while its in-scope confident answers doubled. The whole record,
+with the tables, is [ADR-0036](../../decisions/0036-the-floor-scales-with-the-corpus.md).
+
+**A fleet of one entry never routes.** With one note every key has df 1, so every key weighs the same
+and idf can tell nothing apart. Below `MIN_ENTRIES_TO_ROUTE`, two, the verdict is at most `guess`. Two
+is the first size at which a word in both notes weighs less than a word in one, which is the first size
+at which there is a ruler.
+
+`gate.floor` in `kb route --json`, and every surface that says "against a floor of", carry the floor
+that applied to that fleet, never the calibration constant.
+
 ### `kb blocks`: what the agent wakes up knowing, and what it costs
 
 ```

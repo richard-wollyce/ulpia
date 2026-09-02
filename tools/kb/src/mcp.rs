@@ -775,7 +775,7 @@ fn evidence(c: &crate::memory::Confidence) -> String {
         "EVIDENCE: keyword score {:.1} against a floor of {:.1}; {} of the two independent \
          scorers ranked the top file; it leads the runner-up by {:.2}x. Verdict: {}.\n\n",
         c.keyword_score,
-        crate::memory::SCORE_FLOOR,
+        c.floor,
         match c.agreement {
             2 => "both",
             1 => "only one",

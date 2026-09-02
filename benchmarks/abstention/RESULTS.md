@@ -10,7 +10,25 @@
 | Questions | 50, authored blind and adversarially checked (see below) |
 | Layer | deterministic only: keyword scorer + `SCORE_FLOOR` 17.5, no model, no network |
 
-## The matrix
+## Re-run 2026-09-02, after ADR-0036
+
+Same command, same corpus, same questions, commit `c8c3890` plus the scaled floor. The
+floor for this corpus of 11 entries is now 6.9, derived from the same 17.5 at the 226 entry
+fleet it was measured on.
+
+| label | confident | guess | nothing | of |
+|---|---|---|---|---|
+| in-scope | **12** | **2** | 6 | 20 |
+| near-oos | 2 | 0 | 8 | 10 |
+| far-oos | 0 | 0 | 10 | 10 |
+| noise | 0 | 0 | 10 | 10 |
+
+**The refusal figure did not move: 28 of 30**, the same two baits at the same 33.0 and 24.8,
+both above either floor. The in-scope side doubled its confident answers, 6 to 12, out of the
+guess column. Nothing left the nothing column, because a question that shares no token with
+the corpus scores zero at any floor. The original run is kept below as it was.
+
+## The matrix, 2026-08-23, fixed floor 17.5
 
 Three outcomes, because the system has three and a binary lied in this instrument's
 first run: below the floor the router still answers, labelled a guess.

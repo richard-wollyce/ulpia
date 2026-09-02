@@ -396,7 +396,7 @@ pub fn kind_of(rel: &str) -> Kind {
 /// The title and the file name are close behind because they were also chosen
 /// deliberately. The summary is prose and matches things incidentally, so it
 /// only breaks ties.
-const W_KEYWORD: f32 = 6.0;
+pub const W_KEYWORD: f32 = 6.0;
 const W_PHRASE: f32 = 10.0;
 const W_TITLE: f32 = 3.0;
 const W_STEM: f32 = 3.0;
@@ -559,6 +559,15 @@ impl<'a> Prepared<'a> {
 fn idf(term: &str, df: &HashMap<String, usize>, total: usize) -> f32 {
     let seen = *df.get(term).unwrap_or(&0) as f32;
     (1.0 + (total as f32 / (1.0 + seen))).ln()
+}
+
+/// The weight of a term that exactly one entry carries, at this corpus size: the
+/// heaviest a single word can be. It is `idf` above with `seen = 1`, written out so the
+/// floor can be expressed in it. `ln(1 + N/2)`: 0.41 at one entry, 1.10 at four, 1.87 at
+/// eleven, 4.74 at 226, 6.22 at a thousand. Rarity needs a corpus to be rare in, and this
+/// is what one unit of rarity is worth in each.
+pub fn idf_unique(entries: usize) -> f32 {
+    (1.0 + entries as f32 / 2.0).ln()
 }
 
 // ---------------------------------------------------------------------------

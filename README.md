@@ -188,13 +188,15 @@ lands, because a whole-base read costs minutes, and a caller on any surface dese
 that number before paying it.
 
 That eval is the reproducible half of every number on this page: 13 questions, 10 it
-should answer and 3 it should refuse, graded in front of you. Run today on the demo:
-file 10/10, agent fold 10/10, all 3 refusals refused, and the confidence floor
-separates every hit from every miss on this set. Your screen will also show
-`routes 8/10` and two hits demoted to guesses: that is the stricter
-classifier-included layer declining two low scorers, printed so the flattering
-line never travels without the harsher one beside it. The private-fleet numbers further up
-are the same command pointed at a fleet you cannot see, which is the product working.
+should answer and 3 it should refuse, graded in front of you. Run on 2026-09-02 on the
+demo: file 10/10, agent fold 10/10, routes 10/10, all 3 refusals refused, and no correct
+answer demoted to a guess. An earlier version of this paragraph told you to expect
+`routes 8/10` and two demotions, and it was right at the time: the confidence floor was
+one number, measured on a fleet of 226 entries, and on eleven entries it was too high by
+the arithmetic of idf. The floor now scales with the corpus
+([ADR-0036](decisions/0036-the-floor-scales-with-the-corpus.md)), and the private-fleet
+numbers further up are unchanged to the decimal, because that is the fleet it was
+calibrated on.
 
 Then create your own first agent:
 
@@ -249,7 +251,7 @@ The `Search for:` line is the whole ranking, and the single most common way to e
 a base that holds the answer and cannot find it is to fill that line with topic words.
 Query words are weighted by inverse document frequency, and **a multi word key found whole
 inside the question scores far above the same words counted separately.** Three questions
-against one five file base, confidence floor 17.5:
+against one five file base, as they printed under the fixed floor of 17.5:
 
 ```
 "quanto custa o frete"                             hit     20.68   matched: quanto custa o frete, frete
@@ -258,7 +260,11 @@ against one five file base, confidence floor 17.5:
 ```
 
 The third note is not worse written. Its keys are `reembolso, estorno, devolucao do
-dinheiro`, which name the subject correctly and match no phrase anybody types.
+dinheiro`, which name the subject correctly and match no phrase anybody types. Under the
+floor a five file base gets today, 4.6, that third line is a `hit` at 6.19 rather than a
+guess: right file, a third of the score. That is arithmetic from `floor_for(5)` and not a
+re-run, because that base is not in this repository. The point about phrases stands either
+way, and it is the point.
 
 `kb check` grades that line for you, and two of its warnings are the ones worth acting on
 before anything else:

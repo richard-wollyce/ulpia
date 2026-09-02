@@ -304,7 +304,7 @@ pub fn brief(memory: &Memory, root: &Path, req: &Request, top: usize) -> Briefin
                  Do not assume an agent. Either ask which one this belongs to, or answer \
                  as the fleet's librarian and say the base does not appear to cover it.\n\n{}",
                 answer.confidence.keyword_score,
-                crate::memory::SCORE_FLOOR,
+                answer.confidence.floor,
                 roster(memory)
             ),
         };

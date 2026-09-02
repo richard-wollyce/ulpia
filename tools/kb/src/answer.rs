@@ -22,7 +22,7 @@
 //! score arrives labelled. The instruction is not a vibe, it is what makes LongMemEval's
 //! abstention split measurable end to end.
 
-use crate::memory::{Answer, Confidence, Verdict, SCORE_FLOOR};
+use crate::memory::{Answer, Confidence, Verdict};
 use crate::retrieve::Retrieved;
 
 /// The three table sizes, because one default lied by omission on aggregation.
@@ -96,7 +96,7 @@ pub fn prompt(question: &str, answer: &Answer, mode: Mode) -> String {
         "WHAT RETRIEVAL THINKS. Top keyword score {:.1} against a floor of {:.1}; \
          verdict: {}. Below the floor, treat every passage as a lead, not an answer.\n\n",
         answer.confidence.keyword_score,
-        SCORE_FLOOR,
+        answer.confidence.floor,
         match answer.confidence.verdict {
             Verdict::Hit => "something here matches",
             Verdict::Guess => "a guess; the match may be a coincidence of vocabulary",
@@ -254,7 +254,7 @@ mod tests {
         let _: Option<AgentChoice> = None;
         Answer {
             found,
-            confidence: Confidence { verdict, agreement: 1, keyword_score: score, margin: 1.0 },
+            confidence: Confidence { verdict, agreement: 1, keyword_score: score, margin: 1.0, floor: crate::memory::SCORE_FLOOR },
             agent: None,
             keyword_top: None,
         }

@@ -515,7 +515,7 @@ fn api_route(state: &State, question: &str) -> Value {
         ),
     );
     out.set("score", Value::Num(answer.confidence.keyword_score as f64));
-    out.set("floor", Value::Num(crate::memory::SCORE_FLOOR as f64));
+    out.set("floor", Value::Num(answer.confidence.floor as f64));
     out.set("margin", Value::Num(answer.confidence.margin as f64));
 
     if let Some(choice) = &answer.agent {

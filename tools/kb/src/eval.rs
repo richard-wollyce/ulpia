@@ -533,6 +533,7 @@ mod tests {
                 agreement: 2,
                 keyword_score: 10.0,
                 margin: 2.0,
+                floor: crate::memory::SCORE_FLOOR,
             },
             micros: 100,
             keyword_micros: 40,

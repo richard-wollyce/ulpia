@@ -494,7 +494,7 @@ pub fn evidence_for(memory: &Memory, proposal: &Proposal, top: usize) -> String 
         "  top keyword score {:.1} against a floor of {:.1}; {} of the two independent \
          scorers ranked the top file; it leads the runner-up by {:.2}x\n\n",
         answer.confidence.keyword_score,
-        crate::memory::SCORE_FLOOR,
+        answer.confidence.floor,
         match answer.confidence.agreement {
             2 => "both",
             1 => "only one",

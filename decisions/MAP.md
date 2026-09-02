@@ -449,3 +449,12 @@
   where it was routed; `kb capture` turns that into a raw deposit in the last routed agent's
   inbox at session end, before `promote` reads it. No model. The miss log holds a marker
   while it merges, which is what let the boot hook write to it. Why the trigger stays idle.
+
+- **[[0036-the-floor-scales-with-the-corpus]]** 🟢 accepted 2026-09-02.
+  **The confidence floor stops being one number.** 17.5 was measured on 226 entries, and a
+  matched key is worth `6 × idf`, which grows with the corpus: the fixed floor meant three keys
+  on four entries and half a key on a thousand. It is now 62% of one unique key at every size,
+  17.5 where it was measured, and a fleet of one entry never routes. Every term defined, three
+  instruments before and after: the calibration fleet unchanged to the decimal, the demo from
+  8/10 to 10/10 routed, the abstention benchmark's refusal unchanged and its confident
+  in-scope answers doubled.

@@ -56,6 +56,50 @@ use crate::store::{Scope, Store};
 /// remembered, and it moves when the evidence moves. It has now moved twice.
 pub const SCORE_FLOOR: f32 = 17.5;
 
+/// **The corpus size `SCORE_FLOOR` was measured at.** The two constants are one fact,
+/// "17.5 was the right floor for a fleet of 226 entries", and they are re-derived
+/// together or not at all: change the floor without this and every other corpus size
+/// silently inherits a calibration that was never made for it.
+///
+/// Why the floor has to travel with the size at all, ADR-0036. A matched key is worth
+/// `W_KEYWORD × idf`, and idf grows with the corpus, because rarity needs a corpus to be
+/// rare in. So a fixed 17.5 meant "two unique keys" on a base of ten entries, "one" on
+/// the base it was measured on, and on a thousand entries a word that appears in fifty of
+/// them clears it alone. The floor got harder as the base shrank and easier as it grew,
+/// in exactly the two directions that hurt. Measured on the demo corpus before the change:
+/// with fewer than five entries not one of the gold questions reached `hit`.
+pub const FLOOR_CALIBRATED_AT: usize = 226;
+
+/// Below this many entries the verdict is never `hit`, whatever the score.
+///
+/// The scaled floor corrects the ruler; this says when there is no ruler yet. With one
+/// entry every word it carries has `df = 1`, so every word weighs the same and idf can
+/// tell nothing apart: any shared word clears a floor built from it, not because the
+/// evidence is good but because there is nothing to compare rarity against. Two entries
+/// is the structural minimum, the first size at which a word in both weighs less than a
+/// word in one. The corpus size sweep in ADR-0036 shows every gold question hitting the
+/// right file from two entries up with no wrong file and every refusal holding, so a
+/// larger number here would refuse bases that are measured to route correctly. Revisit
+/// on the first fleet that misroutes at two to four entries.
+pub const MIN_ENTRIES_TO_ROUTE: usize = 2;
+
+/// The floor, in units of what one unique key scores in the corpus it was measured on.
+///
+/// `SCORE_FLOOR / (W_KEYWORD × idf_unique(FLOOR_CALIBRATED_AT))`: 17.5 over 6 × 4.74,
+/// about 0.62. Read it as "a result has to score at least 62% of what a single word
+/// found in exactly one note would score here". Derived rather than typed, so the two
+/// constants above cannot drift from it and the floor on the calibration fleet is 17.5
+/// to the last decimal, by construction.
+pub fn floor_in_unique_keys() -> f32 {
+    SCORE_FLOOR / (index::W_KEYWORD * index::idf_unique(FLOOR_CALIBRATED_AT))
+}
+
+/// The floor for a corpus of this many entries: the same fraction of a unique key,
+/// re-expressed in this corpus's idf. Equal to `SCORE_FLOOR` at `FLOOR_CALIBRATED_AT`.
+pub fn floor_for(entries: usize) -> f32 {
+    floor_in_unique_keys() * index::W_KEYWORD * index::idf_unique(entries)
+}
+
 /// **The incumbent margin was built, measured and removed on 2026-08-19.** The constant
 /// is gone; this note is what it left behind.
 ///
@@ -181,6 +225,11 @@ pub struct Confidence {
     /// Top keyword score divided by the best runner-up's. 1.0 when nothing else
     /// scored, because standing alone is not the same as winning.
     pub margin: f32,
+    /// The floor this verdict was measured against, for this corpus. Travels with the
+    /// verdict because it is no longer one number: every surface that prints "against a
+    /// floor of" reads it from here, and a caller disagreeing with the gate needs the
+    /// threshold that actually applied and not the one from the calibration fleet.
+    pub floor: f32,
 }
 
 impl Confidence {
@@ -688,12 +737,14 @@ impl Memory {
         hits: &[index::Hit<'_>],
         text: &[crate::store::Hit],
     ) -> Confidence {
+        let floor = self.floor();
         let Some(top) = hits.first() else {
             return Confidence {
                 verdict: Verdict::Nothing,
                 agreement: 0,
                 keyword_score: 0.0,
                 margin: 0.0,
+                floor,
             };
         };
         let runner_up = hits.get(1).map(|h| h.score).unwrap_or(0.0);
@@ -729,11 +780,28 @@ impl Memory {
             None => 0,
         };
 
-        // The floor alone. See MIN_MARGIN for the measurement that removed the
-        // margin from this line and why the reasoning behind it was wrong.
-        let verdict = if top.score >= SCORE_FLOOR { Verdict::Hit } else { Verdict::Guess };
+        // The floor alone, scaled to this corpus. See MIN_MARGIN for the measurement
+        // that removed the margin from this line and why the reasoning behind it was
+        // wrong, and `floor_for` for why the floor is no longer one number.
+        let verdict = if top.score >= floor && self.enough_to_route() {
+            Verdict::Hit
+        } else {
+            Verdict::Guess
+        };
 
-        Confidence { verdict, agreement, keyword_score: top.score, margin }
+        Confidence { verdict, agreement, keyword_score: top.score, margin, floor }
+    }
+
+    /// The floor for this fleet's size. One place, so the gate and every surface that
+    /// prints the gate's threshold read the same number.
+    pub fn floor(&self) -> f32 {
+        floor_for(self.entry_count())
+    }
+
+    /// Whether the fleet is large enough for a `hit` to mean anything. See
+    /// `MIN_ENTRIES_TO_ROUTE`.
+    pub fn enough_to_route(&self) -> bool {
+        self.entry_count() >= MIN_ENTRIES_TO_ROUTE
     }
 
     /// The older gate, over a fused list.
@@ -742,12 +810,14 @@ impl Memory {
     /// tray still reads a fused list directly. Superseded for routing decisions by
     /// [`Memory::confidence_of`], for the reason measured in [`Memory::ask`].
     pub fn confidence(&self, found: &[Retrieved]) -> Confidence {
+        let floor = self.floor();
         let Some(top) = found.first() else {
             return Confidence {
                 verdict: Verdict::Nothing,
                 agreement: 0,
                 keyword_score: 0.0,
                 margin: 0.0,
+                floor,
             };
         };
 
@@ -776,10 +846,13 @@ impl Memory {
         // Agreement is real evidence that a file is on topic and no evidence at all
         // that the topic is one the base covers, so it cannot carry a result over the
         // line on its own. `no_agreement` still exists and still says its own thing.
-        let verdict =
-            if top.keyword_score >= SCORE_FLOOR { Verdict::Hit } else { Verdict::Guess };
+        let verdict = if top.keyword_score >= floor && self.enough_to_route() {
+            Verdict::Hit
+        } else {
+            Verdict::Guess
+        };
 
-        Confidence { verdict, agreement, keyword_score: top.keyword_score, margin }
+        Confidence { verdict, agreement, keyword_score: top.keyword_score, margin, floor }
     }
 
     /// Which agent a question belongs to, aggregated from the file level routing.
@@ -1349,7 +1422,7 @@ mod tests {
     }
 
     fn saying(v: Verdict) -> Confidence {
-        Confidence { verdict: v, agreement: 0, keyword_score: 0.0, margin: 0.0 }
+        Confidence { verdict: v, agreement: 0, keyword_score: 0.0, margin: 0.0, floor: SCORE_FLOOR }
     }
 
     /// **The definition of a recall loss lives here and nowhere else.** F-02 in
@@ -1511,6 +1584,95 @@ mod tests {
         }
     }
 
+    /// A memory the size the floor was calibrated on, so `SCORE_FLOOR` means in these
+    /// tests exactly what it meant when it was measured. The gate tests below used an
+    /// empty memory, which was fine while the floor was one number; with the floor
+    /// scaled to the corpus, an empty memory has a floor of zero and no ruler at all.
+    fn calibrated_memory() -> Memory {
+        let mut m = empty_memory();
+        m.entries = (0..FLOOR_CALIBRATED_AT)
+            .map(|i| index::Entry {
+                base: "zed".into(),
+                rel: format!("knowledge/{i}.md"),
+                stem: i.to_string(),
+                title: String::new(),
+                keywords: vec![format!("k{i}")],
+                summary: String::new(),
+                body: String::new(),
+            })
+            .collect();
+        m
+    }
+
+    /// ADR-0036. The floor on the calibration fleet is the measured number, to the
+    /// last decimal and by construction; smaller corpora get a lower one and larger a
+    /// higher one, in the same fraction of one unique key.
+    #[test]
+    fn the_floor_is_the_measured_number_where_it_was_measured_and_scales_elsewhere() {
+        assert!((floor_for(FLOOR_CALIBRATED_AT) - SCORE_FLOOR).abs() < 1e-4);
+        assert!(floor_for(11) < SCORE_FLOOR, "a small base gets a lower floor");
+        assert!(floor_for(1000) > SCORE_FLOOR, "a large base gets a higher one");
+
+        // One unique key, at each size, against that size's floor: the fraction is the
+        // invariant, so a single unique key clears the floor at every size or at none.
+        for n in [4usize, 11, 226, 1000] {
+            let one_key = index::W_KEYWORD * index::idf_unique(n);
+            assert_eq!(
+                one_key >= floor_for(n),
+                index::W_KEYWORD * index::idf_unique(FLOOR_CALIBRATED_AT) >= SCORE_FLOOR,
+                "the meaning of the floor in keys must not change with N (at N={n})"
+            );
+        }
+    }
+
+    /// A thousand entries, a word in fifty of them: under the fixed floor that scored
+    /// 18.2 and was a hit on its own. It should not be, and now it is not.
+    #[test]
+    fn a_word_in_five_percent_of_a_big_corpus_is_not_a_hit_on_its_own() {
+        let n = 1000usize;
+        let df = 50usize;
+        let score = index::W_KEYWORD * (1.0 + n as f32 / (1.0 + df as f32)).ln();
+        assert!(score > SCORE_FLOOR, "the case that motivated this: {score} cleared 17.5");
+        assert!(score < floor_for(n), "and does not clear the floor for its own corpus");
+    }
+
+    /// One entry is no ruler: every word in it has the same weight, so the best the
+    /// gate can say is guess. Two entries and a unique key is a hit, at that size's
+    /// floor.
+    #[test]
+    fn one_entry_never_routes_and_two_can() {
+        let mut one = empty_memory();
+        one.entries = vec![index::Entry {
+            base: "zed".into(), rel: "knowledge/a.md".into(), stem: "a".into(),
+            title: String::new(), keywords: vec!["deploy".into()], summary: String::new(),
+            body: String::new(),
+        }];
+        let big = index::W_KEYWORD * index::idf_unique(1) * 4.0;
+        let c = one.confidence(&[found("zed", 0.9, big, &["keywords #1"])]);
+        assert_eq!(c.verdict, Verdict::Guess, "four keys on one note is still no ruler");
+
+        let mut two = one;
+        two.entries.push(index::Entry {
+            base: "zed".into(), rel: "knowledge/b.md".into(), stem: "b".into(),
+            title: String::new(), keywords: vec!["rollback".into()], summary: String::new(),
+            body: String::new(),
+        });
+        let one_key = index::W_KEYWORD * index::idf_unique(2);
+        let c = two.confidence(&[found("zed", 0.9, one_key, &["keywords #1"])]);
+        assert_eq!(c.verdict, Verdict::Hit, "one unique key clears the floor at every size");
+    }
+
+    /// The verdict carries the floor it was measured against, so no surface prints the
+    /// calibration constant as if it applied.
+    #[test]
+    fn the_verdict_carries_the_floor_that_applied() {
+        let m = calibrated_memory();
+        let c = m.confidence(&[found("zed", 0.9, SCORE_FLOOR + 1.0, &["keywords #1"])]);
+        assert!((c.floor - SCORE_FLOOR).abs() < 1e-4);
+        let e = empty_memory();
+        assert_eq!(e.confidence(&[]).floor, 0.0, "no entries, no ruler, and it says so");
+    }
+
     /// The three questions that produced this rule, as the shapes they had.
     #[test]
     fn agreement_between_the_scorers_is_what_separates_a_hit_from_a_guess() {
@@ -1553,7 +1715,7 @@ mod tests {
 
     #[test]
     fn a_score_over_the_floor_with_agreement_is_a_hit() {
-        let m = empty_memory();
+        let m = calibrated_memory();
         // 9.55 was the lowest correct answer when the floor was 6.0. Written against
         // the constant so it keeps meaning "over the floor" after the next re-derivation.
         let c = m.confidence(&[found("zed", 0.9, SCORE_FLOOR + 3.5, &["keywords #1", "text #2"])]);
@@ -1566,7 +1728,7 @@ mod tests {
     /// a guess by `no_agreement`.
     #[test]
     fn one_scorer_with_a_clean_margin_is_still_a_hit() {
-        let m = empty_memory();
+        let m = calibrated_memory();
         let c = m.confidence(&[
             found("zed", 0.9, 30.0, &["keywords #1"]),
             found("zed", 0.4, 4.0, &["keywords #2"]),
@@ -1583,7 +1745,7 @@ mod tests {
     /// instead of being quietly deleted along with the code that held it.
     #[test]
     fn a_narrow_margin_no_longer_demotes_a_result_that_clears_the_floor() {
-        let m = empty_memory();
+        let m = calibrated_memory();
         // Scores are written against SCORE_FLOOR rather than as literals. The floor was
         // re-derived on 2026-08-20 from 6.0 to 17.5 and these fixtures, at 11.0 and 10.8,
         // silently stopped testing what they were named for: they became two results under

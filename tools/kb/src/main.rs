@@ -868,7 +868,7 @@ fn route_payload(question: &str, memory: &memory::Memory, top: usize) -> json::V
     let mut gate = json::Value::obj();
     gate.set("served", (!refused).into());
     gate.set("ranked_by_text_only", (refused && !answer.found.is_empty()).into());
-    gate.set("floor", score(memory::SCORE_FLOOR as f64));
+    gate.set("floor", score(answer.confidence.floor as f64));
     out.set("gate", gate);
 
     let mut confidence = json::Value::obj();
@@ -1278,7 +1278,7 @@ fn cmd_answer(question: &str, paths: &[&str], all: bool, top: usize, mode: answe
                 "mode: {} | confidence: score {:.1} vs floor {:.1}; {}",
                 mode.label(),
                 a.confidence.keyword_score,
-                memory::SCORE_FLOOR,
+                a.confidence.floor,
                 match a.confidence.verdict {
                     memory::Verdict::Hit => "hit",
                     memory::Verdict::Guess => "guess, read the sources yourself",
@@ -1747,7 +1747,7 @@ fn cmd_eval(gold_path: &Path, paths: &[&str], all: bool, top: usize, classify: b
         if hlo > mhi {
             println!(
                 "       SEPARATES: every hit outscored every miss. Floor {:.1} sits in the gap.",
-                memory::SCORE_FLOOR
+                memory.floor()
             );
         } else {
             println!("       OVERLAPS: no floor tells a hit from a miss on this set.");
@@ -2367,8 +2367,16 @@ with a body"];
     /// three verdicts and a reader expects it to be false for two.
     #[test]
     fn a_guess_is_served_because_a_warning_is_not_a_filter() {
-        let (_, memory) = indexed_fleet("guess", &one_note_the_keyword_scorer_can_reach());
-        let out = route_payload("downtime", &memory, 4);
+        // A key every note carries is worth `6 × ln(1 + 4/5)`, 3.5, under this size's
+        // floor of 4.1: the one shape that is a guess at four entries. One unique key
+        // used to be the fixture and it stopped being a guess when the floor learned to
+        // scale (ADR-0036), which is the change working rather than the test breaking.
+        let mut notes = one_note_the_keyword_scorer_can_reach();
+        for (_, text) in notes.iter_mut() {
+            *text = text.replacen("**Search for:** ", "**Search for:** `everywhere`, ", 1);
+        }
+        let (_, memory) = indexed_fleet("guess", &notes);
+        let out = route_payload("everywhere", &memory, 4);
 
         assert_eq!(text_of(&out, "verdict"), "guess", "{}", out.to_string());
         assert!(flag_of(&out, ["gate", "served"]), "{}", out.to_string());
@@ -2376,18 +2384,20 @@ with a body"];
     }
 
     /// The floor travels so a caller can disagree with the gate without guessing what
-    /// it was measured against. Asserted through `memory::SCORE_FLOOR` rather than
-    /// through the literal 17.5, because the constant has already moved twice and a
-    /// literal here would pin the payload to a number the gate no longer uses.
+    /// it was measured against. Asserted through `Memory::floor` rather than through
+    /// a literal: the floor scales with the corpus since ADR-0036, so on this four note
+    /// fleet it is well under the calibration constant, and the payload has to carry
+    /// the number that actually applied.
     #[test]
     fn the_floor_in_the_payload_is_the_one_the_verdict_was_measured_against() {
         let (_, memory) = indexed_fleet("floor", &one_note_the_keyword_scorer_can_reach());
+        assert!(memory.floor() < memory::SCORE_FLOOR, "a four entry fleet gets a lower floor");
 
         for question in ["como faco rollback de um deploy sem downtime na release", "downtime", "xyzzy"] {
             let out = route_payload(question, &memory, 4);
             assert_eq!(
                 num_of(&out, ["gate", "floor"]),
-                memory::SCORE_FLOOR as f64,
+                ((memory.floor() as f64) * 1e6).round() / 1e6,
                 "{question}: {}",
                 out.to_string()
             );

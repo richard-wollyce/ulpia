@@ -30,7 +30,7 @@
 use std::path::Path;
 use std::time::Instant;
 
-use kb::memory::{Memory, SCORE_FLOOR};
+use kb::memory::Memory;
 
 pub struct Row {
     pub question: String,
@@ -81,7 +81,7 @@ pub fn run(root: &Path, questions: &Path) -> Result<(), String> {
         let score = answer.confidence.keyword_score;
         let out = if answer.keyword_top.is_none() {
             Out::Nothing
-        } else if score >= SCORE_FLOOR {
+        } else if score >= answer.confidence.floor && memory.enough_to_route() {
             Out::Confident
         } else {
             Out::Guess
@@ -164,7 +164,8 @@ pub fn run(root: &Path, questions: &Path) -> Result<(), String> {
     println!("PRICE    in-scope: {} confident, {} guess, {} nothing. A guess still answers, labelled;", count("in-scope", 0), count("in-scope", 1), count("in-scope", 2));
     println!("         the demo corpus's keys were written with the corpus, and these questions were");
     println!("         authored blind, so the guess column is what unturned phrasing costs a small base.");
-    println!("FLOOR    {SCORE_FLOOR}, the same constant `kb route` and `kb boot` gate on. Deterministic layer only:");
+    println!("FLOOR    {:.1} for this corpus of {} entries, the same rule `kb route` and `kb boot` gate on", memory.floor(), memory.entry_count());
+    println!("         (ADR-0036: {:.1} at the {} entry fleet it was measured on). Deterministic layer only:", kb::memory::SCORE_FLOOR, kb::memory::FLOOR_CALIBRATED_AT);
     println!("         the classifier in front of `kb boot` can only decline more than this, never less.");
     Ok(())
 }
