@@ -29,6 +29,7 @@ const band = (current) => `    <header class="band">
         <p class="wordmark"><a href="/">Ulpia</a></p>
         <nav class="nav" aria-label="Sections">
           <ul>
+            <li><a href="/docs/">Docs</a></li>
             <li><a href="/blog/" aria-current="CURRENT">Writing</a></li>
           </ul>
         </nav>
@@ -84,6 +85,7 @@ const page = ({ title, description, canonical, body, ogType = "article", current
     <link rel="stylesheet" href="/src/styles.css" />
   </head>
   <body>
+    <a class="skip" href="#main">Skip to content</a>
 ${band(current)}
 ${body}
 ${FOOTER}
@@ -146,7 +148,7 @@ for (const p of posts) {
       description: p.description,
       canonical: `${SITE}/blog/${p.slug}/`,
       lang: p.lang,
-      body: `    <main class="doc">
+      body: `    <main class="doc" id="main" tabindex="-1">
       <article>
         <h1>${esc(p.title)}</h1>
         <p class="doc-date">
@@ -182,7 +184,7 @@ writeFileSync(
     ogType: "website",
     current: "page",
     canonical: `${SITE}/blog/`,
-    body: `    <main class="doc">
+    body: `    <main class="doc" id="main" tabindex="-1">
       <h1>Writing</h1>
       <p class="doc-date">Richard Wollyce, on building Ulpia: what was decided, what it cost, and what is still wrong.</p>
 ${list}

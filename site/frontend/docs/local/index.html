@@ -1,0 +1,874 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>On Your Machine · Ulpia</title>
+    <meta name="description" content="From a build to a first note on a laptop, then Claude Code and Claude Desktop, with what each command really printed." />
+    <meta name="color-scheme" content="light dark" />
+    <meta name="theme-color" media="(prefers-color-scheme: light)" content="#F6F1E7" />
+    <meta name="theme-color" media="(prefers-color-scheme: dark)" content="#12100D" />
+    <link rel="canonical" href="https://ulpia.io/docs/local/" />
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <meta property="og:title" content="On Your Machine · Ulpia" />
+    <meta property="og:description" content="From a build to a first note on a laptop, then Claude Code and Claude Desktop, with what each command really printed." />
+    <meta property="og:url" content="https://ulpia.io/docs/local/" />
+    <meta property="og:type" content="website" />
+    <script src="/theme.js"></script>
+    <link rel="stylesheet" href="/src/styles.css" />
+  </head>
+  <body>
+    <a class="skip" href="#main">Skip to content</a>
+    <header class="band">
+      <div class="band-inner">
+        <p class="wordmark"><a href="/">Ulpia</a></p>
+        <nav class="nav" aria-label="Sections">
+          <ul>
+            <li><a href="/docs/" aria-current="page">Docs</a></li>
+            <li><a href="/blog/">Writing</a></li>
+          </ul>
+        </nav>
+        <button type="button" class="lamp-toggle" aria-label="Color scheme: light, press to change">
+          <svg viewBox="0 0 28 28" width="28" height="28" aria-hidden="true" focusable="false">
+            <g class="glow">
+              <path class="ray ray-c" d="M 14 1.2 L 14 3.6" />
+              <path class="ray ray-l" d="M 8.6 2.6 L 10.1 4.3" />
+              <path class="ray ray-r" d="M 19.4 2.6 L 17.9 4.3" />
+              <path class="shade-fill" d="M 6 13.5 L 10.5 5.5 L 17.5 5.5 L 22 13.5 Z" />
+            </g>
+            <g class="lamp">
+              <path class="shade-line" d="M 6 13.5 L 10.5 5.5 L 17.5 5.5 L 22 13.5 Z" />
+              <path class="stem" d="M 12.6 13.5 C 11.9 14.3, 11.1 15.0, 11.1 16.1 C 11.1 17.6, 12.9 18.2, 12.9 19.5 C 12.9 20.6, 10.6 20.9, 10.6 22.2 L 17.4 22.2 C 17.4 20.9, 15.1 20.6, 15.1 19.5 C 15.1 18.2, 16.9 17.6, 16.9 16.1 C 16.9 15.0, 16.1 14.3, 15.4 13.5 Z" />
+              <path class="base" d="M 9 24.25 L 19 24.25" />
+              <g class="chain-group">
+                <path class="chain" d="M 19 14.35 L 19 16.35" />
+                <circle class="chain-pull" cx="19" cy="17.15" r="1.05" />
+              </g>
+            </g>
+          </svg>
+        </button>
+      </div>
+    </header>
+
+    <main class="doc" id="main" tabindex="-1">
+      <h1>On Your Machine</h1>
+      <p class="doc-date">Last updated: 2 September 2026</p>
+
+      <nav class="contents" aria-labelledby="contents-title">
+        <p class="contents-title" id="contents-title">Contents</p>
+        <ol>
+          <li><a href="#build">Build</a></li>
+          <li><a href="#the-demo-fleet">The demo fleet</a></li>
+          <li>
+            <a href="#your-own-agent-and-its-first-book">Your own agent and its first book</a>
+            <ol>
+              <li><a href="#what-kb-init-writes">What kb init writes</a></li>
+              <li><a href="#the-note-then-the-question">The note, then the question</a></li>
+              <li><a href="#what-kb-index-buys">What kb index buys</a></li>
+              <li><a href="#check-and-fleet">Check and fleet</a></li>
+              <li><a href="#the-private-layer">The private layer</a></li>
+            </ol>
+          </li>
+          <li><a href="#prose-after-the-verdict-kb-answer">Prose after the verdict: kb answer</a></li>
+          <li><a href="#from-claude-code-and-claude-desktop">From Claude Code and Claude Desktop</a></li>
+          <li><a href="#the-fleet-boots-the-agent">The fleet boots the agent</a></li>
+          <li><a href="#the-reading-room">The reading room</a></li>
+        </ol>
+      </nav>
+
+      <p>
+        Every plate on this page was produced for it on 2 September 2026, from
+        a release build at commit <code>ea43d1d</code> on Windows 11, and quotes
+        what the command printed. Nothing here calls a model. The two commands
+        that can when the manifest names one, <code>kb answer</code> and
+        <code>kb boot</code>, are shown on the paths that do not, and
+        <code>kb promote</code>, which always does, is described and not run,
+        so every line you read below is one you can reproduce with the binary
+        alone.
+      </p>
+
+      <h2 id="build">Build</h2>
+      <p>
+        Requires Rust. There is one dependency, <code>rusqlite</code> 0.37 with
+        its <code>bundled</code> feature, and no build scripts of our own. That
+        dependency compiles SQLite in from the amalgamation, so a fresh checkout
+        needs a C toolchain: the MSVC Build Tools on Windows. There is no network
+        at runtime.
+      </p>
+      <pre><code>git clone https://github.com/richard-wollyce/ulpia &amp;&amp; cd ulpia
+cargo build --release --manifest-path tools/kb/Cargo.toml</code></pre>
+      <p>
+        The binary lands at <code>tools/kb/target/release/kb</code>
+        (<code>kb.exe</code> on Windows). Put it on your <code>PATH</code> or
+        call it by that path; every command below says <code>kb</code>.
+        <code>cargo test</code> in
+        <a href="https://github.com/richard-wollyce/ulpia/tree/main/tools/kb"><code>tools/kb</code></a>
+        runs the suite, and the
+        count is left out here on purpose, because more than one session
+        writes the repository and the number moves between them.
+      </p>
+      <p>
+        The source is public at
+        <a href="https://github.com/richard-wollyce/ulpia">github.com/richard-wollyce/ulpia</a>,
+        under Apache 2.0, with
+        <a href="https://github.com/richard-wollyce/ulpia/blob/main/LICENSE">LICENSE</a>
+        and
+        <a href="https://github.com/richard-wollyce/ulpia/blob/main/NOTICE">NOTICE</a>
+        at the root, and the first line above clones it. Building it yourself
+        is the honest default for a tool that reads your notes, and it is not
+        the only way: tagged releases carry a prebuilt
+        <code>kb-linux-x64</code> and <code>kb-windows-x64.exe</code>, each
+        with a <code>.sha256</code> beside it. There is no macOS binary,
+        because nobody here runs macOS, and a published artifact that nothing
+        has ever executed is worth less than its absence. Build from source
+        there.
+      </p>
+      <pre><code>gh release download kb-v0.1.0 -R richard-wollyce/ulpia -p "kb-linux-x64*"
+sha256sum -c kb-linux-x64.sha256</code></pre>
+
+      <h2 id="the-demo-fleet">The demo fleet</h2>
+      <p>
+        Three tiny invented agents ship with the source under
+        <a href="https://github.com/richard-wollyce/ulpia/tree/main/examples/demo"><code>examples/demo</code></a>:
+        <code>zed</code>, a software architect;
+        <code>steve</code>, a marketing analyst; <code>yaron</code>, a nutrition
+        assistant. Each holds a few textbook notes, and a note is a book: one
+        markdown file about one subject, with its label, the <em>Search
+        for</em> line, near the top. Beside them sits
+        <a href="https://github.com/richard-wollyce/ulpia/blob/main/examples/demo/gold.tsv"><code>gold.tsv</code></a>, the
+        answer key: thirteen questions, ten the fleet should answer and three it
+        should refuse. Everything in the demo is invented. The fleet its authors
+        run is private, which is the product working as designed.
+      </p>
+      <figure class="plate">
+        <pre><code><span class="prompt">$ </span>kb index examples/demo
+<span class="out">  steve      3 reindexed, 0 unchanged, 0 removed, 3 chunks</span>
+<span class="out">  yaron      4 reindexed, 0 unchanged, 0 removed, 4 chunks</span>
+<span class="out">  zed        4 reindexed, 0 unchanged, 0 removed, 4 chunks</span>
+<span class="agree">  total: 11 files, 11 chunks, 3 indexes</span></code></pre>
+        <figcaption>Real output, 2 September 2026, commit ea43d1d, release build on Windows 11, over examples/demo.</figcaption>
+      </figure>
+      <p>
+        <code>kb index</code> builds one SQLite index per agent, beside the
+        agent at <code>&lt;agent&gt;/.kb/index.db</code>, and prints one line per
+        base: how many files it reindexed, left unchanged and removed, and how
+        many chunks it wrote on that run, then a total. The index is derived and
+        disposable. Delete <code>.kb/</code> and you have lost a rebuild, not a
+        fact.
+      </p>
+      <figure class="plate">
+        <pre><code><span class="prompt">$ </span>kb route "quem decide se um deploy pode ir pra producao" examples/demo
+<span class="out">question: quem decide se um deploy pode ir pra producao</span>
+<span class="out">indexed:  11 entries across 3 agents, 0 aliases</span>
+<span class="out"></span>
+<span class="agree">   1.  33.69  zed/knowledge/deploy-checklist.md</span>
+<span class="out">      matched: deploy, producao</span>
+<span class="out">   2.   7.49  steve/knowledge/hooks-that-hold.md</span>
+<span class="out">      matched: decide</span></code></pre>
+        <figcaption>Real output, 2 September 2026, commit ea43d1d, release build on Windows 11, over examples/demo. The command line is longer than the plate and scrolls.</figcaption>
+      </figure>
+      <p>
+        That is Vesta answering which book to open. She prints the question
+        back, what she had to work with (eleven entries across three agents,
+        no aliases), then the ranked files with the score and, under each, the
+        words that matched, so a bad ranking can be diagnosed instead of
+        guessed at. The question is Portuguese over English notes on purpose:
+        the catalogue matches the keys each file declares, in whatever language
+        they were written.
+      </p>
+      <figure class="plate">
+        <pre><code><span class="prompt">$ </span>kb route "quem aprova um deploi" examples/demo
+<span class="out">question: quem aprova um deploi</span>
+<span class="out">indexed:  11 entries across 3 agents, 0 aliases</span>
+<span class="out"></span>
+<span class="agree">  nothing matched. Either the base does not cover it, or the</span>
+<span class="out">  Search for lines do not carry the words a real question uses.</span>
+<span class="out"></span>
+<span class="out">  the base does know these, and they look like words you used:</span>
+<span class="out">    quem aprova deploy, aprovar mudanca, checklist de deploy, deploy, deploy checklist, deploy window, janela de deploy, reverter deploy</span>
+<span class="out">  that is spelling and not meaning, so it finds a typo or a cognate</span>
+<span class="out">  and never finds a translation.</span></code></pre>
+        <figcaption>Real output, 2 September 2026, commit ea43d1d, release build on Windows 11, over examples/demo. The vocabulary line scrolls.</figcaption>
+      </figure>
+      <p>
+        And when she does not have the book, she says so, and answers with the
+        library's own vocabulary. The comparison is character trigram overlap,
+        so it reaches a typo (<code>deploi</code>) or a cognate and never a
+        translation, and the reply says which kind of help it is.
+      </p>
+      <figure class="plate">
+        <pre><code><span class="prompt">$ </span>kb eval examples/demo/gold.tsv examples/demo
+<span class="out">gold:     13 questions, 10 answerable</span>
+<span class="out">indexed:  11 entries across 3 agents</span>
+<span class="out"></span>
+<span class="out">  file agent kw    score  marg verdict question</span>
+<span class="out">  ok   ok    ok     33.7  4.50 hit    quem decide se um deploy pode ir pra producao</span>
+<span class="out">  ok   ok    ok     11.2  1.00 hit    como faco rollback sem downtime</span>
+<span class="out">  ok   ok    ok     22.5  1.00 hit    devo usar sqlite ou postgres no comeco</span>
+<span class="out">  ok   ok    ok     29.3  1.00 hit    what makes a review comment blocking</span>
+<span class="out">  ok   ok    ok     24.8  1.00 hit    como prender a atencao nos primeiros segundos do video</span>
+<span class="out">  ok   ok    ok     24.8  1.00 hit    qual a melhor frequencia de postagem</span>
+<span class="out">  ok   ok    ok     66.9  5.95 hit    how much protein per meal</span>
+<span class="out">  ok   ok    ok     11.2  1.00 hit    quanto tempo um musculo leva pra recuperar</span>
+<span class="out">  ok   ok    ok     24.8  1.00 hit    onde consulto a tabela nutricional de um alimento</span>
+<span class="out">  ok   ok    ok     33.0  1.00 hit    quantos gramas de proteina por quilo</span>
+<span class="out">  ok   -     -       0.0  0.00 none   qual acao da bolsa devo comprar</span>
+<span class="out">  ok   -     -       0.0  0.00 none   me conta uma piada</span>
+<span class="out">  ok   -     -       0.0  0.00 none   qual o sentido da vida</span>
+<span class="out"></span>
+<span class="out">FILE   fused   10/10  (100%)</span>
+<span class="out">       keyword 10/10  (100%), the same question asked of the keyword scorer alone</span>
+<span class="out">[the five-line AGENT block, quoted in the paragraph below]</span>
+<span class="out">GATE   flagged 0/0 of its own misses as a guess</span>
+<span class="out">       demoted 0/10 correct answers to a guess</span>
+<span class="agree">       of 3 question(s) the set says to decline: refused 3, hedged 0, answered 0</span>
+<span class="out"></span>
+<span class="out">SPEED  2176 us per question fused, 750 us keyword only. No model, no network.</span>
+<span class="out">       Release binary.</span></code></pre>
+        <figcaption>Real output, 2 September 2026, commit ea43d1d, release build on Windows 11, over examples/demo. The five AGENT lines between FILE and GATE are quoted in the paragraph below rather than in the plate, where the bracketed line stands in their place. The SPEED line is this laptop's on that run and is not a benchmark; the measured figures with their conditions are on Benchmarks. Long lines scroll.</figcaption>
+      </figure>
+      <p>
+        <code>kb eval</code> grades the catalogue against the answer key in
+        front of you. Run for this page under the floor that scales with the
+        corpus, 6.9 for these eleven entries: the right file 10 of 10, and in
+        the AGENT block the plate leaves out, the right agent 10 of 10 on every
+        row: what <code>kb boot</code> hands over, the deterministic fold alone,
+        and the same fold over the fused list, against 4 of 10 for
+        <code>always-yaron</code>, the best a fixed choice can do on this set,
+        so routing beats the fixed choice by six questions. All 3 refusals
+        refused, and no correct answer demoted to a guess. An earlier version of
+        the README told the reader to expect <code>routes 8/10</code> and two
+        demotions, and it was right at the time: the floor was one fixed number,
+        17.5, measured on a fleet of 226 entries, and on eleven entries it was
+        too high by the arithmetic of inverse document frequency. This is an
+        eval a reader can re-run. Every figure on this page that came from the
+        private fleet says so, because that fleet is one a reader does not
+        have.
+      </p>
+      <p>
+        The abstention line separates three outcomes, refused, hedged and
+        answered, and a test holds that they sum back to the denominator.
+        Before that split, anything that was not a hit counted as an
+        abstention, so a guess that served two files scored as silence, and one
+        run could support both it stayed quiet and it answered while quoting the
+        same figure.
+      </p>
+
+      <h2 id="your-own-agent-and-its-first-book">Your own agent and its first book</h2>
+      <p>
+        The walk below was made in an empty folder, with nothing in it before
+        the first command. A folder holding markdown is a base; no repository is
+        needed, and none is created.
+      </p>
+
+      <h3 id="what-kb-init-writes">What kb init writes</h3>
+      <figure class="plate">
+        <pre><code><span class="prompt">$ </span>kb init yaron
+<span class="out">created .\fleet\yaron</span>
+<span class="out">  12 files and directories</span>
+<span class="agree">  served as it stands: no repository is needed, and none was created</span>
+<span class="out"></span>
+<span class="out">Next: fill in agent.txt's role, then index.md. Both are placeholders,</span>
+<span class="out">and a generated file left unedited is a file nobody owns.</span></code></pre>
+        <figcaption>Real output, 2 September 2026, commit ea43d1d, release build on Windows 11, in an empty folder.</figcaption>
+      </figure>
+      <p>
+        Twelve files and directories: <code>agent.txt</code>,
+        <code>index.md</code>, <code>MAP.md</code>, <code>CLAUDE.md</code>,
+        <code>blocks.txt</code>, <code>kb-aliases.txt</code> and a
+        <code>.gitignore</code>, then <code>knowledge/</code>,
+        <code>inbox/</code>, <code>decisions/</code>, <code>protocols/</code>
+        and <code>templates/</code>, each holding a <code>.gitkeep</code>.
+        That is the full shape and nothing else. <code>agent.txt</code> carries
+        <code>name = Yaron</code>, an empty <code>role =</code> for you to fill,
+        an empty <code>ends =</code> for where the agent stops, and one
+        commented line, <code>private = profile/, projects/,
+        records/</code>, which is the default private layer written out so it is
+        there to be edited and not there to be needed. The
+        <code>.gitignore</code> mirrors that line, a courtesy to anyone who later
+        versions the fleet: <code>kb check</code> warns when the two disagree,
+        and nothing requires that git ever reads it.
+      </p>
+
+      <h3 id="the-note-then-the-question">The note, then the question</h3>
+      <p>
+        Three steps, and only one order between them matters. Write the book,
+        <code>fleet/yaron/knowledge/creatina.md</code>, with a <em>Search
+        for</em> line at the top. Run <code>kb index .</code>. Ask
+        <code>kb route "quanto de creatina por dia" .</code>. The note written
+        for this page:
+      </p>
+      <pre><code># Creatina: a dose de manutencao
+
+**Search for:** `creatina`, `creatine`, `quanto de creatina`, `creatina por dia`, `dose de creatina`, `creatine dose`, `3 g`, `5 g`, `saturacao`, `loading phase`, `fase de carga`, `monohidratada`, `monohydrate`, `retencao de agua`, `water retention`, `quando tomar creatina`, `when to take creatine`
+
+**Exists to:** The maintenance dose of creatine and whether a loading phase is needed
+
+A maintenance dose of 3 to 5 g of creatine monohydrate per day is the textbook figure
+for adults who train. A loading phase of 20 g per day for five to seven days saturates
+the muscle faster and is not required: the same saturation arrives in about four weeks
+at the maintenance dose. Take it at any time of day, with a meal if it upsets the stomach.
+These are population numbers from published guidelines, not a prescription.</code></pre>
+      <p>
+        For the plate below the order was deliberately wrong: <code>kb index
+        .</code> ran first, over the freshly generated agent, and the note was
+        written after it. Then the question was asked twice, once to the
+        catalogue alone and once with <code>--hybrid</code>.
+      </p>
+      <figure class="plate proof">
+        <pre><code><span class="prompt">$ </span>kb route "quanto de creatina por dia" .
+<span class="out">question: quanto de creatina por dia</span>
+<span class="out">indexed:  2 entries across 1 agents, 0 aliases</span>
+<span class="out"></span>
+<span class="agree">   1.  17.28  yaron/knowledge/creatina.md</span>
+<span class="out">      matched: creatina por dia, creatina</span>
+<span class="prompt">$ </span>kb route "quanto de creatina por dia" . --hybrid
+<span class="out">question: quanto de creatina por dia</span>
+<span class="out">indexed:  2 entries across 1 agents, 0 aliases</span>
+<span class="out"></span>
+<span class="out">  NOTE: only one scorer ranked any of these, so this is a guess rather</span>
+<span class="out">  than an answer. The base may not cover the question at all.</span>
+<span class="out"></span>
+<span class="out">  0.016  yaron    knowledge/creatina.md                        keywords #1</span></code></pre>
+        <figcaption>Real output, 2 September 2026, commit ea43d1d, release build on Windows 11, in the folder above, with the note written after the last kb index. Long lines scroll.</figcaption>
+      </figure>
+      <p>
+        A note is served the moment it is on disk. The catalogue, the keyword
+        scorer, re-reads the files on every run, so the first command found the
+        new book before the index had seen it. What <code>kb index</code> buys is
+        the second scorer, full text search over the content, and a note written
+        after the last index has no chunks in it. So <code>--hybrid</code> on
+        that note drops to one scorer and reports a weak guess with no passage:
+        <code>keywords #1</code> with no text rank beside it, the NOTE above,
+        and nothing quoted. That is the only silent failure left in this flow,
+        and it is the quiet kind. The answer is not wrong; it is thinner than it
+        should be.
+      </p>
+      <p>
+        An earlier version of the README had a fourth step between writing and
+        indexing, <code>kb commit</code>, because the router once asked git what
+        it may serve, and a note that was not yet tracked was invisible. That
+        rule is gone. <code>kb</code> never consults git, a directory holding
+        markdown is a base, and <code>kb commit</code> remains, optional, for
+        whoever versions a fleet. It is not in the path between a note and an
+        answer.
+      </p>
+
+      <h3 id="what-kb-index-buys">What kb index buys</h3>
+      <figure class="plate">
+        <pre><code><span class="prompt">$ </span>kb index .
+<span class="agree">  yaron      1 reindexed, 2 unchanged, 0 removed, 1 chunks</span>
+<span class="out">  total: 4 files, 1 chunks, 1 indexes</span>
+<span class="prompt">$ </span>kb route "quanto de creatina por dia" . --hybrid
+<span class="out">question: quanto de creatina por dia</span>
+<span class="out">indexed:  2 entries across 1 agents, 0 aliases</span>
+<span class="out"></span>
+<span class="out">  0.033  yaron    knowledge/creatina.md                        keywords #1 + text #1</span>
+<span class="out">         Creatina: a dose de manutencao: **Exists to:** The maintenance dose of creatine and whether a loading phase is needed ...</span></code></pre>
+        <figcaption>Real output, 2 September 2026, commit ea43d1d, release build on Windows 11, in the same folder, after the index caught up with the note. Long lines scroll.</figcaption>
+      </figure>
+      <p>
+        The index touched one file, the new one, and left two unchanged, because
+        files are content hashed and an unchanged file costs nothing on
+        reindex. With both scorers holding the note, <code>--hybrid</code>
+        prints the fusion score, the agent, the file, and why: <code>keywords
+        #1 + text #1</code>, one rank from each scorer, then the first passage.
+        The fusion is Reciprocal Rank Fusion, each list contributing
+        <code>1 / (60 + rank)</code> to every file it ranks, so two first places
+        sum to 0.033 and a lone first place to 0.016. It reads agreement, not
+        magnitude, which is why the two lines in the demo's hybrid run tie at
+        0.033 while the catalogue alone had them at 33.69 and 7.49: fusion is
+        the right rule for assembling passages a person reads and the wrong one
+        for choosing a single winner, and the verdict comes from the catalogue.
+        Where a passage comes from the deposit, <code>inbox/</code>, the line
+        ends in <code>[short memory]</code>.
+      </p>
+      <figure class="plate">
+        <pre><code><span class="prompt">$ </span>kb route "quem decide se um deploy pode ir pra producao" examples/demo --hybrid
+<span class="out">question: quem decide se um deploy pode ir pra producao</span>
+<span class="out">indexed:  11 entries across 3 agents, 0 aliases</span>
+<span class="out"></span>
+<span class="agree">  0.033  zed      knowledge/deploy-checklist.md                keywords #1 + text #2</span>
+<span class="out">         What a deploy needs before production: ... A deploy without a rollback plan is a bet, not a release. Canary first ...</span>
+<span class="out">  0.033  steve    knowledge/hooks-that-hold.md                 keywords #2 + text #1</span>
+<span class="out">         Hooks: the first three seconds decide the rest: **Exists to:** Why openings decide retention, and the three hook shapes that hold  A ...</span></code></pre>
+        <figcaption>Real output, 2 September 2026, commit ea43d1d, release build on Windows 11, over examples/demo. Long lines scroll.</figcaption>
+      </figure>
+
+      <h3 id="check-and-fleet">Check and fleet</h3>
+      <figure class="plate">
+        <pre><code><span class="prompt">$ </span>kb check .
+<span class="out">yaron  (4 public files, map: MAP.md)</span>
+<span class="agree">  warn  W07  knowledge/creatina.md                          unsearchable key(s): quanto de creatina, 3 g, 5 g. Several written words that reduce to one after stopwords, so the term reaches neither the keyword index nor the phrase index and no question can find it. Rewrite so the word that carries the meaning is the one that survives: `nao contestar` indexed as `contestar`, its own opposite, until it became `proibido contestar`</span>
+<span class="out">  0 errors, 1 warnings</span></code></pre>
+        <figcaption>Real output, 2 September 2026, commit ea43d1d, release build on Windows 11, in the folder above. The finding is one line and scrolls.</figcaption>
+      </figure>
+      <p>
+        <code>kb check</code> lints every base without touching a file. It
+        prints a header per base, the base's name with how many files it read
+        and which map it found, then the findings, then <code>clean</code> or
+        the error and warning counts. It exits 1 on any error, and with
+        <code>--strict</code> on any warning; the run above exits 0 as shown and
+        1 with <code>--strict</code>. The note written for this page earned its
+        warning honestly: <code>quanto de creatina</code> reduces to
+        <code>creatina</code> once the stopwords go, and <code>3 g</code> and
+        <code>5 g</code> reduce to one word each, so none of the three can be
+        found by a question, and the subject each of them names is already on
+        the keys beside them. Drop those three keys and the check is clean,
+        which was run for this page, as the demo's is:
+      </p>
+      <figure class="plate">
+        <pre><code><span class="prompt">$ </span>kb check examples/demo
+<span class="out">steve  (3 public files, map: none)</span>
+<span class="agree">  clean</span>
+<span class="out"></span>
+<span class="out">yaron  (4 public files, map: none)</span>
+<span class="out">  clean</span>
+<span class="out"></span>
+<span class="out">zed  (4 public files, map: none)</span>
+<span class="out">  clean</span></code></pre>
+        <figcaption>Real output, 2 September 2026, commit ea43d1d, release build on Windows 11, over examples/demo.</figcaption>
+      </figure>
+      <figure class="plate">
+        <pre><code><span class="prompt">$ </span>kb fleet .
+<span class="out">FLEET: .</span>
+<span class="out">ROLE: not set. Add a `role = ` line to fleet.txt.</span>
+<span class="out">AGENTS: 1</span>
+<span class="out"></span>
+<span class="out">- Yaron</span>
+<span class="out">  root: .\fleet\yaron</span>
+<span class="out">  role: not set in agent.txt</span>
+<span class="out"></span>
+<span class="agree">SOURCE: fleet.txt, each agent's agent.txt, and the directory names under fleet/. No index was queried and no ranking took place, so none of the above is a retrieved passage and none of it can be attributed to a knowledge file.</span></code></pre>
+        <figcaption>Real output, 2 September 2026, commit ea43d1d, release build on Windows 11, in the folder above, which has no fleet.txt yet. The SOURCE line scrolls.</figcaption>
+      </figure>
+      <p>
+        <code>kb fleet</code> reads and does not rank. The fleet's name and
+        role come from a <code>fleet.txt</code> at the root, each agent's from
+        its <code>agent.txt</code>, and the output says so in its last line,
+        because a model that cannot tell a looked-up fact from a retrieved
+        passage will eventually cite one as the other. The folder above has no
+        <code>fleet.txt</code> yet, so the fleet is named by the path it was
+        given and the role line tells you what to add. The demo's
+        <a href="https://github.com/richard-wollyce/ulpia/blob/main/examples/demo/fleet.txt">manifest</a> carries
+        <code>name = Vesta</code> and <code>role = The demo librarian</code>,
+        and its roster prints each agent's role from the line in its own
+        <code>agent.txt</code>.
+      </p>
+
+      <h3 id="the-private-layer">The private layer</h3>
+      <p>
+        <code>--all</code>, on any command, includes the private layer:
+        <code>profile/</code>, <code>projects/</code> and <code>records/</code>
+        unless the base declares otherwise with a <code>private =</code> line in
+        its <code>agent.txt</code>, where <code>.</code> declares the whole
+        base. Nothing outside the base is consulted. It is the right flag for
+        your own agents and the wrong one for a consumer that other people talk
+        to, because it turns the privacy filter off. The deposit,
+        <code>inbox/</code>, is served in both scopes, and every passage from it
+        is labelled short memory on every surface.
+      </p>
+
+      <h2 id="prose-after-the-verdict-kb-answer">Prose after the verdict: kb answer</h2>
+      <p>
+        <code>kb answer</code> runs retrieval first, unchanged, and only then
+        hands the served passages and the gate's own evidence line to the
+        model named by <code>answerer =</code> in <code>fleet.txt</code>. The
+        demo's line is <code>answerer = <a href="https://github.com/richard-wollyce/ulpia/blob/main/tools/answer-claude.cmd">../../tools/answer-claude.cmd</a></code>, a
+        command that reads a prompt on stdin and answers on stdout; any command
+        with that shape will do. The prompt states the grounding rules as hard
+        instructions: every claim must be supported by a served passage and
+        cite the file after it; the library does not hold this is a correct and
+        complete answer; a passage marked SHORT MEMORY may be used and, if it
+        is, the answer must say the claim comes from short memory; and the
+        answer is given in the language of the question.
+      </p>
+      <p>
+        Three refusals wrap the one model call, in order. A nothing verdict
+        never reaches the model, because fabrication needs a vacuum and gets
+        none. A missing answerer prints the reading list <code>kb route</code>
+        would have printed. A failed call prints the reading list out loud, on
+        stderr, and exits 1. Under every answer the caller prints
+        <code>sources served:</code> from retrieval's own list, so a fabricated
+        citation has nowhere to hide.
+      </p>
+      <figure class="plate proof">
+        <pre><code><span class="prompt">$ </span>kb answer "qual acao da bolsa devo comprar" examples/demo
+<span class="agree">nothing in the library matched. Either it does not cover this, or the</span>
+<span class="out">Search for lines do not carry the words the question used.</span>
+<span class="prompt">$ </span>kb answer "quanto de creatina por dia" .
+<span class="agree">no `answerer = ...` in the fleet manifest, so here is the reading list:</span>
+<span class="out"></span>
+<span class="out">  1. yaron/knowledge/creatina.md</span></code></pre>
+        <figcaption>Real output, 2 September 2026, commit ea43d1d, release build on Windows 11: the first over examples/demo, whose manifest names an answerer that was not called; the second in the folder above, whose manifest does not exist. Zero model calls in either.</figcaption>
+      </figure>
+      <p>
+        Three reading modes exist, chosen by the caller and never guessed. The
+        default reads the top five files in one call, a table sized for a
+        personal question. <code>--expanded</code> reads up to twelve, one
+        call, for evidence spread across several files. <code>--complete</code>
+        reads every keyed file the base serves, in batches of ten, one call per
+        batch plus one to compose, because a question whose answer is crumbs
+        across many files is starved by any top-k table. A whole-base read costs
+        minutes, so complete mode prints its cost before anything runs, the
+        count of files, batches and model calls, then the pace and a whole-read
+        estimate in minutes as soon as the first batch lands.
+      </p>
+      <p>
+        Measured on a release build with Sonnet as the pen, dated 24 August
+        2026 by the
+        <a href="https://github.com/richard-wollyce/ulpia/blob/main/decisions/0032-the-answerer-sits-after-the-verdict.md">decision record</a>
+        and the same day as its 23 August run at commit <code>35322d2</code>
+        by the
+        <a href="https://github.com/richard-wollyce/ulpia/blob/main/benchmarks/abstention/RESULTS.md">benchmark record</a>:
+        the abstention
+        benchmark over <code>examples/demo</code> had left exactly two
+        out-of-scope questions answered confidently by the deterministic layer,
+        both deliberate medical baits sharing vocabulary with textbook
+        nutrition. Passed through <code>kb answer</code>, both were refused, 2
+        of 2: the model stated the served passages hold no renal or dosing
+        content and referred the asker to a professional. That is a sample of
+        two, and the catch rate at scale is its own instrument.
+      </p>
+
+      <h2 id="from-claude-code-and-claude-desktop">From Claude Code and Claude Desktop</h2>
+      <p>
+        <code>kb serve .</code> speaks the Model Context Protocol over stdio.
+        Four tools, none of which writes to the library: <code>kb_route</code> (a question, and
+        optionally <code>top</code>), <code>kb_retrieve</code> (the same two),
+        <code>kb_remember</code> (a claim) and <code>kb_fleet</code>, which
+        takes nothing. The first returns ranked paths with the words that
+        matched and no file contents; the second returns the passages
+        themselves with their heading path and provenance; the third measures a
+        claim against the base and proposes ADD, UPDATE or NOOP with its
+        evidence, writes nothing and never proposes DELETE; the fourth is the
+        roster read from <code>fleet.txt</code> and each <code>agent.txt</code>,
+        not a search. One file is written all the same, and
+        <a href="https://github.com/richard-wollyce/ulpia/blob/main/tools/kb/src/mcp.rs">the source</a>
+        says that hiding it was a mistake: a refusal from <code>kb_route</code> or
+        <code>kb_retrieve</code> appends the question and the terms offered
+        back to <code>kb-misses.txt</code> beside the fleet manifest, a log of
+        what could not be answered rather than knowledge.
+      </p>
+      <figure class="plate proof">
+        <pre><code><span class="prompt">$ </span>printf '%s\n' '{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"kb_route","arguments":{"question":"quem decide se um deploy pode ir pra producao"}}}' | kb serve examples/demo
+<span class="out">kb serve: steve (examples/demo\steve)</span>
+<span class="out">kb serve: yaron (examples/demo\yaron)</span>
+<span class="out">kb serve: zed (examples/demo\zed)</span>
+<span class="out">kb serve: 11 map entries, 0 aliases, scope Public. Ready on stdio.</span>
+<span class="out">[stdout carried one JSON line; its text field, with the escaped newlines rendered:]</span>
+<span class="out">Files to open for: quem decide se um deploy pode ir pra producao</span>
+<span class="out"></span>
+<span class="agree">EVIDENCE: keyword score 33.7 against a floor of 6.9; both of the two independent scorers ranked the top file; it leads the runner-up by 4.50x. Verdict: something here matches.</span>
+<span class="out"></span>
+<span class="out">1. zed/knowledge/deploy-checklist.md  (What a deploy needs before production)</span>
+<span class="out">   matched: deploy, producao</span>
+<span class="out">   The checklist a change passes before production, and who decides</span>
+<span class="out">2. steve/knowledge/hooks-that-hold.md  (Hooks: the first three seconds decide the rest)</span>
+<span class="out">   matched: decide</span>
+<span class="out">   Why openings decide retention, and the three hook shapes that hold</span></code></pre>
+        <figcaption>Real output, 2 September 2026, commit ea43d1d, release build on Windows 11, over examples/demo. The four kb serve lines went to stderr as written; stdout was one JSON-RPC line, shown from the bracketed line down as its text field with the newlines rendered. No initialize was sent before the call. Long lines scroll.</figcaption>
+      </figure>
+      <p>
+        Every <code>kb_route</code> and <code>kb_retrieve</code> answer carries
+        that EVIDENCE line: the keyword score against the floor that applied to
+        this fleet, how many of the two scorers ranked the top file, its lead
+        over the runner-up, and the verdict in words. A miss offers the base's
+        vocabulary back and tells the model, in the same text, that if the
+        question was asked in one language and the base written in another it
+        should rewrite the question with those terms or the canonical ones it
+        expects and ask again; the tool's own description adds that this comes
+        before concluding the base does not cover the subject.
+      </p>
+      <p>
+        There is no write tool, deliberately. A write reached by a model is a
+        different security surface and gets built on purpose, not while the
+        retrieval side is still warm. The private layer stays out unless
+        <code>--all</code> is in the client's configuration, a deliberate act
+        visible in a file; the deposit is served in both scopes, and its
+        passages say <code>[short memory: ...]</code> in the tool's text.
+      </p>
+      <p>
+        Registering it with Claude Code at project scope is a
+        <code>.mcp.json</code> at the root of the folder you open. The
+        <a href="https://github.com/richard-wollyce/ulpia/blob/main/.mcp.json">repository's own</a> reads:
+      </p>
+      <pre><code>{
+  "mcpServers": {
+    "vesta": {
+      "command": "./tools/kb/target/release/kb.exe",
+      "args": ["serve", "."]
+    }
+  }
+}</code></pre>
+      <p>
+        At user scope, which stays out of any repository, one command
+        registers several bases at once, and the <code>--</code> is mandatory:
+        everything after it is passed to the server untouched.
+      </p>
+      <pre><code>claude mcp add --transport stdio --scope user fleet-memory -- \
+  C:\fleets\zed\tools\kb\target\release\kb.exe serve \
+  C:\fleets\zed C:\fleets\steve C:\fleets\yaron</code></pre>
+      <p>
+        Claude Desktop takes the same command and arguments in
+        <code>claude_desktop_config.json</code>:
+      </p>
+      <pre><code>{
+  "mcpServers": {
+    "vesta": {
+      "command": "/path/to/kb",
+      "args": ["serve", "/path/to/your/fleet"]
+    }
+  }
+}</code></pre>
+      <div class="note" role="note">
+        <p><strong>Careful.</strong> claude.ai in a browser cannot use this. A web page cannot spawn a local process, and custom connectors dial out from Anthropic's infrastructure rather than from your machine, so a localhost address resolves to their servers. Claude Code and Claude Desktop both run locally and both work.</p>
+      </div>
+      <p>
+        The server is dual-era. One protocol revision removed the
+        <code>initialize</code> handshake and moved the version into each
+        request; the earlier ones require it. So the server answers
+        <code>initialize</code> when asked, echoing back whatever version the
+        client named, and never requires it, which the plate above already
+        showed by getting an answer to a bare <code>tools/call</code>. And
+        stdout belongs to the protocol: nothing is written there that is not a
+        message, and every diagnostic goes to stderr, where a client is told
+        not to read it as failure.
+      </p>
+      <figure class="plate">
+        <pre><code><span class="prompt">$ </span>printf '%s\n' '{"jsonrpc":"2.0","id":0,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"docs","version":"0"}}}' | kb serve examples/demo 2>/dev/null
+<span class="agree">{"id":0,"jsonrpc":"2.0","result":{"capabilities":{"tools":{}},"protocolVersion":"2025-06-18","serverInfo":{"name":"kb","version":"0.1.0"}}}</span></code></pre>
+        <figcaption>Real output, 2 September 2026, commit ea43d1d, release build on Windows 11, over examples/demo, stderr discarded. Both lines scroll.</figcaption>
+      </figure>
+
+      <h2 id="the-fleet-boots-the-agent">The fleet boots the agent</h2>
+      <p>
+        Which agent answers is not decided by a file the model reads. It is
+        decided before the model sees the message, by <code>kb boot</code> on a
+        <code>UserPromptSubmit</code> hook: the runtime hands the hook the
+        prompt as JSON on stdin and injects whatever it prints on stdout into
+        the model's context. The repository registers it in its own
+        <a href="https://github.com/richard-wollyce/ulpia/blob/main/.claude/settings.json"><code>.claude/settings.json</code></a>,
+        together with the session-end hook
+        described further down:
+      </p>
+      <pre><code>{
+  "hooks": {
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"$CLAUDE_PROJECT_DIR/tools/kb/target/release/kb.exe\" boot \"$CLAUDE_PROJECT_DIR\" --top 5 --all",
+            "timeout": 30
+          }
+        ]
+      }
+    ],
+    "SessionEnd": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"$CLAUDE_PROJECT_DIR/.claude/hooks/promote-on-idle.sh\"",
+            "timeout": 10
+          }
+        ]
+      }
+    ]
+  }
+}</code></pre>
+      <figure class="plate">
+        <pre><code><span class="prompt">$ </span>printf '%s\n' '{"session_id":"docs-local-demo","prompt":"quem decide se um deploy pode ir pra producao","hook_event_name":"UserPromptSubmit"}' | kb boot examples/demo
+<span class="agree">VESTA: this message routes to zed. You are zed for as long as that holds. This was decided by the fleet's router before you saw the message, not by a file you read, so it is not yours to override: if it is wrong, say so rather than answering as somebody else.</span>
+<span class="out"></span>
+<span class="out">Open these before answering:</span>
+<span class="out">  zed/knowledge/deploy-checklist.md</span>
+<span class="out">  steve/knowledge/hooks-that-hold.md</span>
+<span class="prompt">$ </span>printf '%s\n' '{"session_id":"docs-local-demo","prompt":"como faco rollback sem downtime","hook_event_name":"UserPromptSubmit"}' | kb boot examples/demo
+<span class="out">VESTA: still zed.</span>
+<span class="out"></span>
+<span class="out">Open these before answering:</span>
+<span class="out">  zed/knowledge/deploy-checklist.md</span>
+<span class="prompt">$ </span>printf '%s\n' '{"session_id":"docs-local-demo","prompt":"how much protein per meal","hook_event_name":"UserPromptSubmit"}' | kb boot examples/demo
+<span class="out">VESTA: this message routes to yaron. You are yaron for as long as that holds. This was decided by the fleet's router before you saw the message, not by a file you read, so it is not yours to override: if it is wrong, say so rather than answering as somebody else.</span>
+<span class="out"></span>
+<span class="out">(the conversation was with zed until this message)</span>
+<span class="out"></span>
+<span class="out">Open these before answering:</span>
+<span class="out">  yaron/knowledge/protein-basics.md</span>
+<span class="out">  yaron/index.md</span></code></pre>
+        <figcaption>Real output, 2 September 2026, commit ea43d1d, release build on Windows 11, over examples/demo, three messages in one session. The demo's agents carry no blocks.txt, so no constitution follows the first line; an agent kb init writes carries one, and it follows on every message that changes the agent. Long lines scroll.</figcaption>
+      </figure>
+      <p>
+        The constitution is injected only when the routed agent changes,
+        tracked per session id under <code>.kb/sessions/</code>; between
+        changes the hook says <code>VESTA: still zed.</code> and lists the
+        files, because a constitution on the private fleet this was built for
+        was roughly 55 KB when
+        <a href="https://github.com/richard-wollyce/ulpia/blob/main/decisions/0022-the-fleet-boots-the-agent.md">the record</a>
+        was written on 18 August 2026, and
+        repeating it every turn would make the router the most expensive thing
+        in the loop. An
+        empty prompt is a session opening and gets the roster. Machine text,
+        the runtime's own notifications on the same hook, gets silence: run for
+        this page with a system-reminder envelope as the prompt, the hook
+        printed nothing and exited 0. Below the gate it picks nobody and says
+        so:
+      </p>
+      <figure class="plate">
+        <pre><code><span class="prompt">$ </span>printf '%s\n' '{"session_id":"docs-local-demo","prompt":"","hook_event_name":"UserPromptSubmit"}' | kb boot examples/demo
+<span class="out">The fleet:</span>
+<span class="out">  steve</span>
+<span class="out">  yaron</span>
+<span class="out">  zed</span>
+<span class="prompt">$ </span>printf '%s\n' '{"session_id":"docs-local-demo","prompt":"qual acao da bolsa devo comprar","hook_event_name":"UserPromptSubmit"}' | kb boot examples/demo
+<span class="agree">VESTA: routed this message and found no owner (top keyword score 0.0, floor 6.9).</span>
+<span class="out"></span>
+<span class="out">Do not assume an agent. Either ask which one this belongs to, or answer as the fleet's librarian and say the base does not appear to cover it.</span>
+<span class="out"></span>
+<span class="out">The fleet:</span>
+<span class="out">  steve</span>
+<span class="out">  yaron</span>
+<span class="out">  zed</span></code></pre>
+        <figcaption>Real output, 2 September 2026, commit ea43d1d, release build on Windows 11, over examples/demo. Both commands exited 0. Long lines scroll.</figcaption>
+      </figure>
+      <p>
+        It always exits 0. On this event, exit 2 blocks the prompt and erases
+        it, and exit 1 shows the person a hook error; neither is acceptable for
+        a routing step that failed, because the message belongs to the person
+        and must reach the model whatever the router thinks. If nothing was
+        injected, the hook is not installed or the router abstained, and the
+        session is the librarian rather than one of the agents.
+      </p>
+      <p>
+        Measured on 18 August 2026 on the release binary over five bases of a
+        private fleet, which is one a reader does not have: 355 ms per message,
+        of which about 60 ms is process start, about 280 ms is opening the five
+        bases and about 5 ms is the routing itself.
+        <a href="https://github.com/richard-wollyce/ulpia/blob/main/decisions/0022-the-fleet-boots-the-agent.md">The record</a>
+        names no commit.
+        That opening cost included one call to git per base, which the router
+        stopped making on 1 September 2026, and no record in the repository
+        re-measures the figure after that. The model that can sit in front of
+        the deterministic choice, a command named in the manifest that reads a
+        briefing and names the owner, is a separate cost: 9 to 15 seconds
+        through the Claude Code CLI on the author's machine, a figure that read
+        13 to 16 until it was corrected on 20 August 2026, again with no commit
+        named, and it is named on
+        <a href="/docs/how-it-works/">How the Catalogue Ranks</a>. The demo has
+        no such line, so every boot above was the arithmetic alone.
+      </p>
+      <figure class="plate">
+        <pre><code><span class="prompt">$ </span>kb blocks fleet/yaron
+<span class="out">fleet/yaron/blocks.txt</span>
+<span class="out"></span>
+<span class="out">  #   block      mode       files     bytes   ~tokens  cumulative</span>
+<span class="out">  1   identity   resident       2      2342       586         586</span>
+<span class="out">  2   user       resident       0         0         0         586</span>
+<span class="out">      missing file: ../person/core.md</span>
+<span class="out">  3   map        resident       1       978       245         831</span>
+<span class="out">  4   session    on-demand      0         0         0           -</span>
+<span class="out"></span>
+<span class="agree">  resident total: about 831 tokens</span>
+<span class="out"></span>
+<span class="out">  cost of changing a block, in tokens that have to be prefilled again:</span>
+<span class="out">    identity       831</span>
+<span class="out">    user           245</span>
+<span class="out">    map            245</span>
+<span class="out"></span>
+<span class="out">  A change invalidates its own block and everything after it, so the</span>
+<span class="out">  first block is the most expensive to touch. That is why the order is</span>
+<span class="out">  by how often a block changes, most stable first.</span></code></pre>
+        <figcaption>Real output, 2 September 2026, commit ea43d1d, release build on Windows 11, in the folder above, on the blocks.txt kb init wrote. The missing file is the person's core, which kb init --person creates and this walk did not.</figcaption>
+      </figure>
+      <p>
+        <code>kb blocks</code> prints what the agent wakes up knowing and what
+        it costs: each block of the constitution in stability order, resident or
+        on demand, its size in bytes and rough tokens, then the cost of changing
+        each block in tokens that have to be prefilled again, because prefix
+        caching reuses a prompt only up to the first token that differs. The
+        <a href="https://github.com/richard-wollyce/ulpia/blob/main/tools/kb/README.md">README</a>'s
+        own example, from the private fleet and carrying no date or
+        commit in the README: identity 5,911 tokens,
+        user 2,399, map 6,404, and the map is the largest resident block and
+        the one that changes most often, which is the worst combination
+        available. The README's projection, with its condition: once
+        <code>kb route</code> is wired into the loop, the map becomes on-demand
+        and the resident set drops by 46 percent across that fleet, because
+        routing is the map's whole job and it will be happening outside the
+        model by then.
+      </p>
+      <figure class="plate">
+        <pre><code><span class="prompt">$ </span>printf '%s\n' '{"session_id":"first-session","prompt":"quanto de creatina por dia","hook_event_name":"UserPromptSubmit"}' | kb boot .
+<span class="out">VESTA: this message routes to yaron. You are yaron for as long as that holds. This was decided by the fleet's router before you saw the message, not by a file you read, so it is not yours to override: if it is wrong, say so rather than answering as somebody else.</span>
+<span class="out">[the constitution kb init wrote follows, left out here]</span>
+<span class="prompt">$ </span>kb capture . --session first-session
+<span class="agree">captured session first-session into .\fleet\yaron\inbox\2026-09-02-session-first-session.md</span>
+<span class="prompt">$ </span>cat fleet/yaron/inbox/2026-09-02-session-first-session.md
+<span class="out">---</span>
+<span class="out">provenance: agent</span>
+<span class="out">stage: raw</span>
+<span class="out">---</span>
+<span class="out"></span>
+<span class="out"># Session first-session, 2026-09-02</span>
+<span class="out"></span>
+<span class="out">What this session produced without a model, written by `kb capture` when it ended. Nothing here has been judged. `kb promote` reads it and decides what, if anything, enters the library.</span>
+<span class="out"></span>
+<span class="out">## Where the conversation went</span>
+<span class="out"></span>
+<span class="out">yaron</span>
+<span class="prompt">$ </span>kb capture . --session first-session
+<span class="out">nothing captured for session first-session: the session produced nothing to capture</span></code></pre>
+        <figcaption>Real output, 2 September 2026, commit ea43d1d, release build on Windows 11, in the folder above. The bracketed line stands for the generated constitution the boot printed after its first line. Long lines scroll.</figcaption>
+      </figure>
+      <p>
+        At <code>SessionEnd</code> the second hook runs <code>kb capture</code>
+        synchronously, then a detached <code>kb promote</code>. Capture turns
+        the session's record, which <code>kb boot</code> appended to on every
+        message, into one markdown file in the last routed agent's
+        <code>inbox/</code>: <code>provenance: agent</code>,
+        <code>stage: raw</code>, no model run and no <em>Search for</em> line,
+        so the catalogue never names a raw session as an answer while the text
+        scorer can still surface it, labelled short memory. The deposit is
+        written before the record is deleted, so a crash between the two
+        captures again rather than losing the session. A session no agent was
+        routed in is not captured, the record is kept, and the reason is
+        printed; the second capture above found nothing left to take.
+      </p>
+
+      <h2 id="the-reading-room">The reading room</h2>
+      <figure class="plate">
+        <pre><code><span class="prompt">$ </span>kb ui examples/demo
+<span class="agree">kb ui: http://127.0.0.1:4114/  (3 agents, 11 entries)</span></code></pre>
+        <figcaption>Real output, 2 September 2026, commit ea43d1d, release build on Windows 11, over examples/demo, stopped after three seconds. The line is written to stderr.</figcaption>
+      </figure>
+      <p>
+        <code>kb ui</code> serves one embedded page plus three Garamond faces
+        on <code>127.0.0.1:4114</code>; the page holds the fleet, the
+        catalogue, the stacks, the desk, the block budgets and the doctor. It
+        binds the loopback address and nothing else: the flags it takes are
+        <code>--port</code> and <code>--all</code>, there is no flag for another
+        address, and the listener in
+        <a href="https://github.com/richard-wollyce/ulpia/blob/main/tools/kb/src/ui.rs">the source</a>
+        is bound to
+        <code>127.0.0.1</code> by name, so a page that has no business leaving
+        the machine cannot be asked to. The tray application over the same
+        library is Windows only, and young.
+      </p>
+
+      <p class="doc-back">
+        Previous: <a href="/docs/how-it-works/">How the Catalogue Ranks</a> ·
+        Next: <a href="/docs/cloud/">Somewhere That Is Not Your Machine</a> ·
+        <a href="/docs/">All of the docs</a> ·
+        <a href="/">Back to the library</a>
+      </p>
+    </main>
+
+    <footer>
+      <p class="address-line">
+        <a href="/docs/">Docs</a> · <a href="/benchmarks/">Benchmarks</a> · <a href="mailto:hello@ulpia.io">hello@ulpia.io</a>
+      </p>
+    </footer>
+  </body>
+</html>

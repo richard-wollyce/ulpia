@@ -1,0 +1,897 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>What Was Done · Ulpia</title>
+    <meta name="description" content="The shipped log by day and the decision record, one line per decision, reversals included." />
+    <meta name="color-scheme" content="light dark" />
+    <meta name="theme-color" media="(prefers-color-scheme: light)" content="#F6F1E7" />
+    <meta name="theme-color" media="(prefers-color-scheme: dark)" content="#12100D" />
+    <link rel="canonical" href="https://ulpia.io/docs/decisions/" />
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <meta property="og:title" content="What Was Done · Ulpia" />
+    <meta property="og:description" content="The shipped log by day and the decision record, one line per decision, reversals included." />
+    <meta property="og:url" content="https://ulpia.io/docs/decisions/" />
+    <meta property="og:type" content="website" />
+    <script src="/theme.js"></script>
+    <link rel="stylesheet" href="/src/styles.css" />
+  </head>
+  <body>
+    <a class="skip" href="#main">Skip to content</a>
+    <header class="band">
+      <div class="band-inner">
+        <p class="wordmark"><a href="/">Ulpia</a></p>
+        <nav class="nav" aria-label="Sections">
+          <ul>
+            <li><a href="/docs/" aria-current="page">Docs</a></li>
+            <li><a href="/blog/">Writing</a></li>
+          </ul>
+        </nav>
+        <button type="button" class="lamp-toggle" aria-label="Color scheme: light, press to change">
+          <svg viewBox="0 0 28 28" width="28" height="28" aria-hidden="true" focusable="false">
+            <g class="glow">
+              <path class="ray ray-c" d="M 14 1.2 L 14 3.6" />
+              <path class="ray ray-l" d="M 8.6 2.6 L 10.1 4.3" />
+              <path class="ray ray-r" d="M 19.4 2.6 L 17.9 4.3" />
+              <path class="shade-fill" d="M 6 13.5 L 10.5 5.5 L 17.5 5.5 L 22 13.5 Z" />
+            </g>
+            <g class="lamp">
+              <path class="shade-line" d="M 6 13.5 L 10.5 5.5 L 17.5 5.5 L 22 13.5 Z" />
+              <path class="stem" d="M 12.6 13.5 C 11.9 14.3, 11.1 15.0, 11.1 16.1 C 11.1 17.6, 12.9 18.2, 12.9 19.5 C 12.9 20.6, 10.6 20.9, 10.6 22.2 L 17.4 22.2 C 17.4 20.9, 15.1 20.6, 15.1 19.5 C 15.1 18.2, 16.9 17.6, 16.9 16.1 C 16.9 15.0, 16.1 14.3, 15.4 13.5 Z" />
+              <path class="base" d="M 9 24.25 L 19 24.25" />
+              <g class="chain-group">
+                <path class="chain" d="M 19 14.35 L 19 16.35" />
+                <circle class="chain-pull" cx="19" cy="17.15" r="1.05" />
+              </g>
+            </g>
+          </svg>
+        </button>
+      </div>
+    </header>
+
+    <main class="doc" id="main" tabindex="-1">
+      <h1>What Was Done</h1>
+      <p class="doc-date">Last updated: 2 September 2026</p>
+
+      <p>
+        The Bibliotheca Ulpia was a reading room and a record office in one
+        building, and this page is the record office. It holds two ledgers:
+        what landed, by the day it landed, and what was decided, one line per
+        record, with the reversals left in. It is written for the developer
+        asking whether this is a weekend project or a system with a record,
+        and whether the things it refused were measured or assumed.
+      </p>
+
+      <nav class="contents" aria-labelledby="contents-title">
+        <p class="contents-title" id="contents-title">Contents</p>
+        <ol>
+          <li>
+            <a href="#how-the-record-is-kept">How the record is kept</a>
+            <ol>
+              <li><a href="#four-records-that-still-read-proposed">Four records that still read proposed</a></li>
+            </ol>
+          </li>
+          <li><a href="#shipped-by-day">Shipped, by day</a></li>
+          <li>
+            <a href="#the-decision-record-one-line-each">The decision record, one line each</a>
+            <ol>
+              <li><a href="#measured-and-rejected">Measured and rejected</a></li>
+            </ol>
+          </li>
+          <li><a href="#the-first-integration-and-its-ten-findings">The first integration and its ten findings</a></li>
+        </ol>
+      </nav>
+
+      <h2 id="how-the-record-is-kept">How the record is kept</h2>
+      <p>
+        A change to the product lands as a decision first and is measured
+        after. The rule is written where the numbers are: changing the
+        product to chase a benchmark is the tuning the instruments exist to
+        refuse, so a change is recorded as a product decision, with the mode
+        it runs under declared in the run's own header, and only then run
+        against the same questions as before. The records are numbered and
+        dated, and the ledger's rule is that none is rewritten after
+        acceptance: what changes later is added beneath the record as a dated
+        amendment, which four of them carry, and a decision that is reversed
+        gets a new record that supersedes the old one, which is why the
+        reversals below are lines in the ledger and not deletions from it.
+      </p>
+      <p>
+        Each record carries the two options that were on the table and what
+        each would have cost, because a recommendation with one option is a
+        preference and not a decision. The ledger's header asks each to name
+        the event that would reopen it, its revisit trigger, so that a decision
+        is not held by habit; thirty-two of the thirty-six do, and 0012, 0030,
+        0032 and 0033 carry none. The floor's record, for one, waits for the
+        first fleet that misroutes at two to four entries, for the first fleet
+        near a thousand, and for its measured constant moving again.
+      </p>
+      <p>
+        A floor that was published stays published. The first LongMemEval-S
+        run, every mode at its default, scored 49 percent under a local
+        judge, and its hypotheses file remains beside the file of the run
+        that declared the reading mode per question and scored 61 percent.
+        The lower file is not withdrawn because a better one exists; it is
+        the floor.
+      </p>
+      <p>
+        The records are deliberately not in the retrieval path. They bind
+        every agent, so they live at the root of the repository rather than
+        inside any one agent's folder, and they are read by people and by an
+        agent that opens them on purpose. Attaching them to routing was tried
+        and reversed, and the ledger's header says where the reason is kept:
+        in the comment block of <code>fleet.txt</code>.
+      </p>
+
+      <h3 id="four-records-that-still-read-proposed">Four records that still read proposed</h3>
+      <p>
+        Four records carry the status <em>proposed</em> while what they
+        describe has shipped, and the honest thing is to say so here rather
+        than promote them quietly. ADR-0005, the agent wakes with its
+        constitution and not with its library: the boot path landed on
+        2026-08-14 and <code>kb blocks</code> on 2026-08-15. ADR-0010, the
+        memory as an MCP server: <code>kb serve</code> landed on 2026-08-16.
+        ADR-0011, the fleet layout: <code>kb init</code> and one index per
+        agent landed that same day. ADR-0020, the owner from intent and the
+        reading from agreement: the split landed on 2026-08-18, and two later
+        records changed parts of it without naming it, ADR-0027 moving the
+        owner choice to a model and ADR-0036 replacing the fixed floor it
+        gated on.
+      </p>
+      <p>
+        Three more read proposed for the ordinary reason. ADR-0004, local
+        inference, and ADR-0023, the phone, describe work that is not built.
+        ADR-0006 describes a cascade of which the alias table and the trigram
+        step exist and the embedding step was measured and refused. ADR-0009
+        is accepted for the stack and proposed for the contract, and says so
+        on its own status line.
+      </p>
+
+      <h2 id="shipped-by-day">Shipped, by day</h2>
+      <p>
+        Fifteen days carry a commit between 2026-08-14 and 2026-09-02, read
+        from the repository's log on 2 September 2026 at commit
+        <code>8285c1f</code>; a day missing from the list is a day on which
+        nothing landed in this repository. Beside each day are the hashes of
+        the commits the line is drawn from, and each resolves in the log of
+        the repository at
+        <a href="https://github.com/richard-wollyce/ulpia/commits/main">github.com/richard-wollyce/ulpia</a>,
+        so a line can be checked against the commit it was drawn from.
+      </p>
+      <dl>
+        <dt>2026-08-14</dt>
+        <dd>
+          The linter and the router with no model in it, the same day.
+          <code>kb</code>, the linter that makes the conventions real; the
+          agent wakes with its constitution and not with its library;
+          <code>kb route</code>, the router, with the place it breaks found;
+          routing across languages with an alias table and IDF, no model
+          needed. Commits <code>82ce813</code>, <code>9884cdb</code>,
+          <code>5401661</code>, <code>0f54c2a</code>.
+        </dd>
+        <dt>2026-08-15</dt>
+        <dd>
+          The memory pipeline and the single user posture decided, and
+          provenance landed; the SQLite index and hybrid retrieval, taking
+          the first dependency; <code>kb remember</code>, which measures a
+          claim and refuses to decide; <code>kb blocks</code>, which measures
+          what the agent wakes up knowing. Commits <code>c6b9c67</code>,
+          <code>f543333</code>, <code>3ade07c</code>, <code>6c1701f</code>.
+        </dd>
+        <dt>2026-08-16</dt>
+        <dd>
+          <code>kb serve</code>, the base as an MCP server; the private
+          layer leak closed, and scope made a thing a query must state;
+          <code>kb</code> made a library with the whole pipeline behind one
+          type; the tray, linking the memory in as a library; <code>kb
+          init</code>; one index per agent, with no way to point at the wrong
+          one. Commits <code>fda0b23</code>, <code>c62409d</code>,
+          <code>429562c</code>, <code>edf2ac0</code>, <code>b43a844</code>,
+          <code>441ae15</code>.
+        </dd>
+        <dt>2026-08-17</dt>
+        <dd>
+          The restart: the public repository started with the agents
+          structurally outside it; a miss answers with the vocabulary the
+          base actually has; one language in the software and any language
+          for the person; the agent shape published and made unable to
+          drift. Commits <code>d5fda73</code>, <code>ab54bdc</code>,
+          <code>d02507d</code>, <code>10e6392</code>.
+        </dd>
+        <dt>2026-08-18</dt>
+        <dd>
+          <code>kb write</code>, a note and the entry that makes it
+          reachable, or neither; <code>tools/bench</code>, the measuring
+          instrument in Rust; the keyword score carried past fusion so each
+          scorer does the job it is better at; the decision records moved to
+          the root; the system named Ulpia, the librarian still Vesta, the
+          agents in <code>fleet/</code>; commit by pathspec, because more
+          than one session writes the tree; the front door, ulpia.io; the
+          fleet boots the agent on a hook instead of asking the model to
+          boot itself; the reading room, <code>kb ui</code>. Commits
+          <code>56438ce</code>, <code>9bb34b9</code>, <code>622b2fa</code>,
+          <code>ef5fdf9</code>, <code>0890bae</code>, <code>eb5a186</code>,
+          <code>0f0564f</code>, <code>f51fe19</code>, <code>d22a9a7</code>.
+        </dd>
+        <dt>2026-08-19</dt>
+        <dd>
+          The desk opens, and the reading room learns the library's own
+          language; the person is one base every agent reads and never an
+          agent that answers; a fleet declares its human, and the shape of
+          that declaration is what ships; a wikilink stops at the edge of its
+          base, in both surfaces; the site deployed to Cloudflare Pages; a
+          model decides who answers, because choosing an agent was never
+          arithmetic. Commits <code>ff2672a</code>, <code>38db595</code>,
+          <code>b2abdb3</code>, <code>d824094</code>, <code>779cab0</code>,
+          <code>6bbbe8d</code>.
+        </dd>
+        <dt>2026-08-20</dt>
+        <dd>
+          A note carries its own keys, and the map stops deciding what
+          exists; the person's base is <code>person/</code>; the README
+          stops publishing numbers it cannot defend, and promotion gets its
+          trigger, on <code>SessionEnd</code>; a deposit needs two readers.
+          Commits <code>59b70f4</code>, <code>68d83cc</code>,
+          <code>c623069</code>, <code>1218ac1</code>.
+        </dd>
+        <dt>2026-08-21</dt>
+        <dd>
+          The page's privacy claim made to match the code, and the runbook
+          made to match the account. Commit <code>3cfd1de</code>.
+        </dd>
+        <dt>2026-08-23</dt>
+        <dd>
+          An agent's evidence has three species, and mass in one cannot
+          outvote purpose in another; the tree made ready for release, with
+          nothing personal left in it; the two benchmarks nobody else runs,
+          the refusal and the speed. Commits <code>d705197</code>,
+          <code>c93e382</code>, <code>c0d2662</code>.
+        </dd>
+        <dt>2026-08-24</dt>
+        <dd>
+          <code>kb answer</code>: the library learns to speak, and the
+          refusal survives prose; the session-to-fleet converter, so
+          LongMemEval runs against the product itself; LongMemEval-S, all
+          500 questions, with the refusal as the headline. Commits
+          <code>c3881d5</code>, <code>c6ba44e</code>, <code>e93063d</code>.
+        </dd>
+        <dt>2026-08-25</dt>
+        <dd>
+          Three answer modes, because one default lied on aggregation; the
+          declared-modes run, with the earlier floor kept published; Ulpia
+          as a LongMemEval-V2 backend, the harness theirs and the memory
+          ours; the benchmarks page. Commits <code>8e1019c</code>,
+          <code>80b8e01</code>, <code>6d7206a</code>, <code>4198189</code>.
+        </dd>
+        <dt>2026-08-26</dt>
+        <dd>
+          The V2 adapter learns where to open the book, four instrumented
+          rounds with every fix named; the text scorer prunes what cannot
+          rank. Commits <code>757f141</code>, <code>603ceda</code>.
+        </dd>
+        <dt>2026-08-28</dt>
+        <dd>
+          <code>route</code> speaks JSON, the index says it has one home,
+          and the Linux binary links no libc; the musl claim stops being a
+          claim, because the binary ran on amazonlinux and on alpine.
+          Commits <code>cbd590d</code>, <code>f320903</code>.
+        </dd>
+        <dt>2026-09-01</dt>
+        <dd>
+          Nine of the ten field-report findings closed, worked on 2026-08-30
+          and landed here: the gate speaks in the payload, one definition of
+          a recall loss, and git leaves the runtime; the session feeds the
+          deposit, and every surface counts its losses. Commits
+          <code>c071dd4</code>, <code>c8c3890</code>.
+        </dd>
+        <dt>2026-09-02</dt>
+        <dd>
+          The floor scales with the corpus, and a corpus of one has no
+          floor; the continuous integration run asserts the eval lines the
+          front page quotes; the tool's README counts four MCP tools and drops
+          the check that no longer exists. Commits <code>ea43d1d</code>,
+          <code>4aba4de</code>, <code>8285c1f</code>.
+        </dd>
+      </dl>
+
+      <h2 id="the-decision-record-one-line-each">The decision record, one line each</h2>
+      <p>
+        Thirty-six records, in number order. Each line is the ledger's own
+        summary cut to a sentence or two, and the status and date are the
+        record's own. Names of the people and agents who appear in the
+        records are left off this page. Three records carry a suffix because
+        a later record replaced part of them: 0012's system name by 0019,
+        0024's directory name by 0029, and 0025's runtime half by 0034. A
+        number in a line was measured on the private fleet unless the line
+        says otherwise, and a reader cannot re-run those; the demo corpus
+        and the benchmark files are the reproducible half.
+      </p>
+      <dl>
+        <dt>ADR-0001: an engineering agent is built on an earlier agent's three file split, extended for engineering</dt>
+        <dd>
+          Accepted 2026-08-13. The split is extended with
+          <code>decisions/</code>, <code>records/sessions/</code>,
+          <code>fleet/</code> and a staleness aware evidence ruler. Rejects a
+          combined boot file, which grows without limit and is paid on every
+          question, and rejects building a code first retrieval system before
+          the manual procedure has proven its shape.
+        </dd>
+        <dt>ADR-0002: the evidence ruler for claims about software</dt>
+        <dd>
+          Accepted 2026-08-13. Why software needs its own ruler rather than
+          adopting an earlier agent's unchanged, and the rule that matters
+          most in it: a model's output, including the architect's own, is
+          tier D until confirmed. The tier sits on the note with a per claim
+          tag only when a claim diverges, and a recheck happens on a major
+          version or on use, never on a calendar.
+        </dd>
+        <dt>ADR-0003: files stay the source of truth, the index is derived</dt>
+        <dd>
+          Accepted 2026-08-13. Answers whether the agents should move from
+          markdown to a database, Neo4j specifically. Files stay the source of
+          truth and any index is derived, rebuildable and disposable: the
+          runtime reads files natively, a database turns every read into a
+          tool call that can fail or be skipped, a graph is bad at storing
+          long prose, the real pain is validation rather than retrieval, and
+          the two options are not equally reversible.
+        </dd>
+        <dt>ADR-0004: local first inference, and the role split it forces</dt>
+        <dd>
+          Proposed 2026-08-13. Generation is memory bandwidth bound and
+          prefill is compute bound, so on four cores with no GPU reading a
+          21,000 token boot path costs minutes of silence per question and no
+          smaller model fixes it. The answer is to retrieve instead of read,
+          and to split the jobs by what each model is good at. Its numbers
+          are calculated, not measured, and the record says so on its status
+          line.
+        </dd>
+        <dt>ADR-0005: the agent wakes with its constitution, not with its library</dt>
+        <dd>
+          Proposed 2026-08-13; the boot path shipped on 2026-08-14 and
+          <code>kb blocks</code> on 2026-08-15. Prefix caching is real and
+          costs three things: KV cache RAM at about 144 KB per token, an
+          attention tax paid on every generated token, and silent recall
+          failure. The constitution stays resident within a budget of 4,000
+          tokens; the library is indexed by code and retrieved per query;
+          routing starts as a keyword lookup against the <em>Search for</em>
+          lines with no model at all.
+        </dd>
+        <dt>ADR-0006: one canonical language in the core, every language at the edge</dt>
+        <dd>
+          Proposed 2026-08-13. Separates the core prose, the keys the router
+          matches, and the edge conversation. Normalise at the boundary and
+          keep one canonical representation in the core: English, per base,
+          because the jargon is already English. The keys become multilingual
+          by a cascade: free alias lookup, then local query expansion only on
+          a miss, then embeddings only when keywords stop covering it.
+        </dd>
+        <dt>ADR-0007: the memory pipeline, and provenance as a first class field</dt>
+        <dd>
+          Accepted 2026-08-13. Four named outcomes on every write, ADD,
+          UPDATE, DELETE and NOOP, where NOOP is the branch whose absence
+          produced most of the junk in a published audit of a neighbouring
+          product. The agent may delete, because a delete gate produces
+          hoarding and git makes deletion visible and recoverable, so the
+          constraint is disclosure. Provenance and stage are front matter,
+          and an agent claim is never promoted to human without a human act.
+        </dd>
+        <dt>ADR-0008: build for one self hosted user, keep the hosted service possible</dt>
+        <dd>
+          Accepted 2026-08-13. Build for exactly one self hosted user, with
+          no accounts, no tenancy, no telemetry and config as a file, and keep
+          a paid hosted service possible without building any of it now: a
+          directory now and a database later is an afternoon, while the
+          reverse is an export and an apology. The paid product, if ever, is
+          convenience and not capability.
+        </dd>
+        <dt>ADR-0009: the GUI is a client of a contract, and the runtime is a choice inside it</dt>
+        <dd>
+          Accepted 2026-08-16 for the stack, proposed for the contract. Tauri
+          confirmed, but the boundary is the API contract and not the
+          framework, which is what makes a hosted service a second
+          implementation instead of a rewrite. Records that no third party
+          application can hold a consumer subscription credential, and the
+          three runtimes that follow from it. Voice deferred, with the seam
+          built.
+        </dd>
+        <dt>ADR-0010: the memory system ships as an MCP server, so the GUI stops being the only door</dt>
+        <dd>
+          Proposed 2026-08-16; <code>kb serve</code> shipped the same day.
+          Any MCP capable client can call the routing and the memory while
+          the user's own subscription pays for the model, so the credential
+          never comes near us. The server is confined to the base path it was
+          launched with, because tool arguments arrive from a model. The
+          write tool it named is not among the four tools the server
+          publishes today.
+        </dd>
+        <dt>ADR-0011: the fleet has one shape, and the library still accepts any path</dt>
+        <dd>
+          Proposed 2026-08-16; <code>kb init</code> and one index per agent
+          shipped the same day. The least reversible decision so far.
+          Separates what the library accepts, any path, from where the
+          product creates and looks, one defined place, because an
+          orchestrator able to create an agent has to know where to put it.
+          One index per agent, because a missing predicate cannot leak a file
+          that is not in the database you opened, and no absolute path
+          anywhere inside the fleet, so moving, backup and sync are one
+          operation.
+        </dd>
+        <dt>ADR-0012: the system is Vesta, and everything lives under a personal name</dt>
+        <dd>
+          Accepted 2026-08-17; the system name and the no-new-domain position
+          superseded by 0019. The system and its orchestrator were both
+          called Vesta, shipping under the author's own name with one
+          subdomain per system, because a civil name has no third party who
+          can hold prior rights to it. A mark must be abstract and never
+          literal, which kills Router, Hub, Conductor and Nexus on sight.
+          Vesta is the Roman deity who had no statue, represented by the fire
+          itself: the index is the fire, the markdown is the wills.
+        </dd>
+        <dt>ADR-0013: the base is read before the model is allowed to decide it was not needed</dt>
+        <dd>
+          Accepted 2026-08-17. Routing is a reflex rather than a decision,
+          because it costs microseconds and reads no text, and the model
+          classifies only after seeing what came back, because whether it
+          needs the base is the one decision a model is worst at. Twenty real
+          questions went 10 hits, 3 weak, 7 misses before repair and 17, 1, 2
+          after, with the fused scorer rescuing none of the seven; the record
+          admits the second number is tuned against its own test set.
+        </dd>
+        <dt>ADR-0014: the system is written in English, the conversation is not</dt>
+        <dd>
+          Accepted 2026-08-17. One language for identifiers, comments,
+          markdown, commits and interface copy; whatever the user types stays
+          in the language they typed it. Beat the split rule because the cost
+          of a split is not the translation but the boundary, and a rule that
+          needs a judgement per string drifts, which it already had between
+          two decisions four days apart.
+        </dd>
+        <dt>ADR-0015: expansion is split by kind of distance, and the code half ships first</dt>
+        <dd>
+          Accepted 2026-08-17. A typo or a cognate is orthographic distance:
+          character trigram overlap against the keys the base already holds,
+          in microseconds with no dependency, so a miss returns candidate
+          vocabulary instead of a dead end. A translation is semantic distance
+          and needs a model. Rejected building the local model version first
+          on a measurement: at 5.55 to 5.88 tokens per second
+          on the author's machine, a 20 to 40 token expansion costs 3.4 to 7.2
+          seconds against 4.43 ms for the whole of <code>kb_retrieve</code>,
+          paid on the path where the question already failed.
+        </dd>
+        <dt>ADR-0016: a note and the entry that makes it reachable are one write</dt>
+        <dd>
+          Accepted 2026-08-17. There is no flag that does one without the
+          other. Closes the bootstrap: the proposing half existed and nothing
+          turned an approved proposal into a file, so the base could only grow
+          by hand and did not. Rejects generating keys from the note text,
+          because keys exist to bridge how somebody asks to how the file was
+          written, and deriving them from the file guarantees the half already
+          held.
+        </dd>
+        <dt>ADR-0017: BGE-M3 measured and not adopted, because fusing it made the system worse</dt>
+        <dd>
+          Accepted 2026-08-17. Head to head on twenty real questions it got 13
+          right against roughly 16 for the keyword scorer. Fused, nineteen
+          answers were unchanged, one moved off the correct file, and an
+          honest abstention became a confident wrong answer. The keyword
+          scorer's one error scored 3.82 while every correct answer scored
+          9.55 or more, and BGE-M3's correct and wrong answers overlapped
+          completely, so a dense scorer that never abstains removes the
+          property the refusal depends on. Costs measured on the same
+          machine: 2.2 GB, and 2,833 seconds to index 1,039 chunks.
+        </dd>
+        <dt>ADR-0018: no model enters the retrieval path, and the score floor becomes the mechanism</dt>
+        <dd>
+          Accepted 2026-08-18. The full table on a 19 question set: the
+          keyword scorer 16 of 19 and the only scorer whose score separates
+          hit from miss; both cross encoder rerankers degraded the ranking
+          they were handed, BGE reranker v2-m3 to 11 at 2,571 ms per pair and
+          Jina v2 to 14 at 647 ms per pair with a non-commercial licence. A
+          skeptic commissioned against the reranker plan predicted zero
+          marginal gain before the numbers existed, and the reality was
+          negative.
+        </dd>
+        <dt>ADR-0019: the system is Ulpia, and the fleet is the folder the agents live in</dt>
+        <dd>
+          Accepted 2026-08-18. Supersedes 0012's system name and its
+          no-new-domain position; Vesta stays the librarian. A rule that
+          kills the literal words everyone converges on, a collision search
+          that killed six of eight candidates, and the survivor is the
+          Bibliotheca Ulpia, Trajan's library, which was Rome's public
+          reading room and its record office in one building. Sealed by
+          ulpia.io; <code>agents/</code> becomes <code>fleet/</code>.
+        </dd>
+        <dt>ADR-0020: Vesta chooses which agent answers, and each scorer does the job it was measured to be better at</dt>
+        <dd>
+          Proposed 2026-08-18; the split shipped the same day. Fusion rewards
+          agreement, so a file both scorers rank fourth beats a file one
+          scorer ranks first, which is right for assembling passages a person
+          reads and wrong for choosing one owner: the owner and the verdict
+          come from intent, the reading from agreement. On the 19 question set
+          the keyword scorer alone picked the right file 18 times and the
+          right agent 16, the fusion 11 and 13, and a hardcoded agent 10.
+          Carries a refuted prediction of its own author, that the runner-up
+          margin should be the primary gate, killed by the instrument on its
+          first run. The owner choice later went to a model, in 0027, and the
+          fixed floor it gated on to a scaled one, in 0036.
+        </dd>
+        <dt>ADR-0021: a commit names the paths it commits, and proves afterwards that it took nothing else</dt>
+        <dd>
+          Accepted 2026-08-18. Written because one commit already carried two
+          sessions' unrelated work under one message, staged by
+          <code>git add -A</code> while the other session was mid write.
+          <code>git commit -- &lt;paths&gt;</code> builds the commit from
+          only those paths and ignores the rest of the index, so a pathspec
+          closes the race instead of guarding it. <code>kb commit</code>
+          refuses an empty list and a list spanning two repositories, and
+          reads the commit back. Does not solve two sessions editing one
+          file, and says so.
+        </dd>
+        <dt>ADR-0022: the fleet boots the agent, the agent does not boot itself</dt>
+        <dd>
+          Accepted 2026-08-18. A static conditional naming one agent
+          literally meant a nutrition question still woke the architect.
+          Replaced by <code>kb boot</code> on a <code>UserPromptSubmit</code>
+          hook, the one surface in that runtime where the software speaks
+          before the model does; it emits the constitution only when the
+          routed agent changes, refuses to pick below the gate, and always
+          exits 0 because exit 2 on that event erases the user's message.
+          Cost 355 ms per message on five bases when isolated by experiment:
+          60 ms process start, 280 ms opening the bases, 5 ms routing.
+        </dd>
+        <dt>ADR-0023: the desk streams over SSE with sequence numbers, and the phone is a decision, not a feature flag</dt>
+        <dd>
+          Proposed 2026-08-19. Typed events and sequence numbers shipped;
+          dedup and sync replay wait for a client that can actually lose
+          messages, which a loopback browser cannot. The phone is four
+          decisions: a LAN bind is a new exposure class, an installable app
+          needs a secure context plain LAN HTTP never grants, a reachable
+          desk can spend the plan from any device holding the token, and
+          phone Wi-Fi is where replay stops being scaffolding. Deferred
+          together.
+        </dd>
+        <dt>ADR-0024: the person is one base every agent reads, and never an agent that answers</dt>
+        <dd>
+          Accepted 2026-08-19; the directory name superseded by 0029. Written
+          after the desk answered <em>who am I</em> with <em>the base does
+          not cover it</em>, while the same human was recorded twice, in two
+          languages, in two private folders. N copies of a person drift, and
+          the gaps are invisible from inside any one agent, so the person is
+          one base with a small resident core and retrieved domain files. It
+          has no <code>agent.txt</code>, so the router reads it and can never
+          elect it.
+        </dd>
+        <dt>ADR-0025: a fleet must declare its human, and the shape of that declaration is the part that can be published</dt>
+        <dd>
+          Accepted 2026-08-19; the runtime half superseded by 0034. Public:
+          <code>kb init --person</code>, the committed person skeleton, and
+          the structural rule. Private: the person's base, every word.
+          <code>kb init</code> writes a <code>[user]</code> block into every
+          agent it creates, so an agent cannot be born not knowing who it
+          works for. Templates ship empty with questions in them, because an
+          agent that does not know its human gives generic answers
+          confidently. The general form: publish the shape, keep the content.
+        </dd>
+        <dt>ADR-0026: a wikilink resolves inside its own base and nowhere else</dt>
+        <dd>
+          Accepted 2026-08-19. The linter scoped links to one base while the
+          reading room resolved fleet wide, so the same file was fine and
+          broken at once. Privacy decided it, not tidiness: a base is where
+          privacy is decided, and fleet wide resolution would make the audit
+          that converted eight files' worth of private wikilinks permanent
+          work. Crossing a base is written out as a path, and the linter
+          names the other base in the error.
+        </dd>
+        <dt>ADR-0027: a model decides who answers, because choosing an agent is classification</dt>
+        <dd>
+          Accepted 2026-08-19. Retrieval is lexical and a keyword index
+          answers it; <em>who understands this subject</em> is semantic, and
+          no count of shared words answers it, which a subject nobody has
+          written about proved: the word <em>zero</em> in <em>zero
+          downtime</em> gave the marketing agent the whole field. The model
+          gets a dossier of roster plus evidence, never the corpus, so it
+          cannot invent a file, and coverage is a first class answer:
+          covered, adjacent, uncovered. Carries a built and rejected cascade:
+          gating the model on the deterministic score cut latency from 14 s
+          to 1 s and routed a DevOps question to marketing in 971 ms, because
+          a gate built on a blind signal inherits the blindness. The cost is
+          stated and not hidden: 9 to 15 seconds per message through a model
+          run as a command, and the record keeps its own correction, that the line
+          read 13 to 16 until 2026-08-20 while the shipped path took 43 to
+          48, because that command inherited the fleet root as its working
+          directory.
+        </dd>
+        <dt>ADR-0028: a note carries its own keys, and the map stops deciding what exists</dt>
+        <dd>
+          Accepted 2026-08-20. Written the day one file's formatting made
+          seven of another agent's notes invisible to the router while
+          <code>kb check</code> printed clean. Two labelled lines under the
+          title. Not front matter: a delimited block has a way to not exist,
+          and a file with none yielded zero findings. Not a Keywords heading:
+          a section runs to the next heading and silently deleted the note's
+          opening prose from the full text index, run with the header shape
+          as the only variable. <code>MAP.md</code> is demoted to a reading
+          list and a resident block, not deleted.
+        </dd>
+        <dt>ADR-0029: the person's base is person/, because profile named three things</dt>
+        <dd>
+          Accepted 2026-08-20. Supersedes only the directory name in 0024.
+          <code>profile</code> named the shared base, a tombstone inside one
+          agent and a private folder inside another, and the reading room
+          already carried a special case written around the collision. The
+          fleet refused to open when the emptied directory became a seventh
+          base under 0028's predicate, which is the privacy gate working
+          rather than failing.
+        </dd>
+        <dt>ADR-0030: two promoters, and the second one is not a second opinion</dt>
+        <dd>
+          Accepted 2026-08-20. The proposer reads the deposit and never the
+          base; the reviewer reads the proposal plus what the deterministic
+          router says the base already holds, and never the proposer's
+          reasoning. Three lenses, unanimity to write, stage
+          <code>captured</code>, and refusals counted, because a repeated
+          refusal is a gap in the base. Exists against the measured failure of
+          automatic extraction elsewhere: 97.8 percent junk.
+        </dd>
+        <dt>ADR-0031: an agent's evidence has three species, and mass in one cannot outvote purpose in another</dt>
+        <dd>
+          Accepted 2026-08-21. Memory is what an agent knows, skills are how
+          it works and where it stops, tools are text declarations of what it
+          may use. The fold takes the best file of each species and sums the
+          species, which is the second answer to the volume problem, the
+          first having been measured dead. Ingestion may only ever write
+          memory, as a rule in code.
+        </dd>
+        <dt>ADR-0032: the answerer sits after the verdict, and the refusal survives it</dt>
+        <dd>
+          Accepted 2026-08-24, amended twice on 2026-08-25. <code>kb
+          answer</code> runs retrieval first, deterministic and unchanged,
+          and the model named by <code>answerer =</code> receives the
+          question, the served passages and the gate's own evidence line
+          under grounding rules; a <em>nothing</em> verdict never reaches the
+          model. On arrival, the two medical baits the deterministic layer
+          had answered confidently were both refused, 2 of 2, with Sonnet as
+          the pen. Amended for three reading modes chosen by the caller and
+          never guessed, and for a map that answers per file, which took
+          extraction recall of gold evidence from 60 to 91 percent on the
+          identical 30 questions.
+        </dd>
+        <dt>ADR-0033: the text scorer prunes what cannot rank</dt>
+        <dd>
+          Accepted 2026-08-26. Over a base of 57,486 chunks the FTS5 match
+          walk was the cost: the word <em>list</em> alone matched 19,530 of
+          them. A term in more than a quarter of the corpus is pruned from
+          the text expression on bases above 10,000 chunks, and the keyword
+          scorer still sees every word. Measured on identical 19 question
+          sets against the unpruned binary: median 371 ms against 306 ms,
+          p95 1264 ms against 1772 ms, half a second off the tail for 65 ms
+          at the median. Below the threshold nothing changes and the demo
+          eval is bit identical. The classic two phase fix was built and
+          refuted, 524 ms against 246 ms, and the refutation lives as a
+          comment on the query.
+        </dd>
+        <dt>ADR-0034: git leaves the runtime, and a base declares its own private layer</dt>
+        <dd>
+          Accepted 2026-09-01, implemented the same day; supersedes the
+          runtime half of 0025. <code>kb</code> stops asking git what it may
+          serve. The oracle refused folders without <code>git init</code>,
+          hid every note until it was tracked, served nothing from a
+          deployment bundle, shelled out once per base per question, and was
+          bypassed by <code>--all</code> on every surface the owner actually
+          used. A base declares its private layer in <code>agent.txt</code>,
+          defaulting to <code>profile/, projects/, records/</code>; the
+          deposit is served and every passage from it is labelled short
+          memory. Git stays as an optional tool for whoever versions a fleet.
+        </dd>
+        <dt>ADR-0035: the session feeds the deposit, and every surface counts its losses</dt>
+        <dd>
+          Accepted 2026-09-01, implemented the same day. <code>kb boot</code>
+          records what each message refused and where it was routed;
+          <code>kb capture</code> turns that into a raw deposit in the last
+          routed agent's inbox at session end, before <code>promote</code>
+          reads it, with no model. The miss log holds a marker while it
+          merges, which is what let the boot hook write to it under two
+          sessions.
+        </dd>
+        <dt>ADR-0036: the floor scales with the corpus, and a corpus of one has no floor</dt>
+        <dd>
+          Accepted 2026-09-02, implemented and measured the same day. 17.5
+          was measured on 226 entries, and a matched key is worth 6 times its
+          idf, which grows with the corpus, so the fixed floor meant three
+          keys on four entries and half a key on a thousand. It is now 62
+          percent of one unique key at every size, 17.5 where it was
+          measured, and a fleet of one entry never routes. Three instruments
+          before and after: the calibration fleet unchanged to the decimal,
+          the demo from 8 of 10 to 10 of 10 routed, and the abstention
+          benchmark's refusal unchanged at 28 of 30 while its confident
+          in-scope answers doubled from 6 to 12 of 20.
+        </dd>
+      </dl>
+      <p>
+        ADR-0032 and ADR-0033 are absent from
+        <a href="https://github.com/richard-wollyce/ulpia/blob/main/decisions/MAP.md"><code>decisions/MAP.md</code></a>,
+        the ledger file the other lines are drawn from, checked by grep on
+        2 September 2026, so those two lines are drawn from the records
+        themselves.
+      </p>
+
+      <h3 id="measured-and-rejected">Measured and rejected</h3>
+      <p>
+        Six of the lines above are refusals. The reader asking whether they
+        were measured or assumed gets the answer per line.
+      </p>
+      <dl>
+        <dt>Neo4j, ADR-0003</dt>
+        <dd>
+          Argued, not measured: the one refusal on this list that rests on
+          reversibility and on what a graph is bad at storing, dated the day
+          before this repository's first commit.
+        </dd>
+        <dt>BGE-M3 as a dense scorer, ADR-0017</dt>
+        <dd>
+          Measured on twenty real questions, head to head and then fused, and
+          refused because the fusion turned an honest abstention into a
+          confident wrong answer.
+        </dd>
+        <dt>Two cross encoder rerankers, ADR-0018</dt>
+        <dd>
+          Measured on a 19 question set, and both degraded the ranking they
+          were handed, at 2,571 ms and 647 ms per pair.
+        </dd>
+        <dt>A score gated cascade for the owner choice, ADR-0027</dt>
+        <dd>
+          Built and run: it cut latency from 14 s to 1 s and routed a DevOps
+          question to marketing in 971 ms, and no threshold rescues a gate
+          built on a blind signal.
+        </dd>
+        <dt>Front matter and a Keywords heading for the note header, ADR-0028</dt>
+        <dd>
+          Both run with the header shape as the only variable: a broken front
+          matter block yielded fewer findings than a whole one, and a heading
+          section deleted the note's opening prose from the full text index.
+        </dd>
+        <dt>Git in the runtime, ADR-0034</dt>
+        <dd>
+          Five costs met in use rather than imagined, among them the first
+          hosted integration passing <code>--all</code> for the wrong reason,
+          to make anything work at all from a bundle with no
+          <code>.git</code>.
+        </dd>
+      </dl>
+
+      <h2 id="the-first-integration-and-its-ten-findings">The first integration and its ten findings</h2>
+      <p>
+        On 2026-08-29 the first production consumer sent back a field
+        report. The shape: a chat agent inside a serverless function, an
+        ephemeral instance with a read only filesystem, one
+        <code>execFile</code> of <code>kb route --json</code> per question,
+        the base and the binary shipped inside the deployment bundle. The
+        binary was <code>kb-v0.1.0</code> for
+        <code>x86_64-unknown-linux-musl</code> at commit
+        <code>f320903</code>; the base held 2 agents, 9 index entries, 11
+        text files, 148 KB. Six real questions, zero retrieval failures, the
+        verdict gate obeyed, and the error contract used to warn a person on
+        screen. The report itself is not in the repository, because it names
+        a real deployment and real questions asked by real people; what the
+        repository holds is the mechanism half, with file and line for every
+        finding.
+      </p>
+      <p>
+        Ten findings came out of it. Nine were closed on 2026-08-30, each as
+        a failing test first, then the change, then a run; the commit that
+        carries them is dated 2026-09-01 in the log.
+      </p>
+      <dl>
+        <dt>F-01, the gate speaks in the payload</dt>
+        <dd>
+          <code>route --json</code> carries
+          <code>gate: { served, ranked_by_text_only, floor }</code>, three
+          facts rather than one enum. A caller branches on
+          <code>gate.served</code> and never on the length of
+          <code>results</code>, because a refused answer still carries its
+          candidates.
+        </dd>
+        <dt>F-02, one definition of a recall loss</dt>
+        <dd>
+          Six surfaces had decided the contents of <code>kb-misses.txt</code>
+          four different ways. <code>Memory::recall_loss</code> now decides,
+          records and hands back the vocabulary in one call, and no surface
+          holds its own opinion.
+        </dd>
+        <dt>F-03, the miss travels in the JSON</dt>
+        <dd>
+          A refusal carries a <code>miss</code> object with the question, the
+          vocabulary, the date, the path it wrote to, and <code>error</code>
+          when it could not, so a caller with nowhere to write can persist it
+          whole. <code>KB_MISSES_PATH</code> moves the log. Run on 2026-08-30
+          against a path that could not be written: exit 0 and the reason in
+          the payload. Not run against a genuinely read only mount, and the
+          tool's README says so.
+        </dd>
+        <dt>F-04, <code>remember --json</code></dt>
+        <dd>
+          The flag was parsed once for the whole process and dropped on this
+          one arm. <code>kb remember --json</code> now emits the claim, the
+          proposal, the reason, the ranked evidence and a <code>notice</code>
+          carrying the caveat the terminal prints. All three outcomes ran
+          against <code>examples/demo</code> on 2026-08-30: NOOP at
+          containment 1.000, UPDATE at 0.625, ADD at 0.250.
+        </dd>
+        <dt>F-05, refused and hedged counted apart</dt>
+        <dd>
+          <code>kb eval</code> had counted anything that was not a hit as an
+          abstention, so a guess that served two files scored as silence. The
+          summary now carries <code>abstention_refused</code>,
+          <code>abstention_hedged</code> and
+          <code>abstention_answered</code>, with a test that they sum back to
+          the denominator.
+        </dd>
+        <dt>F-06, suggestions on refusal</dt>
+        <dd>
+          <code>suggestions</code> was computed only when the fused list was
+          empty, which is not the case it was built for. The condition moved
+          from the list length to the verdict. The honesty property kept its
+          own test: a base with no orthographic neighbour of any question
+          word still offers nothing rather than the nearest thing it holds.
+        </dd>
+        <dt>F-07, the index error names the cause</dt>
+        <dd>
+          A bundle that left <code>.kb/</code> behind got a permission error,
+          true and misleading. A missing index now names the cause, then
+          <code>kb index</code>, then the deployment half of it, with the
+          underlying error kept in brackets.
+        </dd>
+        <dt>F-09, both binaries documented</dt>
+        <dd>
+          The report said only a Linux binary is published; the release
+          workflow at the <code>kb-v0.1.0</code> tag builds a Windows binary
+          beside it, with its sha256. What was missing was the sentence in
+          the tool's own README, which now names both and states that there
+          is no macOS build, with the reason: nobody here runs one.
+        </dd>
+        <dt>F-10, spawn numbers with platform and date</dt>
+        <dd>
+          The README had told integrators that spawning per request pays an
+          in-process cold open figure every time. Measured on 2026-08-30,
+          release build, <code>examples/demo</code>, 40 samples after 3
+          warm-ups, on the same Windows laptop as the latency benchmark:
+          spawn, open and answer at p50 184.8 ms. On Linux the integrator
+          measured 9.6 ms for the whole thing on WSL2, a figure the
+          repository carries as theirs and has not reproduced.
+        </dd>
+        <dt>F-08, open</dt>
+        <dd>
+          Process start costs more than the search on a serverless caller,
+          about 6 ms to spawn against 2.4 ms of retrieval on the integrator's
+          machine, and there is no batch mode. <code>kb serve</code> speaks
+          MCP over stdio, which does not fit a stateless HTTP handler. A
+          batch mode is a decision and not a task, and it blocks nobody
+          today.
+        </dd>
+      </dl>
+      <p>
+        Three defects turned up by running that reading had not found:
+        <code>kb answer</code> recorded no recall loss at all, a fourth
+        definition found while unifying the other three; the hybrid terminal
+        path kept swallowing the record one level down after the first fix,
+        with three tests passing over it; and the first timing of F-10
+        measured its own harness, PowerShell's
+        <code>Measure-Command</code> at p50 298 ms, and was discarded.
+      </p>
+
+      <p class="doc-back">
+        Previous: <a href="/docs/reference/">Reference</a> ·
+        Next: <a href="/docs/roadmap/">What Is Next</a> ·
+        <a href="/docs/">All of the docs</a> ·
+        <a href="/">Back to the library</a>
+      </p>
+    </main>
+
+    <footer>
+      <p class="address-line">
+        <a href="/docs/">Docs</a> · <a href="/benchmarks/">Benchmarks</a> · <a href="mailto:hello@ulpia.io">hello@ulpia.io</a>
+      </p>
+    </footer>
+  </body>
+</html>

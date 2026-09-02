@@ -1,0 +1,689 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Concepts · Ulpia</title>
+    <meta name="description" content="Every word the rest of the docs use, in library terms first, and the shape of an agent, the two memories, the private layer and the person." />
+    <meta name="color-scheme" content="light dark" />
+    <meta name="theme-color" media="(prefers-color-scheme: light)" content="#F6F1E7" />
+    <meta name="theme-color" media="(prefers-color-scheme: dark)" content="#12100D" />
+    <link rel="canonical" href="https://ulpia.io/docs/concepts/" />
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <meta property="og:title" content="Concepts · Ulpia" />
+    <meta property="og:description" content="Every word the rest of the docs use, in library terms first, and the shape of an agent, the two memories, the private layer and the person." />
+    <meta property="og:url" content="https://ulpia.io/docs/concepts/" />
+    <meta property="og:type" content="website" />
+    <script src="/theme.js"></script>
+    <link rel="stylesheet" href="/src/styles.css" />
+  </head>
+  <body>
+    <a class="skip" href="#main">Skip to content</a>
+    <header class="band">
+      <div class="band-inner">
+        <p class="wordmark"><a href="/">Ulpia</a></p>
+        <nav class="nav" aria-label="Sections">
+          <ul>
+            <li><a href="/docs/" aria-current="page">Docs</a></li>
+            <li><a href="/blog/">Writing</a></li>
+          </ul>
+        </nav>
+        <button type="button" class="lamp-toggle" aria-label="Color scheme: light, press to change">
+          <svg viewBox="0 0 28 28" width="28" height="28" aria-hidden="true" focusable="false">
+            <g class="glow">
+              <path class="ray ray-c" d="M 14 1.2 L 14 3.6" />
+              <path class="ray ray-l" d="M 8.6 2.6 L 10.1 4.3" />
+              <path class="ray ray-r" d="M 19.4 2.6 L 17.9 4.3" />
+              <path class="shade-fill" d="M 6 13.5 L 10.5 5.5 L 17.5 5.5 L 22 13.5 Z" />
+            </g>
+            <g class="lamp">
+              <path class="shade-line" d="M 6 13.5 L 10.5 5.5 L 17.5 5.5 L 22 13.5 Z" />
+              <path class="stem" d="M 12.6 13.5 C 11.9 14.3, 11.1 15.0, 11.1 16.1 C 11.1 17.6, 12.9 18.2, 12.9 19.5 C 12.9 20.6, 10.6 20.9, 10.6 22.2 L 17.4 22.2 C 17.4 20.9, 15.1 20.6, 15.1 19.5 C 15.1 18.2, 16.9 17.6, 16.9 16.1 C 16.9 15.0, 16.1 14.3, 15.4 13.5 Z" />
+              <path class="base" d="M 9 24.25 L 19 24.25" />
+              <g class="chain-group">
+                <path class="chain" d="M 19 14.35 L 19 16.35" />
+                <circle class="chain-pull" cx="19" cy="17.15" r="1.05" />
+              </g>
+            </g>
+          </svg>
+        </button>
+      </div>
+    </header>
+
+    <main class="doc" id="main" tabindex="-1">
+      <h1>Concepts</h1>
+      <p class="doc-date">Last updated: 2 September 2026</p>
+
+      <nav class="contents" aria-labelledby="contents-title">
+        <p class="contents-title" id="contents-title">Contents</p>
+        <ol>
+          <li><a href="#the-words">The words</a></li>
+          <li>
+            <a href="#what-an-agent-is">What an agent is</a>
+            <ol>
+              <li><a href="#the-tree">The tree</a></li>
+              <li><a href="#name-role-and-where-it-stops">Name, role, and where it stops</a></li>
+              <li><a href="#the-constitution-in-blocks">The constitution in blocks</a></li>
+              <li><a href="#the-header-of-a-note">The header of a note</a></li>
+              <li><a href="#the-map-demoted">The map, demoted</a></li>
+              <li><a href="#a-link-stops-at-the-edge">A link stops at the edge</a></li>
+            </ol>
+          </li>
+          <li><a href="#the-person">The person</a></li>
+          <li>
+            <a href="#two-memories-and-the-filter-between-them">Two memories, and the filter between them</a>
+            <ol>
+              <li><a href="#both-memories-are-searched">Both memories are searched</a></li>
+              <li><a href="#three-doors-into-the-library">Three doors into the library</a></li>
+              <li><a href="#the-filter">The filter</a></li>
+            </ol>
+          </li>
+          <li>
+            <a href="#privacy-is-a-property-of-the-layout">Privacy is a property of the layout</a>
+            <ol>
+              <li><a href="#the-declaration">The declaration</a></li>
+              <li><a href="#the-flag">The flag</a></li>
+              <li><a href="#git-is-not-consulted">Git is not consulted</a></li>
+              <li><a href="#what-git-is-still-for">What git is still for</a></li>
+            </ol>
+          </li>
+        </ol>
+      </nav>
+
+      <p>
+        Ulpia is a library, and the rest of these pages talk about it in a
+        library's words. This page defines them, the library term first and
+        the technical term after it, and then shows the four shapes every
+        other page assumes: an agent, the two memories, the private layer and
+        the person. It is written for the developer deciding whether this
+        model of memory matches the agent they are building, so where a word
+        hides a mechanism the mechanism is named beside it.
+      </p>
+
+      <h2 id="the-words">The words</h2>
+      <dl>
+        <dt>the library</dt>
+        <dt>Ulpia</dt>
+        <dd>
+          A fleet of agents, each with its own knowledge base, and one memory
+          layer under all of them, on your machine. The name is the
+          Bibliotheca Ulpia, Trajan's library, which was Rome's public reading
+          room and its official record office in one building.
+        </dd>
+
+        <dt>the librarian</dt>
+        <dt>Vesta, <code>kb boot</code></dt>
+        <dd>
+          The orchestrator that knows who is in the fleet and routes what
+          arrives. She runs as <code>kb boot</code> on a
+          <code>UserPromptSubmit</code> hook: the message is scored across
+          every base, the owner is picked, and that agent's constitution is
+          injected before the model reads anything. When no base covers the
+          message she does not pick an agent. She says the question has no
+          clear owner, and the session stays hers rather than any agent's.
+        </dd>
+
+        <dt>a book</dt>
+        <dt>a note</dt>
+        <dd>
+          One markdown file about one subject, most often in an agent's
+          <code>knowledge/</code>, with two labelled lines directly under the
+          title: a <em>Search for</em> line, which is the label, and an
+          <em>Exists to</em> line, which says in one sentence what the file is
+          for.
+        </dd>
+
+        <dt>the label</dt>
+        <dt>the <code>Search for</code> line</dt>
+        <dd>
+          The words a real question would use, chosen by a person and written
+          at the top of the note. It is the heaviest term in the keyword
+          scorer, which also gives a smaller weight to a title match and to a
+          whole phrase. A file without one builds no entry in that index and
+          scores zero on every question there.
+        </dd>
+
+        <dt>the catalogue</dt>
+        <dt><code>kb route</code></dt>
+        <dd>
+          Answers which agent and which files a question should open, by
+          scoring the question against every label. No model is involved, so
+          it is instant, explainable and reproducible, and it cannot invent a
+          file that does not exist. It prints which words matched, so a bad
+          ranking can be diagnosed instead of guessed at, and it says plainly
+          when nothing matched rather than returning a confident guess.
+        </dd>
+
+        <dt>the card index</dt>
+        <dt><code>&lt;base&gt;/.kb/index.db</code></dt>
+        <dd>
+          One SQLite file per base, built by <code>kb index</code>. It holds
+          the full text chunks the second scorer reads and nothing that cannot
+          be recomputed from the markdown. Derived and disposable: delete
+          <code>.kb/</code> and you have lost a rebuild, not a fact. There is
+          no flag to point it anywhere else, because which database you got
+          once depended on where you were standing.
+        </dd>
+
+        <dt>a shelf</dt>
+        <dt>a base</dt>
+        <dd>
+          Any directory with markdown in it. It is served the moment it
+          exists: no marker, no init, no repository. An agent is a base with
+          an <code>agent.txt</code>; the person is a base without one.
+        </dd>
+
+        <dt>the fleet</dt>
+        <dd>
+          Every base under one root, found by being there, with
+          <code>fleet.txt</code> beside them when the fleet keeps one. That manifest carries the
+          fleet's own <code>name =</code> and <code>role =</code>, the
+          <code>answerer =</code> command that <code>kb answer</code> hands
+          passages to, and the exceptions the shape cannot express: a base
+          attached from elsewhere with <code>attach =</code>, an agent
+          switched off with <code>disable =</code>.
+        </dd>
+
+        <dt>the deposit</dt>
+        <dt>short memory</dt>
+        <dd>
+          <code>inbox/</code> in each agent, plus <code>kb-misses.txt</code>,
+          the questions the base could not answer. Fresh and unjudged. Fed by
+          files a person drops there and by <code>kb capture</code> at the end
+          of a session. It is searched, and everything served from it is
+          labelled short.
+        </dd>
+
+        <dt>the stacks</dt>
+        <dt>long memory</dt>
+        <dd>
+          <code>knowledge/</code> in each agent, with a label on every note.
+          The library proper. Fed by <code>kb write</code>, by
+          <code>kb promote</code>, and by a person editing markdown.
+        </dd>
+
+        <dt>accession</dt>
+        <dt><code>kb promote</code></dt>
+        <dd>
+          The filter between the two memories. It reads each agent's deposit
+          and offers what it finds to two promoters. The first proposes notes
+          and never sees the base; the second decides, three times through
+          three different questions, and never sees the first one's
+          reasoning. Only a unanimous accept writes, at stage
+          <code>captured</code>. A refusal is counted in
+          <code>kb-rejections.txt</code>, because the same proposal refused
+          three times is a gap in the base rather than a bad proposal.
+        </dd>
+
+        <dt>the three verdicts</dt>
+        <dt><code>hit</code>, <code>guess</code>, <code>nothing</code></dt>
+        <dd>
+          What the catalogue says about its own answer. A hit is here is the
+          book: something here matches. A guess is this might be it, served
+          with the warning written on it: the match may be a coincidence of
+          vocabulary. Nothing is I do not have that book, and the base then
+          offers its own vocabulary, the keys it does hold that look like the
+          words you used. That comparison is character trigram overlap, so it
+          reaches a typo or a cognate and never a translation, and the reply
+          says which kind of help it is.
+        </dd>
+
+        <dt>the floor</dt>
+        <dt><code>gate.floor</code></dt>
+        <dd>
+          The verdict is the top file's keyword score compared against a
+          floor, and the floor scales with the corpus, because a key's weight
+          is inverse document frequency and rarity needs a corpus to be rare
+          in. The calibration constant is 17.5, measured on a fleet of 226
+          entries; restated as a share of what one unique key scores at a
+          given size, it is 6.9 at eleven entries and 4.1 at four. Every
+          surface that names a floor prints the one that applied to that
+          fleet, never the constant.
+        </dd>
+
+        <dt>the reader</dt>
+        <dt><code>fleet/person/</code></dt>
+        <dd>
+          The human the fleet works for, recorded as a base with no
+          <code>agent.txt</code>. The router reads it and can never elect it,
+          because a person is not an agent.
+        </dd>
+
+        <dt>the request slips</dt>
+        <dt><code>kb-misses.txt</code></dt>
+        <dd>
+          The questions the base could not answer, verbatim, one line per
+          distinct question with a count, and the count is which one to fix
+          next. They are a real person's real questions, so the log is
+          gitignored wherever it lands; what gets committed is the alias line
+          a miss eventually earns, never the miss. It lives beside
+          <code>fleet.txt</code> and not in <code>.kb/</code>, because deleting
+          the index loses a rebuild and deleting this loses evidence that
+          cannot be recomputed.
+        </dd>
+
+        <dt>the cross references</dt>
+        <dt><code>kb-aliases.txt</code></dt>
+        <dd>
+          One <code>alias = canonical</code> per line. Expansion is additive,
+          so the original words always survive and a wrong line can add noise
+          but never remove signal. A line is added only after a real question
+          missed: it is a record of misses, not a dictionary, and a dictionary
+          is what makes it unmaintainable.
+        </dd>
+
+        <dt>the reading room</dt>
+        <dt><code>kb ui</code></dt>
+        <dd>
+          A local page over the same contract as every other surface, at
+          <code>http://127.0.0.1:4114</code>. It binds 127.0.0.1 and nothing
+          else, and there is no flag to bind it anywhere else, because the
+          page has no business leaving the machine.
+        </dd>
+
+        <dt>the constitution</dt>
+        <dt><code>blocks.txt</code></dt>
+        <dd>
+          What an agent wakes up knowing, declared as labelled blocks in the
+          order of how often each one changes, most stable first. The order is
+          a mechanism, and the next section says which.
+        </dd>
+
+        <dt>provenance and stage</dt>
+        <dd>
+          Two fields a note declares and a served passage carries in the JSON
+          and in the text the MCP tool returns; a note without them draws a
+          warning from <code>kb check</code>.
+          Provenance says who wrote it: <code>human</code>, <code>agent</code>
+          or <code>external</code>. Stage says how far it has come:
+          <code>raw</code>, <code>captured</code>, <code>distilled</code> or
+          <code>derived</code>. A model's output stored as evidence is a fact
+          laundered, so the two travel with the passage where a program or a
+          model reads it, and an agent claim is never quietly promoted to
+          human.
+        </dd>
+      </dl>
+
+      <h2 id="what-an-agent-is">What an agent is</h2>
+      <p>
+        An agent is a shelf with a name on it: a base that carries an
+        <code>agent.txt</code>. The shape below is what <code>kb init</code>
+        writes. The same shape is kept in the repository as
+        <a href="https://github.com/richard-wollyce/ulpia/tree/main/agent-skeleton"><code>agent-skeleton/</code></a>, generated by that command, and a test
+        fails if the two ever differ. <a href="https://github.com/richard-wollyce/ulpia/tree/main/person-skeleton"><code>person-skeleton/</code></a> has the
+        same drift test for the same reason: a template that has drifted from
+        its generator is documentation that lies about its own product.
+      </p>
+
+      <h3 id="the-tree">The tree</h3>
+      <pre><code>fleet/&lt;name&gt;/
+  CLAUDE.md         who the agent is
+  index.md          its operating instructions
+  MAP.md            what exists in its base, and the words a question would use
+  agent.txt         name and role, read by the orchestrator
+  blocks.txt        the constitution, ordered by how often each block changes
+  kb-aliases.txt    a record of real questions that missed
+  knowledge/        the distillations. The brain
+  inbox/            raw material awaiting distillation
+  decisions/  protocols/  templates/</code></pre>
+      <p>
+        The three folders on the last line hold decisions that outlive a
+        conversation, the agent's own procedures, and document skeletons. No
+        absolute path exists anywhere inside a fleet, so moving the
+        directory, backing it up and setting up a new machine are the same
+        operation.
+      </p>
+
+      <h3 id="name-role-and-where-it-stops">Name, role, and where it stops</h3>
+      <p>
+        <code>agent.txt</code> is what the librarian reads to name and route.
+        Its fields, as the skeleton ships them:
+      </p>
+      <pre><code>name = Skeleton
+role =
+
+# private = profile/, projects/, records/
+
+ends = </code></pre>
+      <p>
+        The <code>private =</code> line is commented out because its value is
+        the default: it is there to be edited, not to be needed.
+        <code>ends =</code> is where this agent stops, and it is read by the
+        model that chooses the agent, because a roster of roles alone tells
+        that model what each agent does and never what none of them does. An
+        agent generated without the line is one that model cannot bound. The
+        file is separate from <code>index.md</code> on purpose: a field drawn
+        in a menu does not belong inside the block whose whole job is never
+        changing.
+      </p>
+
+      <h3 id="the-constitution-in-blocks">The constitution in blocks</h3>
+      <p>
+        <code>blocks.txt</code> declares what the agent wakes up knowing. As
+        the skeleton ships it, with the comments removed:
+      </p>
+      <pre><code>[identity]
+CLAUDE.md
+index.md
+
+[user]
+../person/core.md
+
+[map]
+MAP.md
+
+[session] on-demand</code></pre>
+      <p>
+        The order is a mechanism. Prefix caching reuses the cached state of a
+        prompt only up to the first token that differs, so a change
+        invalidates its own block and everything after it. Put a frequently
+        changing block early and every switch pays to recompute the stable
+        ones behind it, for nothing. Identity changes rarely and goes first.
+        The person is one file shared by the whole fleet. The map changes
+        whenever a note is added, so it goes last among the resident blocks.
+        The session is fetched only when a question needs it.
+        <code>kb blocks .</code> prints what each block costs and what
+        changing it costs.
+      </p>
+
+      <h3 id="the-header-of-a-note">The header of a note</h3>
+      <p>
+        A note carries its own keys. Directly under the title, before the
+        body, two labelled lines, shown here with placeholder words:
+      </p>
+      <pre><code>**Search for:** `the words a real question would use`
+
+**Exists to:** say in one line what this file is for.</code></pre>
+      <p>
+        Not YAML front matter and not a heading, and both alternatives were
+        run before being refused, because both fail silently. A delimited
+        block has a way to not exist: a file with no front matter at all came
+        back clean from the linter, while a file that had front matter and
+        omitted one field earned two warnings, so the more broken file got
+        fewer findings. A <code>Keywords</code> heading is sharper. The
+        chunker skips everything from a keyword section to the next heading of
+        any level, so a section placed at the top of a note deleted the note's
+        opening paragraphs from the text index. A line excludes itself; a
+        heading excludes everything after it.
+      </p>
+      <p>
+        The line is read tolerantly and emitted in one shape. The label may
+        be bold or plain, the separator a comma or a semicolon, the backticks
+        optional, and the Portuguese <code>Buscar por:</code> is accepted
+        because half of the fleet this was built in writes Portuguese. Each of
+        those tolerances was a real parse failure first.
+      </p>
+      <p>
+        The generated <code>index.md</code> ships with a placeholder label and
+        a note under it saying to replace that line: half of its terms are the
+        agent's own name and the rest are true of every agent in the fleet,
+        so together they distinguish nothing. It asks for thirty to seventy
+        terms naming what this agent is actually asked about, in both
+        languages, which is what makes it reachable by a real question.
+      </p>
+
+      <h3 id="the-map-demoted">The map, demoted</h3>
+      <p>
+        <code>MAP.md</code> is demoted, not deleted. The router does not
+        consult it and <code>kb check</code> does not demand it; a base
+        without one indexes and routes. It stays for two readers that are not
+        the catalogue: a person, who gets a reading list, and the agent
+        itself, which carries it as a resident constitution block.
+        <code>kb write</code> still writes the keys twice, into the note's own
+        header and into a map entry, and it refuses when the agent has no map.
+        A failed map write deletes the note again rather than leaving one half
+        behind.
+      </p>
+
+      <h3 id="a-link-stops-at-the-edge">A link stops at the edge</h3>
+      <p>
+        A <code>[[wikilink]]</code> resolves inside its own base and nowhere
+        else, in the linter and in the reading room alike, and a test fails if
+        the two rules ever diverge again. To point at another agent's file,
+        write the path. The reason is privacy rather than tidiness: a base is
+        a privacy boundary, and a link that silently crossed one is how a
+        reference to private material lands in a file you meant to publish.
+        Writing the path out means you knew. When a broken link's target
+        exists in another base, the linter names that base and says to write
+        the path instead, so the rule does not bend and the error becomes
+        something a person can act on.
+      </p>
+
+      <h2 id="the-person">The person</h2>
+      <p>
+        A fleet has agents, and it has exactly one person, and the person is
+        not an agent.
+      </p>
+      <pre><code>kb init --person</code></pre>
+      <p>
+        That writes <code>fleet/person/</code> with no <code>agent.txt</code>,
+        which is the whole trick: the router reads the base and can never
+        elect it as the one who answers, because a question about you belongs
+        to the librarian and not to a specialist impersonating you. The base
+        holds a map and three notes. <code>core.md</code> is resident in every agent
+        through the <code>[user]</code> block, so it is kept short, because it
+        is paid for by every question every agent answers: who they are, the
+        languages they write in, the machine, and how they want to be worked
+        with. <code>work.md</code> and <code>presence.md</code> are retrieved
+        when a question calls for them, so nobody pays for the whole person on
+        every question.
+      </p>
+      <p>
+        Every agent <code>kb init</code> creates carries that
+        <code>[user]</code> block, so an agent cannot be born not knowing who
+        it works for. That is not hypothetical. This fleet ran with two agents
+        that had no such block, and the marketing one answered a question
+        about its owner's CV without knowing his name. Until the block was
+        written into the template, the template carried a comment describing
+        it and not the block itself, and a comment describing a block that is
+        not there is worse than neither.
+      </p>
+      <div class="note" role="note">
+        <p><strong>Careful.</strong> An empty profile is not a neutral state. An agent that does not know who it works for gives generic answers confidently, which is worse than one that knows it is missing something. The generated files carry questions rather than placeholders for that reason.</p>
+      </div>
+      <p>
+        The shape is public and the content is not. The skeletons and the
+        generator are part of the system; what a person writes into their own
+        <code>fleet/</code> is <a href="https://github.com/richard-wollyce/ulpia/blob/main/.gitignore">gitignored</a> by the system's repository and is
+        never published. It leaves the machine only inside a prompt your own
+        client sends to a model you chose, and with a local model not at all.
+        The base is named <code>person</code> because its earlier name,
+        <code>profile</code>, named three different things in one tree, and
+        the collision was already producing code to work around it.
+      </p>
+
+      <h2 id="two-memories-and-the-filter-between-them">Two memories, and the filter between them</h2>
+      <p>
+        The verbs are one system, and its shape is two memories with a filter
+        between them. Short memory is the deposit: <code>inbox/</code> in each
+        agent plus <code>kb-misses.txt</code>, fed by files a person drops and
+        by <code>kb capture</code> at session end. Long memory is the stacks:
+        <code>knowledge/</code> with a label on every note, fed by
+        <code>kb write</code>, by <code>kb promote</code>, and by a person
+        editing markdown. The filter is <code>kb promote</code>, with
+        <code>kb remember</code> as its measure. It reads the short memory and
+        either writes into the long one or refuses; nobody reads the filter
+        itself.
+      </p>
+
+      <h3 id="both-memories-are-searched">Both memories are searched</h3>
+      <p>
+        That is the decision rather than a gap. The router routes to the
+        library, because a note without a label has no index entry and the
+        deposit has none by design, so the catalogue never names a raw drop as
+        an answer. The text scorer reaches both, and a raw drop in the deposit
+        can surface as a passage. When it does it arrives labelled. In the
+        JSON every result carries <code>memory: "short"</code> or
+        <code>"long"</code>, from one rule on the path. On the passage header
+        <code>kb answer</code> hands the model, the label reads
+        <code>[SHORT MEMORY: recent, not distilled]</code>, and it rides on
+        every passage rather than once per file, because a model reading
+        passage four does not reliably remember what was said above passage
+        one. On the terminal line it is <code>[short memory]</code>. In the
+        text the MCP tool returns it is the long form,
+        <code>[short memory: recent, not distilled, not yet in the library]</code>.
+      </p>
+      <p>
+        The rule travels with the label. The model may use a short-memory
+        passage, and if it does it says the claim comes from short memory, so
+        the reader knows it is fresh rather than settled. Hiding the deposit
+        would lose real facts, and serving it unmarked would let a raw drop
+        read as settled knowledge. Serving it marked leaves the decision with
+        whoever is reading, made consciously.
+      </p>
+
+      <h3 id="three-doors-into-the-library">Three doors into the library</h3>
+      <p>
+        A fact enters the library by one of three doors: a person writing it,
+        <code>kb write</code> writing it on their behalf, or
+        <code>kb promote</code> admitting it unanimously. Each door leaves
+        provenance on the note saying which. <code>kb capture</code> is not a
+        door. It runs no model and writes no label. It turns the session's
+        record, which the librarian appends to on every message, into one raw
+        file in the last routed agent's deposit, at
+        <code>provenance: agent</code> and <code>stage: raw</code>, and then
+        the filter reads it. No index is built in the background; every one
+        is rebuilt by whoever asks.
+      </p>
+
+      <h3 id="the-filter">The filter</h3>
+      <p>
+        <code>kb promote</code> is two models with different inputs, not one
+        model reviewed by another. The first promoter reads the deposit and
+        never sees the base; it proposes. The second reads the proposal
+        together with what the base already holds and never sees the first
+        one's reasoning; it decides, three times, through three different
+        questions: does this contradict something the base states, is it
+        already held, and does it belong to this agent at all. The second
+        reader's view of the base does not come from a model. It comes from
+        the catalogue, asked with the proposal's own keys, and that path has
+        no model in it, which is the only reason the word independent applies
+        to anything here. Any lens refusing is a refusal, an answer with no
+        verdict line is a refusal, and every failure degrades toward
+        writing nothing, because the command mutates the base. What is
+        admitted lands at stage <code>captured</code>: read by a model and
+        reviewed by a model and by no person, and the word keeps that visible.
+      </p>
+      <p>
+        The pressure behind two readers is a measurement from elsewhere. A
+        production audit filed on the public issue tracker of another
+        memory layer counted 10,134 entries over 32 days, of which 97.8
+        percent were judged junk. The count and the judgement are the
+        filer's, not ours. That is what happens
+        when the thing that writes is also the only thing that decides, and no
+        model fixes it, because it is not a capability gap.
+      </p>
+      <p>
+        Ingestion writes memory only, and the writer refuses anything else in
+        code. A conversation can teach the fleet a fact. It cannot grant a
+        competence or install a tool, because those are written and
+        configured deliberately, so a proposal aimed at anything but a memory
+        folder is refused as a hard rule rather than caught by a lens that
+        sometimes notices, and the refusal is counted like any other.
+      </p>
+
+      <h2 id="privacy-is-a-property-of-the-layout">Privacy is a property of the layout</h2>
+      <p>
+        Each base declares its own private layer, and nothing outside the base
+        is consulted.
+      </p>
+
+      <h3 id="the-declaration">The declaration</h3>
+      <pre><code>private = profile/, projects/, records/</code></pre>
+      <p>
+        One line in <code>agent.txt</code>. That value is also the default, so
+        a base that says nothing behaves exactly as the folder map says: those
+        three folders describe a real person and real work, and they are
+        served only with <code>--all</code>. <code>private = .</code> declares
+        the whole base private. A base named <code>person</code> is private as
+        a whole by name, because that is the name
+        <code>kb init --person</code> writes and the person's base carries no
+        manifest of its own. The line is read off disk when the base is
+        opened, so a declaration cannot be absent and cannot be stale, and it
+        costs a file read instead of a subprocess per base per question.
+      </p>
+      <p>
+        The deposit is deliberately not in that list, and the first draft of
+        <a href="https://github.com/richard-wollyce/ulpia/blob/main/decisions/0034-git-leaves-the-runtime.md">the record that decided this</a> had it there. Short memory should be
+        searched. So <code>inbox/</code> is served in every scope, with the
+        label on.
+      </p>
+
+      <h3 id="the-flag">The flag</h3>
+      <p>
+        <code>--all</code> includes the private layer and means nothing else.
+        It is the right flag for your own agents and the wrong one for a
+        consumer other people talk to, because it turns the filter off. In the
+        fleet this was built in, the local boot hook passes it, because that
+        hook runs on the owner's machine, on the owner's own message, and
+        injects context into the owner's own session. The MCP server
+        registered in <a href="https://github.com/richard-wollyce/ulpia/blob/main/.mcp.json"><code>.mcp.json</code></a> is invoked as
+        <code>serve .</code> without it, because what a tool returns travels
+        to whatever model is reasoning. The rule that keeps those two apart:
+        a new surface gets the public scope by default and has to argue for
+        <code>--all</code>, and the argument has to be that it cannot carry
+        data off the machine.
+      </p>
+      <div class="note" role="note">
+        <p><strong>Careful.</strong> The first deployment of this passed <code>--all</code> for the wrong reason: not to include a private layer, but to make anything serve at all under the older git rule described below. That reason no longer exists. Pass the flag only when the consumer is meant to see the private layer.</p>
+      </div>
+
+      <h3 id="git-is-not-consulted">Git is not consulted</h3>
+      <p>
+        And it used to be. An earlier version read <code>git ls-files</code>
+        to decide what it may serve, on the argument that the thing deciding
+        what is served should be the thing deciding what is published. The
+        argument was right and the cost was not. A folder was refused until
+        somebody ran <code>git init</code>. A note was invisible until it was
+        tracked, and the write command grew a <code>git add</code> of its own
+        so that a router could see a file. A deployment bundle without
+        <code>.git</code> served nothing. A fleet of a hundred agents shelled
+        out to git a hundred times per question, before a single index was
+        read. And every surface the owner actually used passed
+        <code>--all</code> and bypassed the gate anyway. A memory layer is
+        used as a database, and nobody asks a database to commit itself before
+        it will answer. The old sentence, unknown is not public, is retired.
+        What replaces it: undeclared is the folder map.
+      </p>
+
+      <h3 id="what-git-is-still-for">What git is still for</h3>
+      <p>
+        Versioning a fleet, if you want that. <code>kb init</code> writes a
+        <code>.gitignore</code> that mirrors the declared private layer, so a
+        fleet you choose to version starts with the right ignores, and
+        <code>kb check</code> warns when the two disagree. More than one
+        session writes a fleet at once, so committing is a verb the tool owns:
+      </p>
+      <pre><code>kb commit &lt;path&gt;... -m "message"</code></pre>
+      <p>
+        Name every path. There is deliberately no flag meaning everything,
+        because that one affordance is how a commit ends up carrying somebody
+        else's half finished work under your message. The mechanism:
+        <code>git commit -- &lt;paths&gt;</code> builds the commit from only
+        those paths and ignores the rest of the index, so whatever another
+        session staged a second ago cannot land in yours.
+        <code>kb commit</code> does that, then reads the commit back and
+        prints what it left dirty, which is the step a person skips by hand. A
+        <a href="https://github.com/richard-wollyce/ulpia/blob/main/.githooks/pre-commit">tracked pre-commit hook</a> refuses a raw <code>git commit</code>, enabled
+        once, per repository, with <code>git config core.hooksPath .githooks</code>.
+      </p>
+      <p>
+        What this does not solve: two sessions editing the same file still
+        clobber each other. No git technique fixes that, because the race is
+        at the filesystem before git sees anything.
+      </p>
+
+      <p class="doc-back">
+        Next: <a href="/docs/how-it-works/">How the Catalogue Ranks</a> ·
+        <a href="/docs/">All of the docs</a> ·
+        <a href="/">Back to the library</a>
+      </p>
+    </main>
+
+    <footer>
+      <p class="address-line">
+        <a href="/docs/">Docs</a> · <a href="/benchmarks/">Benchmarks</a> · <a href="mailto:hello@ulpia.io">hello@ulpia.io</a>
+      </p>
+    </footer>
+  </body>
+</html>

@@ -1,0 +1,224 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Docs · Ulpia</title>
+    <meta name="description" content="The reading order for the Ulpia docs, the conventions every page keeps, and where each part of the system stands today." />
+    <meta name="color-scheme" content="light dark" />
+    <meta name="theme-color" media="(prefers-color-scheme: light)" content="#F6F1E7" />
+    <meta name="theme-color" media="(prefers-color-scheme: dark)" content="#12100D" />
+    <link rel="canonical" href="https://ulpia.io/docs/" />
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <meta property="og:title" content="Docs · Ulpia" />
+    <meta property="og:description" content="The reading order for the Ulpia docs, the conventions every page keeps, and where each part of the system stands today." />
+    <meta property="og:url" content="https://ulpia.io/docs/" />
+    <meta property="og:type" content="website" />
+    <script src="/theme.js"></script>
+    <link rel="stylesheet" href="/src/styles.css" />
+  </head>
+  <body>
+    <a class="skip" href="#main">Skip to content</a>
+    <header class="band">
+      <div class="band-inner">
+        <p class="wordmark"><a href="/">Ulpia</a></p>
+        <nav class="nav" aria-label="Sections">
+          <ul>
+            <li><a href="/docs/" aria-current="page">Docs</a></li>
+            <li><a href="/blog/">Writing</a></li>
+          </ul>
+        </nav>
+        <button type="button" class="lamp-toggle" aria-label="Color scheme: light, press to change">
+          <svg viewBox="0 0 28 28" width="28" height="28" aria-hidden="true" focusable="false">
+            <g class="glow">
+              <path class="ray ray-c" d="M 14 1.2 L 14 3.6" />
+              <path class="ray ray-l" d="M 8.6 2.6 L 10.1 4.3" />
+              <path class="ray ray-r" d="M 19.4 2.6 L 17.9 4.3" />
+              <path class="shade-fill" d="M 6 13.5 L 10.5 5.5 L 17.5 5.5 L 22 13.5 Z" />
+            </g>
+            <g class="lamp">
+              <path class="shade-line" d="M 6 13.5 L 10.5 5.5 L 17.5 5.5 L 22 13.5 Z" />
+              <path class="stem" d="M 12.6 13.5 C 11.9 14.3, 11.1 15.0, 11.1 16.1 C 11.1 17.6, 12.9 18.2, 12.9 19.5 C 12.9 20.6, 10.6 20.9, 10.6 22.2 L 17.4 22.2 C 17.4 20.9, 15.1 20.6, 15.1 19.5 C 15.1 18.2, 16.9 17.6, 16.9 16.1 C 16.9 15.0, 16.1 14.3, 15.4 13.5 Z" />
+              <path class="base" d="M 9 24.25 L 19 24.25" />
+              <g class="chain-group">
+                <path class="chain" d="M 19 14.35 L 19 16.35" />
+                <circle class="chain-pull" cx="19" cy="17.15" r="1.05" />
+              </g>
+            </g>
+          </svg>
+        </button>
+      </div>
+    </header>
+
+    <main class="doc" id="main" tabindex="-1">
+      <h1>Docs</h1>
+      <p class="doc-date">Last updated: 2 September 2026</p>
+
+      <h2 id="read-it-in-this-order">Read it in this order</h2>
+      <p>
+        The first four pages are written to be read in order, and together
+        they take about an hour and twenty-five minutes. The four after them are
+        for looking things up, and nobody is expected to read a reference
+        through. The time beside each page is its word count on 2 September
+        2026, with the code plates left out, at two hundred words a minute,
+        and it is an estimate of reading, not a measurement of anything.
+      </p>
+
+      <nav class="contents" aria-labelledby="contents-title">
+        <p class="contents-title" id="contents-title">Contents</p>
+        <ol class="post-list">
+          <li>
+            <a href="/docs/concepts/">Concepts</a>
+            <p class="post-meta">About twenty minutes</p>
+            <p class="post-desc">The words, the shape of an agent, the two memories, and the private layer.</p>
+          </li>
+          <li>
+            <a href="/docs/how-it-works/">How the Catalogue Ranks</a>
+            <p class="post-meta">About thirty minutes</p>
+            <p class="post-desc">Two scorers, the floor, what a miss returns, and who chooses the agent.</p>
+          </li>
+          <li>
+            <a href="/docs/local/">On Your Machine</a>
+            <p class="post-meta">About twenty minutes</p>
+            <p class="post-desc">The build, the demo fleet, your first note, and Claude Code and Claude Desktop.</p>
+          </li>
+          <li>
+            <a href="/docs/cloud/">Somewhere That Is Not Your Machine</a>
+            <p class="post-meta">About fifteen minutes</p>
+            <p class="post-desc">A serverless function, the four lessons it taught, the JSON, and the write side.</p>
+          </li>
+          <li>
+            <a href="/docs/reference/">Reference</a>
+            <p class="post-meta">Not timed</p>
+            <p class="post-desc">Every verb, every JSON field, every check code and every file the tool reads, from the source.</p>
+          </li>
+          <li>
+            <a href="/docs/decisions/">What Was Done</a>
+            <p class="post-meta">Not timed</p>
+            <p class="post-desc">The shipped log by day and the decision record, one line per decision, reversals included.</p>
+          </li>
+          <li>
+            <a href="/docs/roadmap/">What Is Next</a>
+            <p class="post-meta">Not timed</p>
+            <p class="post-desc">What is waiting, proposed, decided against or kept possible, each with the trigger that moves it and no dates.</p>
+          </li>
+          <li>
+            <a href="/benchmarks/">Benchmarks</a>
+            <p class="post-meta">Not timed</p>
+            <p class="post-desc">Every number beside its command, machine, corpus and date, and the commit where its results file records one, and the vendors' numbers in the vendors' own words.</p>
+          </li>
+        </ol>
+      </nav>
+
+      <p>
+        That list is a navigation landmark, and a skip link stands before the
+        band on every page, so a keyboard reaches the text without walking
+        through the doors first. Every page of the docs carries its Previous
+        and its Next, where they exist, in the line at its foot, with a link
+        back to this page,
+        and the Docs door in the band wears the current mark on every page
+        behind it: a door says where you are while you are in any room behind
+        it.
+      </p>
+      <p>
+        Benchmarks is not a door. The band holds two, Docs and Writing, and a
+        third would not fit beside the wordmark and the lamp on a narrow
+        screen. Benchmarks is reached from the list above and from the address
+        line at the foot of every page of the docs and of the front page.
+      </p>
+
+      <h2 id="what-every-page-keeps">What every page keeps</h2>
+      <p>
+        The library comes first and the term second, in that order inside the
+        sentence. A note is a book. The <em>Search for</em> line under its
+        title is the label, written by a person to say what questions the book
+        answers. The router is the catalogue. Vesta is the librarian, and when
+        the library has nothing for a question she says so in its own words: I
+        do not have that book. The technical noun follows as the explanation,
+        keyword index, full text search, roster, and never leads.
+      </p>
+      <p>
+        Every number carries its platform, its corpus, its commit and its date
+        in the sentence that quotes it, because a number that cannot say where
+        it came from is marketing. Some figures were measured on the private
+        fleet the authors run, against an answer key the repository ignores;
+        those are labelled as figures a reader cannot reproduce, and the demo
+        eval that ships with the source is the reproducible half. No test
+        count is printed anywhere, because more than one session writes the
+        repository and the count moves between them.
+      </p>
+      <p>
+        The demo fleet is invented. <code>zed</code> is a software architect,
+        <code>steve</code> a marketing analyst and <code>yaron</code> a
+        nutrition assistant, three tiny agents with an answer key, and every
+        path a reader is asked to follow in these docs uses them. The fleet the
+        authors run is private, which is the product working as designed.
+      </p>
+      <p>
+        The source is public at
+        <a href="https://github.com/richard-wollyce/ulpia">github.com/richard-wollyce/ulpia</a>,
+        under Apache 2.0, with
+        <a href="https://github.com/richard-wollyce/ulpia/blob/main/LICENSE">LICENSE</a>
+        and
+        <a href="https://github.com/richard-wollyce/ulpia/blob/main/NOTICE">NOTICE</a>
+        at the root. Where a page quotes a file, it links that file in the
+        repository, so a sentence here can be checked against the line it
+        came from. What no page does is promise a feature the repository does
+        not hold.
+      </p>
+      <p>
+        Every terminal plate that shows a run captions the date and the commit
+        of that run, so a plate that has gone stale goes stale visibly instead
+        of quietly. A plate that shows a documented shape rather than a pasted
+        run says so in its caption.
+      </p>
+
+      <h2 id="where-it-stands-part-by-part">Where it stands, part by part</h2>
+      <p>
+        Early, used daily, and honest about which is which. The items that are
+        not built each point at their line on What Is Next, where the trigger
+        that would build them is named.
+      </p>
+      <dl>
+        <dt><code>tools/kb</code></dt>
+        <dd>Works, and is used daily. <code>cargo test</code> in <code>tools/kb</code> is green, and the count is left out on purpose, because more than one session writes the repository and the number moves between them. One dependency.</dd>
+        <dt><code>kb ui</code></dt>
+        <dd>The reading room. It binds <code>127.0.0.1</code> and nothing else, and there is no flag to bind anywhere else, because the page has no business leaving the machine.</dd>
+        <dt><code>tools/tray</code></dt>
+        <dd>A Windows tray app over the same library. Windows only, and young.</dd>
+        <dt>The site</dt>
+        <dd>A static front on Cloudflare Pages, with one Rust binary behind it that is not in the production path today; it serves the site locally and stands up on a subdomain the day something has to be computed per request.</dd>
+        <dt>Local model routing</dt>
+        <dd>Not built. Its line is under <a href="/docs/roadmap/#the-work-in-front-of-us">the work in front of us</a> on What Is Next.</dd>
+        <dt>Voice</dt>
+        <dd>Not built. Its line is under <a href="/docs/roadmap/#kept-possible-not-built">kept possible, not built</a> on What Is Next.</dd>
+        <dt>A macOS binary</dt>
+        <dd>None, because nobody here runs macOS, so a published artifact would be one nothing has ever executed; build from source there. Its line is under <a href="/docs/roadmap/#decided-against-and-what-would-reopen-it">decided against</a> on What Is Next.</dd>
+        <dt>A hosted instance</dt>
+        <dd>None, and none to point at: the index lives beside the files and nothing talks to a server. Its line is under <a href="/docs/roadmap/#kept-possible-not-built">kept possible, not built</a> on What Is Next.</dd>
+      </dl>
+      <p>
+        Last read at commit <code>ea43d1d</code> on 2 September 2026. That is
+        the last commit that changed a number these pages quote; the two commits
+        after it on that day, <code>4aba4de</code> and <code>8285c1f</code>,
+        touched the CI workflow and the kb README and moved no number.
+        This line moves whenever a number on any docs page
+        changes. The newest figures the docs quote come from that day: the
+        abstention re-run of 2 September 2026, made at commit
+        <code>c8c3890</code> with the scaled floor applied, and the floor
+        itself, which landed as <code>ea43d1d</code> on the same day.
+      </p>
+
+      <p class="doc-back">
+        Next: <a href="/docs/concepts/">Concepts</a> ·
+        <a href="/">Back to the library</a>
+      </p>
+    </main>
+
+    <footer>
+      <p class="address-line">
+        <a href="/docs/">Docs</a> · <a href="/benchmarks/">Benchmarks</a> · <a href="mailto:hello@ulpia.io">hello@ulpia.io</a>
+      </p>
+    </footer>
+  </body>
+</html>

@@ -18,11 +18,13 @@
     <link rel="stylesheet" href="/src/styles.css" />
   </head>
   <body>
+    <a class="skip" href="#main">Skip to content</a>
     <header class="band">
       <div class="band-inner">
         <p class="wordmark"><a href="/">Ulpia</a></p>
         <nav class="nav" aria-label="Sections">
           <ul>
+            <li><a href="/docs/">Docs</a></li>
             <li><a href="/blog/">Writing</a></li>
           </ul>
         </nav>
@@ -48,66 +50,78 @@
       </div>
     </header>
 
-    <main class="doc">
+    <main class="doc" id="main" tabindex="-1">
       <h1>Terms of use</h1>
-      <p class="doc-date">Last updated: 24 August 2026</p>
+      <p class="doc-date">Last updated: 2 September 2026</p>
 
-      <h2>What this is</h2>
+      <h2 id="what-this-is">What this is</h2>
       <p>
-        ulpia.io is a page describing software whose source is public. Reading
-        it is free and asks nothing of you.
+        ulpia.io describes software whose source is public at
+        <a href="https://github.com/richard-wollyce/ulpia">github.com/richard-wollyce/ulpia</a>.
+        Reading the site is free and asks nothing of you.
       </p>
       <p>
-        These terms cover this page. They do not cover the software: it carries
-        its own licence, Apache 2.0, in its repository.
+        These terms cover this website and nothing else. They do not cover the
+        software, which carries its own licence, Apache 2.0, in its repository.
       </p>
 
-      <h2>What we promise about what is written here</h2>
+      <h2 id="what-we-promise-about-what-is-written-here">What we promise about what is written here</h2>
       <p>
         That we will not knowingly write something false, and that the terminal
-        output shown on the page is real output from the real program.
+        output shown on the front page is real output from the real program,
+        captured on the date shown beside it. The caption under it names that
+        date, the commit and the platform. The markup is made from the
+        program's own bytes: whole lines may be left out, and the caption says
+        which, but no line is edited.
       </p>
       <p>
-        Not that the page is complete. Not that everything described on it will be
-        built. Not that it will look like this when it is. Pre-launch means the
-        plan can change, and nothing on this page is a contract to deliver
-        anything.
+        It is not a promise that the page is complete, nor that everything
+        described on it will be built as described. Pre-launch means the plan
+        can change, and nothing on this site is a contract to deliver anything.
       </p>
 
-      <h2>The mailing list</h2>
+      <h2 id="the-mailing-list">The mailing list</h2>
       <p>
         If you give us an address, you get messages of the kind described next to
-        the box you ticked, and you can leave at any time.
+        the box you ticked, and you can leave at any time. What happens to the
+        address is in the <a href="/privacy/">privacy notice</a>. As of the date
+        above, nothing has been sent to anyone.
       </p>
       <p>
         We are not obliged to keep the list running. If we close it, we say so in
         a final message.
       </p>
 
-      <h2>What not to do here</h2>
+      <h2 id="what-not-to-do-here">What not to do here</h2>
       <p>
-        Do not submit an address that is not yours. Do not use the form for
+        Do not submit an address that is not yours, and do not use the form for
         anything other than an address. Do not attack, scrape, overload or probe
         this site.
       </p>
-      <p>The form is rate limited, and traffic that abuses it gets blocked.</p>
-
-      <h2>What is ours</h2>
-      <p>The text, the design, the name Ulpia and the marks on this page are ours.</p>
       <p>
-        The product's source code is open source under the Apache License 2.0; its
-        terms live in the repository's LICENSE file and travel with the code. This
-        page governs only this website.
+        Traffic that abuses the form is handled at the edge, by Cloudflare, which
+        serves the page, and not by the form recording who sent it. The form
+        stores no IP address, because collecting a second piece of personal data
+        to protect the first is a bad trade.
       </p>
 
-      <h2>Links to other places</h2>
+      <h2 id="what-is-ours">What is ours</h2>
+      <p>The text, the design, the name Ulpia and the marks on this site are ours.</p>
+      <p>
+        The product's source code is open source under the Apache License 2.0;
+        its terms live in the repository's
+        <a href="https://github.com/richard-wollyce/ulpia/blob/main/LICENSE">LICENSE</a>
+        file and travel with the code. This page governs only this website.
+      </p>
+
+      <h2 id="links-to-other-places">Links to other places</h2>
       <p>
         Where we link somewhere else, we do not control what is on the other end.
       </p>
 
-      <h2>Liability</h2>
+      <h2 id="liability">Liability</h2>
       <p>
-        This page is provided as it is. To the extent the law allows us to say so,
+        This site is provided as it is. To the extent the law allows us to say so,
         we are not liable for what you do with what you read here.
       </p>
       <p>
@@ -115,19 +129,30 @@
         away.
       </p>
 
-      <h2>Changes</h2>
+      <h2 id="changes">Changes</h2>
       <p>
         We can change these terms. The date at the top says when we last did.
       </p>
+      <p>
+        This edition replaced one sentence and extended one. The replaced
+        sentence said the form was rate limited, which describes a setting this
+        site does not keep in writing; what it keeps in writing is that abuse is
+        handled at the edge, and the sentence now says that. The promise about
+        the terminal output now ties it to the date, the commit and the
+        platform in its caption. The sentences that say the source is public
+        and name its licence now link the repository and its
+        <a href="https://github.com/richard-wollyce/ulpia/blob/main/LICENSE">LICENSE</a>
+        file.
+      </p>
 
-      <h2>Which law applies</h2>
+      <h2 id="which-law-applies">Which law applies</h2>
       <p>
         The laws of Brazil, where the person responsible for this site lives and
         works. If you are a consumer somewhere else, this does not take away the
         protections your own law gives you.
       </p>
 
-      <h2>Contact</h2>
+      <h2 id="contact">Contact</h2>
       <p><a href="mailto:hello@ulpia.io">hello@ulpia.io</a></p>
 
       <p class="doc-back"><a href="/">Back to the library</a></p>
@@ -135,7 +160,7 @@
 
     <footer>
       <p class="address-line">
-        <a href="mailto:hello@ulpia.io">hello@ulpia.io</a>
+        <a href="/docs/">Docs</a> · <a href="/benchmarks/">Benchmarks</a> · <a href="mailto:hello@ulpia.io">hello@ulpia.io</a>
       </p>
     </footer>
   </body>

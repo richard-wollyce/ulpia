@@ -1,0 +1,595 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Somewhere That Is Not Your Machine · Ulpia</title>
+    <meta name="description" content="What ships in the bundle, what the filesystem must allow, and what a process start costs when kb answers inside a serverless function." />
+    <meta name="color-scheme" content="light dark" />
+    <meta name="theme-color" media="(prefers-color-scheme: light)" content="#F6F1E7" />
+    <meta name="theme-color" media="(prefers-color-scheme: dark)" content="#12100D" />
+    <link rel="canonical" href="https://ulpia.io/docs/cloud/" />
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <meta property="og:title" content="Somewhere That Is Not Your Machine · Ulpia" />
+    <meta property="og:description" content="What ships in the bundle, what the filesystem must allow, and what a process start costs when kb answers inside a serverless function." />
+    <meta property="og:url" content="https://ulpia.io/docs/cloud/" />
+    <meta property="og:type" content="website" />
+    <script src="/theme.js"></script>
+    <link rel="stylesheet" href="/src/styles.css" />
+  </head>
+  <body>
+    <a class="skip" href="#main">Skip to content</a>
+    <header class="band">
+      <div class="band-inner">
+        <p class="wordmark"><a href="/">Ulpia</a></p>
+        <nav class="nav" aria-label="Sections">
+          <ul>
+            <li><a href="/docs/" aria-current="page">Docs</a></li>
+            <li><a href="/blog/">Writing</a></li>
+          </ul>
+        </nav>
+        <button type="button" class="lamp-toggle" aria-label="Color scheme: light, press to change">
+          <svg viewBox="0 0 28 28" width="28" height="28" aria-hidden="true" focusable="false">
+            <g class="glow">
+              <path class="ray ray-c" d="M 14 1.2 L 14 3.6" />
+              <path class="ray ray-l" d="M 8.6 2.6 L 10.1 4.3" />
+              <path class="ray ray-r" d="M 19.4 2.6 L 17.9 4.3" />
+              <path class="shade-fill" d="M 6 13.5 L 10.5 5.5 L 17.5 5.5 L 22 13.5 Z" />
+            </g>
+            <g class="lamp">
+              <path class="shade-line" d="M 6 13.5 L 10.5 5.5 L 17.5 5.5 L 22 13.5 Z" />
+              <path class="stem" d="M 12.6 13.5 C 11.9 14.3, 11.1 15.0, 11.1 16.1 C 11.1 17.6, 12.9 18.2, 12.9 19.5 C 12.9 20.6, 10.6 20.9, 10.6 22.2 L 17.4 22.2 C 17.4 20.9, 15.1 20.6, 15.1 19.5 C 15.1 18.2, 16.9 17.6, 16.9 16.1 C 16.9 15.0, 16.1 14.3, 15.4 13.5 Z" />
+              <path class="base" d="M 9 24.25 L 19 24.25" />
+              <g class="chain-group">
+                <path class="chain" d="M 19 14.35 L 19 16.35" />
+                <circle class="chain-pull" cx="19" cy="17.15" r="1.05" />
+              </g>
+            </g>
+          </svg>
+        </button>
+      </div>
+    </header>
+
+    <main class="doc" id="main" tabindex="-1">
+      <h1>Somewhere That Is Not Your Machine</h1>
+      <p class="doc-date">Last updated: 2 September 2026</p>
+
+      <nav class="contents" aria-labelledby="contents-title">
+        <p class="contents-title" id="contents-title">Contents</p>
+        <ol>
+          <li><a href="#local-first-is-a-position">Local first is a position</a></li>
+          <li><a href="#the-shape-that-reached-production">The shape that reached production</a></li>
+          <li><a href="#lesson-one-ship-the-base-and-its-index-and-mean-all-if-you-pass-it">Lesson one: ship the base and its index, and mean <code>--all</code> if you pass it</a></li>
+          <li><a href="#lesson-two-a-read-only-filesystem-is-survivable-the-miss-log-is-not-free">Lesson two: a read-only filesystem is survivable, the miss log is not free</a></li>
+          <li><a href="#lesson-three-every-process-start-pays-the-cold-open">Lesson three: every process start pays the cold open</a></li>
+          <li><a href="#lesson-four-match-the-libc-or-link-none">Lesson four: match the libc, or link none</a></li>
+          <li><a href="#reading-the-json">Reading the JSON</a></li>
+          <li><a href="#the-write-side-from-a-machine-that-has-no-repository">The write side from a machine that has no repository</a></li>
+          <li><a href="#left-open-on-purpose">Left open on purpose</a></li>
+        </ol>
+      </nav>
+
+      <h2 id="local-first-is-a-position">Local first is a position</h2>
+      <p>
+        The library lives with its reader. <code>kb</code> reads the markdown on
+        every run, and the index it builds, the catalogue's card drawer, sits in
+        a <code>.kb/</code> folder beside the books it was built from. Nothing in
+        it talks to a server. There is no hosted instance to point a client at,
+        and the base has to be on the same filesystem as the binary. That is a
+        position, recorded as one, and not a limitation waiting for a later
+        version to lift it.
+      </p>
+      <p>
+        It happens to describe a server as well as it describes a laptop. A
+        function runtime that has the folder and the binary on one filesystem
+        has everything the librarian needs. What it usually lacks is a writable
+        disk, a repository, time to spare at process start, and a libc that
+        matches the one the binary was built against, and those four are the
+        whole of this page.
+      </p>
+      <p>
+        The rest of the position comes from the decision that set it, <a href="https://github.com/richard-wollyce/ulpia/blob/main/decisions/0008-single-user-open-source.md">ADR-0008</a>:
+        build for exactly one self-hosted user. No accounts, no tenancy, no
+        telemetry, and configuration is a file in the base. A hosted service is
+        kept possible and is not built. What keeps it possible without building
+        it is that the base is addressed by path and never assumed, and that
+        nothing derived is ever the source of truth, so the files can be run
+        anywhere and the index rebuilt from them after any failure.
+      </p>
+
+      <h2 id="the-shape-that-reached-production">The shape that reached production</h2>
+      <p>
+        The first deployment was not ours. An integrator put <code>kb</code>
+        inside a chat agent running in a serverless function: an ephemeral
+        instance, a read-only filesystem, the base and the binary shipped inside
+        the deployment bundle, and one <code>execFile</code> of
+        <code>kb route --json</code> per question. The binary was
+        <code>kb-v0.1.0</code> for <code>x86_64-unknown-linux-musl</code>, built
+        at commit <code>f320903</code>. The base held 2 agents, 9 index entries
+        and 11 text files, 148 KB in all.
+      </p>
+      <p>
+        Their field report is dated 2026-08-29, and it is not in the repository
+        because it names a real deployment, a real project and real questions
+        asked by real people. What the repository holds is the mechanism half: a
+        <a href="https://github.com/richard-wollyce/ulpia/blob/main/reports/2026-08-29-first-integration.md">worklist</a> written on 2026-08-30, before any code changed, so that each
+        finding could be turned into a failing test first.
+      </p>
+      <p>
+        The read half held. Six real questions, zero retrieval failures, the
+        verdict gate obeyed, and the error contract used to warn a person on
+        screen. The write half was never exercised
+        and in that shape could not have been, because every write path assumed
+        a writable repository on the same machine as the question. A hosted
+        consumer never has one.
+      </p>
+      <p>
+        Ten findings came out of the report. Nine closed on 2026-08-30, each one
+        a failing test before a change. The tenth, F-08, is batch mode; it was
+        never scheduled, it is open, and it blocks nobody. The four lessons
+        below are those findings sorted by what a deployment has to know.
+      </p>
+
+      <h2 id="lesson-one-ship-the-base-and-its-index-and-mean-all-if-you-pass-it">Lesson one: ship the base and its index, and mean <code>--all</code> if you pass it</h2>
+      <p>
+        A bundle needs no <code>.git</code>. It did once: <code>kb</code> asked
+        <code>git ls-files</code> which files it might serve, a bundle has no
+        repository, and so every base was left out and the result set came back
+        empty. The first integration passed <code>--all</code> to get past that,
+        which is the wrong reason to pass it. <a href="https://github.com/richard-wollyce/ulpia/blob/main/decisions/0034-git-leaves-the-runtime.md">ADR-0034</a>, accepted on 2026-09-01,
+        removed the question. The private layer is now a declaration in each
+        base, <code>profile/</code>, <code>projects/</code> and
+        <code>records/</code> unless <code>agent.txt</code> says otherwise, and
+        it is read off the files you shipped. Run that day:
+        <a href="https://github.com/richard-wollyce/ulpia/tree/main/examples/demo"><code>examples/demo</code></a> copied outside any repository, indexed and
+        routed without <code>--all</code>, three agents served.
+      </p>
+      <p>
+        So <code>--all</code> means what its help text always said, include the
+        private layer, and nothing else. Pass it only if the consumer is meant to
+        see that layer. A hosted agent answering other people almost never is.
+      </p>
+      <p>
+        The catalogue has to travel too. <code>kb index</code> builds the
+        <code>.kb/</code> folder inside each base, at
+        <code>&lt;base&gt;/.kb/index.db</code>, and a runtime that cannot write
+        cannot build it, so build it before the deploy and make sure it reaches
+        the machine that answers the question. A bundle that left
+        <code>.kb/</code> behind used to get
+        <code>cannot open the index: Permission denied (os error 13)</code>,
+        which sent the integrator to look at file permissions. Since F-07 the
+        message names the cause before the symptom.
+      </p>
+      <figure class="plate">
+        <pre><code><span class="out">cannot open the index at &lt;path&gt;: </span><span class="agree">nothing has been</span>
+<span class="agree">indexed here yet.</span><span class="out"> Run `kb index` on the base, and make</span>
+<span class="out">sure the .kb/ directory it writes reaches the machine</span>
+<span class="out">that answers the question. (os error 183)</span></code></pre>
+        <figcaption>
+          The message as read out of the binary on 2026-08-30 and quoted in the
+          worklist of that date, <a href="https://github.com/richard-wollyce/ulpia/blob/main/reports/2026-08-29-first-integration.md">reports/2026-08-29-first-integration.md</a>; the
+          string landed in commit c071dd4. The path is elided as the
+          report elided it. Wrapped here to fit the plate; the binary prints
+          one line.
+        </figcaption>
+      </figure>
+      <p>
+        With <code>--json</code> the same sentence arrives as the
+        <code>error</code> field of <code>{"question": ..., "error": ...}</code>
+        on stdout, with exit code 1. An index that exists and will not open gets
+        the reason and none of that advice, because building one is not the fix.
+      </p>
+
+      <h2 id="lesson-two-a-read-only-filesystem-is-survivable-the-miss-log-is-not-free">Lesson two: a read-only filesystem is survivable, the miss log is not free</h2>
+      <p>
+        The index is built before the deploy and only read at runtime, so a
+        read-only filesystem answers correctly and does not try to reindex. The
+        one file a query writes is <code>kb-misses.txt</code>, the librarian's
+        record of the books she was asked for and did not have: the recall loss
+        log. A failed write there prints one line on stderr, returns the reason
+        in <code>miss.error</code>, and does not fail the query. That was run on
+        2026-08-30 against a log path that could not be written: exit 0,
+        <code>miss.recorded</code> false, <code>miss.error</code> carrying
+        <code>os error 5</code>. It was not run against a genuinely read-only
+        mount, which is a different thing, and the <a href="https://github.com/richard-wollyce/ulpia/blob/main/tools/kb/README.md">kb README</a> marks it so.
+      </p>
+      <figure class="plate">
+        <pre><code><span class="out">"miss": { "question": "...",</span>
+<span class="out">          "looked_like": ["..."],</span>
+<span class="out">          "date": "...",</span>
+<span class="out">          "log": "...",</span>
+<span class="agree">          "recorded": false,</span>
+<span class="agree">          "error": "... (os error 5)" }</span></code></pre>
+        <figcaption>
+          The refusal shape, with the field names in the order
+          <code>route_payload</code> writes them and the values elided; not a
+          pasted run. <code>recorded</code> false and os error 5 are what the
+          unwritable-path run of 2026-08-30 returned, landed in commit c071dd4.
+        </figcaption>
+      </figure>
+      <p>
+        Losing that log costs more than it appears to. It is the only record of what
+        the base failed to answer, and the first deployment ran its window of
+        six real questions and kept none of them, while the log in the
+        repository held two lines written earlier on a laptop. Two options, and
+        they are not the same thing.
+      </p>
+      <ul>
+        <li>
+          Read <code>miss</code> out of <code>kb route --json</code> and store it
+          where your stack already writes. The object is self contained for
+          this purpose. This survives the instance.
+        </li>
+        <li>
+          Export <code>KB_MISSES_PATH=/tmp/kb-misses.txt</code> and accept that
+          the log lives as long as the instance does. This costs one line of
+          configuration and keeps the file's own shape, and it is gone when the
+          instance is.
+        </li>
+      </ul>
+      <figure class="plate">
+        <pre><code><span class="prompt">$ </span>export KB_MISSES_PATH=/tmp/kb-misses.txt</code></pre>
+        <figcaption>
+          The second option, as <a href="https://github.com/richard-wollyce/ulpia/blob/main/tools/kb/README.md">the kb README</a> gives it at commit
+          8285c1f, read on 2 September 2026. No output: the path the log went
+          to is reported back in <code>miss.log</code>.
+        </figcaption>
+      </figure>
+      <p>
+        <code>KB_MISSES_PATH</code> names a file and not a directory, so nothing
+        is guessed; two fleets pointed at one path share one log, and that is
+        the caller's decision to make. An empty value is treated as unset,
+        because a platform that exported the name and chose no value has not
+        chosen a path.
+      </p>
+      <p>
+        The writes that change the base itself, <code>kb write</code> and
+        <code>kb promote</code>, do not belong on that machine at all. What a
+        machine without the repository can still do on the write side is the
+        section but one below.
+      </p>
+
+      <h2 id="lesson-three-every-process-start-pays-the-cold-open">Lesson three: every process start pays the cold open</h2>
+      <p>
+        Every process start pays the cold open: the binary starts, the fleet is
+        opened, the catalogue is read, and only then is the first question
+        answered. What that costs depends on the operating system far more than
+        on the base. Three numbers, each with its conditions. Two were run here;
+        the one that matters most for a deployment was not, and is marked.
+      </p>
+      <figure class="ledger">
+        <div class="ledger-scroll" tabindex="0" role="region" aria-labelledby="ledger-cold-open-caption">
+          <table>
+            <thead>
+              <tr>
+                <th scope="col">Run</th>
+                <th scope="col">Conditions</th>
+                <th scope="col">Date</th>
+                <th scope="col">Measure</th>
+                <th scope="col" class="num">ms</th>
+                <th scope="col">Beside it</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <th scope="row">Open the fleet and answer the first question, in process</th>
+                <td>Windows laptop, i5-1135G7, 16 GB; examples/demo; release build</td>
+                <td>2026-08-23</td>
+                <td>cold open, once</td>
+                <td class="num">136.4</td>
+                <td>then warm p50 0.68 and p95 1.16 over 1000 samples of 50 questions</td>
+              </tr>
+              <tr>
+                <th scope="row">Spawn <code>kb route --json</code>, open, answer</th>
+                <td>the same laptop; examples/demo; release build; 40 samples after 3 warm-ups</td>
+                <td>2026-08-30</td>
+                <td>p50</td>
+                <td class="num">184.8</td>
+                <td>min 145.8, p90 252.2</td>
+              </tr>
+              <tr>
+                <th scope="row">The same spawn and answer</th>
+                <td>Linux, WSL2 on x86-64; a 9 entry base; 40 executions</td>
+                <td>2026-08-29</td>
+                <td>p50</td>
+                <td class="num">9.6</td>
+                <td>about 6 ms of it process creation; the integrator's figure, not reproduced here</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <figcaption id="ledger-cold-open-caption">
+          Row one is <a href="https://github.com/richard-wollyce/ulpia/blob/main/benchmarks/latency/RESULTS.md">benchmarks/latency/RESULTS.md</a>, commit 35322d2. Row two is
+          the worklist of 2026-08-30, timed from Python's subprocess.run
+          with output discarded, landed in commit c071dd4. Row three is the
+          first integrator's field report, which is not in the repository, and
+          nobody here has reproduced it: the WSL on the project machine has no
+          Rust toolchain.
+        </figcaption>
+      </figure>
+      <figure class="plate">
+        <pre><code><span class="prompt">$ </span>kb route "como faco rollback sem downtime" examples/demo --all --hybrid --json --top 4
+<span class="agree">p50 184.8 ms   min 145.8   p90 252.2   max 308.7</span></code></pre>
+        <figcaption>
+          The command timed for row two and its four numbers, as the worklist
+          of 2026-08-30 records them (commit c071dd4). The command is
+          longer than the plate and scrolls.
+        </figcaption>
+      </figure>
+      <p>
+        The gap between the second row and the third is about twentyfold, and
+        it is why the earlier advice was wrong. The kb README used to say that
+        spawning per request "pays the 136 ms every time", quoting the first
+        row's cold open as if it were the cost of a spawn. That is a Windows
+        in-process number generalised to Linux, where the whole spawn and answer
+        costs less than the rounding, and the sentence pushed people toward a
+        long-lived process they did not need.
+      </p>
+      <p>
+        The corrected advice. On Linux, do not engineer around the spawn: a few
+        lines of <code>execFile</code> per request, and the process costs less
+        than one round trip to anything. On Windows, and in a loop on any
+        platform, measure before you decide. <code>kb serve</code> speaks MCP
+        over stdio and pays the open once per process, which fits a long-lived
+        worker and does not fit a stateless HTTP handler.
+      </p>
+      <div class="note" role="note">
+        <p><strong>Careful.</strong> The warm figures in row one are a personal fleet at personal-fleet scale, 15 files. The LongMemEval-V2 pre-reader instrument, measured 2026-08-26 on a laptop of the same specification (i5-1135G7, 16 GB, Windows 11) over haystacks of about 200 MB each, has a query latency of p50 745 ms on the enterprise domain and 773 ms on the web domain. Those are different regimes, and they must not be set beside each other as one speed.</p>
+      </div>
+
+      <h2 id="lesson-four-match-the-libc-or-link-none">Lesson four: match the libc, or link none</h2>
+      <p>
+        A Linux binary built against a modern glibc will not start on the older
+        glibc that serverless images carry, because glibc symbol references are
+        versioned. A build on Ubuntu 24.04 asks for glibc 2.39; Amazon Linux
+        2023 has 2.34, and Amazon Linux 2 has 2.26. The failure is invisible
+        until the deploy: the build goes green, uploads, and dies on the host
+        with a missing symbol version.
+      </p>
+      <p>
+        The release workflow builds <code>x86_64-unknown-linux-musl</code>
+        instead, which needs <code>musl-gcc</code> on the runner because the one
+        dependency compiles bundled SQLite with a C compiler. <code>file</code>
+        reports the artifact as static-pie linked, stripped. The same artifact
+        then runs <code>kb check --all examples/demo</code> inside
+        <code>amazonlinux:2023</code> and inside <code>alpine:3</code> before
+        anything is published, so the portability claim is executed rather than
+        asserted. That ran in CI on 2026-08-28.
+      </p>
+      <figure class="plate">
+        <pre><code><span class="out">docker run --rm -v "$PWD:/w" -w /w amazonlinux:2023 "./$KB" check --all examples/demo</span>
+<span class="out">docker run --rm -v "$PWD:/w" -w /w alpine:3 "./$KB" check --all examples/demo</span></code></pre>
+        <figcaption>
+          Two lines of <a href="https://github.com/richard-wollyce/ulpia/blob/main/.github/workflows/release.yml">.github/workflows/release.yml</a>, as committed in cbd590d
+          on 2026-08-28; the step ran in CI the same day. Each line is longer
+          than the plate and scrolls.
+        </figcaption>
+      </figure>
+      <p>
+        A Windows binary, <code>kb-windows-x64.exe</code>, is built beside
+        <code>kb-linux-x64</code>, each with a <code>.sha256</code> next to it.
+        There is no macOS build. Nobody on the project runs one, so a published
+        artifact would be one nothing has ever executed, which is worth less
+        than its absence.
+      </p>
+      <div class="note" role="note">
+        <p><strong>Note.</strong> Both binaries are on the tagged release <a href="https://github.com/richard-wollyce/ulpia/releases/tag/kb-v0.1.0"><code>kb-v0.1.0</code></a> of 28 August 2026, each with a <code>.sha256</code> beside it, and <a href="/docs/local/#build">On Your Machine</a> shows the download and the checksum line. The source is public at <a href="https://github.com/richard-wollyce/ulpia">github.com/richard-wollyce/ulpia</a>, under <a href="https://github.com/richard-wollyce/ulpia/blob/main/LICENSE">Apache 2.0</a>, and can be cloned today.</p>
+      </div>
+
+      <h2 id="reading-the-json">Reading the JSON</h2>
+      <p>
+        <code>kb route --json</code> prints one line on stdout, and it is not a
+        serialisation of the terminal output. A program wants the ranked list,
+        the passages and the verdict in one call, which is what the contract
+        computes in one pass anyway, so <code>--json</code> always fuses both
+        scorers and <code>--hybrid</code> adds nothing on top of it.
+      </p>
+      <figure class="plate">
+        <pre><code><span class="out">{</span>
+<span class="out">  "question": "...",</span>
+<span class="out">  "verdict": "hit",</span>
+<span class="agree">  "gate": { "served": true,</span>
+<span class="agree">            "ranked_by_text_only": false,</span>
+<span class="agree">            "floor": ... },</span>
+<span class="out">  "confidence": { "agreement": ...,</span>
+<span class="out">                  "keyword_score": ...,</span>
+<span class="out">                  "margin": ... },</span>
+<span class="out">  "agent": { "name": "...", "score": ...,</span>
+<span class="out">             "files": ..., "margin": ...,</span>
+<span class="out">             "contenders": ..., "totals": [ ... ] },</span>
+<span class="out">  "keyword_top": "...",</span>
+<span class="out">  "indexed": { "entries": ..., "agents": ...,</span>
+<span class="out">               "aliases": ... },</span>
+<span class="out">  "skipped": [],</span>
+<span class="out">  "index_was_rebuilt": false,</span>
+<span class="out">  "suggestions": [],</span>
+<span class="out">  "miss": null,</span>
+<span class="out">  "results": [{ "base": "...", "path": "...",</span>
+<span class="out">                "memory": "long",</span>
+<span class="out">                "title": "...", "purpose": "...",</span>
+<span class="out">                "score": ..., "keyword_score": ...,</span>
+<span class="out">                "why": ["keywords #1", "text #1"],</span>
+<span class="out">                "matched": ["..."],</span>
+<span class="out">                "passages": [{ "heading_path": "...",</span>
+<span class="out">                               "text": "...",</span>
+<span class="out">                               "excerpt": "...",</span>
+<span class="out">                               "provenance": "...",</span>
+<span class="out">                               "stage": null }] }]</span>
+<span class="out">}</span></code></pre>
+        <figcaption>
+          The field names, in the order <code>route_payload</code> and
+          <code>retrieved_as_json</code> in <a href="https://github.com/richard-wollyce/ulpia/blob/main/tools/kb/src/main.rs">tools/kb/src/main.rs</a> write them at
+          commit ea43d1d, read on 2 September 2026, with the values elided. A
+          shape, not a pasted run.
+        </figcaption>
+      </figure>
+      <div class="note" role="note">
+        <p><strong>Careful.</strong> Branch on <code>gate.served</code>, never on <code>results.length</code>. A refusal still carries its candidates, because the verdict comes from the keyword scorer, the catalogue's reading of the labels, and the results come from both scorers, so <code>verdict: "nothing"</code> with a full array is an ordinary outcome and not a contradiction.</p>
+      </div>
+      <p>
+        <code>gate.ranked_by_text_only</code> separates the two refusals a
+        caller has to handle differently. <code>true</code> means the text
+        scorer found files the labels missed, which is a base whose
+        <em>Search for</em> lines need a word and which may well hold the answer.
+        <code>false</code> with an empty <code>results</code> means nothing
+        ranked anywhere, which is a coverage problem. <code>gate.floor</code> is
+        what <code>confidence.keyword_score</code> was measured against for this
+        corpus, never the calibration constant, so the gate can be argued with
+        rather than guessed at.
+      </p>
+      <p>
+        <code>skipped</code> names bases that were left out, on stdout beside
+        the results rather than on stderr. It is empty since git left the
+        runtime, because the one reason a base used to be left out no longer
+        exists; the field stays because callers read it, and it is where a
+        future reason will be named. The integrator used it to tell "the base
+        does not cover this" from "no base was searched" and showed a warning
+        on screen.
+      </p>
+      <p>
+        <code>results[].memory</code> is <code>short</code> or
+        <code>long</code>. Short is the deposit, <code>inbox/</code>: recent,
+        unjudged, not yet in the library, served on purpose and labelled on
+        purpose. A caller that wants only settled knowledge filters on
+        <code>long</code>.
+      </p>
+      <p>
+        <code>miss</code> is <code>null</code> when the answer was served. On a
+        refusal it is the self-contained object shown under lesson two, and a
+        caller with nowhere to write persists it whole. Errors go to stdout as
+        <code>{"question": ..., "error": ...}</code> with exit code 1, and to
+        stderr as the same sentence a person would read.
+      </p>
+      <p>
+        Nothing that existed was removed or renamed when <code>gate</code> and
+        <code>miss</code> were added on 2026-08-30. A test in
+        <a href="https://github.com/richard-wollyce/ulpia/blob/main/tools/kb/src/main.rs"><code>main.rs</code></a> lists the payload's field names and fails when one
+        leaves it, because a missing key and a key holding <code>null</code>
+        read the same way in most languages. Field by field, the payload is in
+        the <a href="/docs/reference/">Reference</a>.
+      </p>
+
+      <h2 id="the-write-side-from-a-machine-that-has-no-repository">The write side from a machine that has no repository</h2>
+      <p>
+        Every write path but one assumes a repository on disk with permission to
+        write. <code>kb remember</code> assumes none of it. It measures a claim
+        against what the base already says and proposes one of three outcomes;
+        it writes nothing, decides nothing and needs no model, so it can run at
+        the moment a fact appears, in the conversation, on the machine that has
+        none of the repository.
+      </p>
+      <p>
+        The measure is containment: the fraction of the claim's words already
+        present in one chunk. Not Jaccard, which divides by the union and so
+        scores a short claim low however completely a long section already
+        covers it. At 0.90 or above the proposal is <code>NOOP</code>, the base
+        already says this. At 0.55 or above it is <code>UPDATE</code>,
+        substantial overlap with a small difference, which is what the same fact
+        with a new value looks like. Below that, <code>ADD</code>.
+      </p>
+      <p>
+        <code>DELETE</code> is never proposed, and the tool says so on every
+        run. Deleting needs the claim to be false rather than absent, and no
+        count of shared words can tell those apart. The pipeline <a href="https://github.com/richard-wollyce/ulpia/blob/main/decisions/0007-memory-architecture.md">ADR-0007</a>
+        defined has four outcomes and lets the agent delete on its own, with the
+        reason in the commit message; that is judgement, and judgement is what
+        this command declines to exercise.
+      </p>
+      <p>
+        <code>--json</code> emits <code>claim</code>, <code>proposal</code>,
+        <code>reason</code>, <code>evidence[]</code> and <code>notice</code>;
+        each evidence entry carries <code>base</code>, <code>path</code>,
+        <code>heading_path</code>, <code>excerpt</code>,
+        <code>containment</code>, <code>shared</code> and
+        <code>missing</code>. The flag was accepted and ignored on this command
+        until F-04; it reaches it now. All three outcomes ran against
+        <a href="https://github.com/richard-wollyce/ulpia/tree/main/examples/demo"><code>examples/demo</code></a> on 2026-08-30: <code>NOOP</code> at
+        containment 1.000, <code>UPDATE</code> at 0.625, <code>ADD</code> at
+        0.250. Errors take the shape <code>route</code> uses,
+        <code>{"claim": ..., "error": ...}</code> on stdout with exit 1.
+      </p>
+      <figure class="plate">
+        <pre><code><span class="prompt">$ </span>kb remember "the rollback path is written down before the deploy" fleet/zed --json
+<span class="out">{</span>
+<span class="out">  "claim": "the rollback path is written down before the deploy",</span>
+<span class="agree">  "proposal": "NOOP",</span>
+<span class="out">  "reason": "5 of 5 words are already present in one chunk. ...",</span>
+<span class="out">  "evidence": [{ "base": "zed",</span>
+<span class="out">                 "path": "knowledge/deploy-checklist.md",</span>
+<span class="out">                 "heading_path": "...", "excerpt": "...",</span>
+<span class="out">                 "containment": 1.0,</span>
+<span class="out">                 "shared": ["rollback", "..."],</span>
+<span class="out">                 "missing": [] }],</span>
+<span class="out">  "notice": "kb measured overlap. Whether the older text is now wrong is judgement ..."</span>
+<span class="out">}</span></code></pre>
+        <figcaption>
+          The example as <a href="https://github.com/richard-wollyce/ulpia/blob/main/tools/kb/README.md">tools/kb/README.md</a> gives it at commit 8285c1f,
+          read on 2 September 2026, re-wrapped to the plate; a documented
+          shape, not a pasted run. Lines longer than the plate scroll.
+        </figcaption>
+      </figure>
+      <p>
+        The pattern for a hosted consumer is to ask at the moment, queue the
+        proposal, and apply it later. Call
+        <code>kb remember &lt;claim&gt; --json</code> where the fact appears.
+        Store the object; it is self contained and stable, so it can be queued,
+        versioned and reviewed. On a machine that has the repository, act on it:
+        <code>ADD</code> becomes <code>kb write &lt;agent&gt; &lt;slug&gt; --keys ...</code>
+        with the claim as the body, <code>UPDATE</code> means edit
+        <code>evidence[0].path</code> in <code>evidence[0].base</code>, the
+        passage the overlap was measured against, and <code>NOOP</code> is
+        dropped. <code>notice</code> carries the same caveat the terminal
+        prints, so a model reading this through another surface is told what a
+        person is told.
+      </p>
+      <p>
+        Over MCP, <code>kb_remember</code> is the same judgement for a
+        long-lived process. <code>kb serve</code> exposes it beside
+        <code>kb_route</code>, <code>kb_retrieve</code> and
+        <code>kb_fleet</code>, all read only: it proposes and writes nothing,
+        and there is deliberately no write tool a model can reach.
+      </p>
+
+      <h2 id="left-open-on-purpose">Left open on purpose</h2>
+      <p>
+        Three things this page does not settle, because each is a decision and
+        not a task.
+      </p>
+      <ul>
+        <li>
+          Whether a <code>guess</code> is a recall loss. Today it is not: a guess
+          was served, with a warning, and a question that reached the caller is
+          not one the base failed to reach. Moving that line changes what
+          <code>kb-misses.txt</code> counts, and both live revisit triggers are
+          measured against that file, so it moves on a measurement. A test pins
+          the current answer so that changing it has to be deliberate.
+        </li>
+        <li>
+          Batch mode, F-08. Many questions in one invocation and one JSON line
+          per answer is the cheap version of a server, and worth a decision
+          rather than a reflex. Open.
+        </li>
+        <li>
+          A per-consumer scope. <a href="https://github.com/richard-wollyce/ulpia/blob/main/decisions/0034-git-leaves-the-runtime.md">ADR-0034</a> gives two: everything, and everything
+          outside the private folders. A hosted agent that may read
+          <code>projects/</code> and not <code>profile/</code> needs a third,
+          per consumer rather than per base. It is built when the second real
+          consumer asks, and not before.
+        </li>
+      </ul>
+
+      <p class="doc-back">
+        Previous: <a href="/docs/local/">On Your Machine</a> ·
+        Next: <a href="/docs/reference/">Reference</a> ·
+        <a href="/docs/">All of the docs</a> ·
+        <a href="/">Back to the library</a>
+      </p>
+    </main>
+
+    <footer>
+      <p class="address-line">
+        <a href="/docs/">Docs</a> · <a href="/benchmarks/">Benchmarks</a> · <a href="mailto:hello@ulpia.io">hello@ulpia.io</a>
+      </p>
+    </footer>
+  </body>
+</html>

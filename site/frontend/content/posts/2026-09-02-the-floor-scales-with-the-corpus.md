@@ -5,8 +5,9 @@ description: Why one threshold cannot serve a base of ten notes and a base of a 
 lang: en
 ---
 
-Vesta refuses to answer when nothing in your library matches well enough. That refusal is
-a comparison: the best file's keyword score against a floor. Until today the floor was one
+Vesta marks an answer as a guess when nothing in your library matches well enough, and
+refuses when nothing matches at all. The first of those is a comparison: the best file's
+keyword score against a floor. Until today the floor was one
 number, 17.5, measured on one fleet. This post is about why one number cannot be right for
 every size of library, what replaced it, and what each piece of the arithmetic means, so you
 can argue with the threshold instead of trusting it.
@@ -21,7 +22,7 @@ can argue with the threshold instead of trusting it.
 | **df** | Document frequency: how many entries carry a given key |
 | **idf** | Inverse document frequency, `ln(1 + N / (1 + df))`. The weight of a key. A key found in one note out of a thousand weighs 6.2; a key on every note weighs almost nothing. This is the standard arithmetic for "how much does this word tell me about which file to open" |
 | **idf_unique(N)** | idf for a key that exactly one note carries: `ln(1 + N/2)`. The heaviest a single key can be at that size. 0.41 with one entry, 1.10 with four, 1.87 with eleven, 4.74 with 226 |
-| **keyword score** | Each key the question matches is worth `6 × idf`, and the score is the sum. It is the number `kb route` prints beside every file |
+| **keyword score** | Each key the question matches is worth `6 × idf`, and the score is the sum, plus further terms for title, file name, summary and phrase matches. It is the number `kb route` prints beside every file |
 | **floor** | What the top score has to reach for the verdict to be `hit`. Below it the router still answers, labelled a `guess`; at zero it says `nothing` |
 
 ## Why one number was wrong twice
@@ -29,15 +30,15 @@ can argue with the threshold instead of trusting it.
 idf grows with N, because rarity needs a corpus to be rare in. So a fixed floor means a
 different number of keys at every size:
 
-| N | one unique key scores | a key in 5% of entries scores | what 17.5 meant |
-|---|---|---|---|
-| 4 | 6.6 | 6.4 | three unique keys |
-| 11 | 11.2 | 8.4 | two |
-| 226 | 28.4 | 10.7 | one |
-| 1000 | 37.3 | 18.2 | half a key: a word in fifty files cleared it alone |
+| N | one unique key scores | what 17.5 meant |
+|---|---|---|
+| 4 | 6.6 | three unique keys |
+| 11 | 11.2 | two |
+| 226 | 28.4 | one |
+| 1000 | 37.3 | half a key: a word in fifty files scored 18.2 and cleared it alone |
 
 The floor got harder as the base shrank and easier as it grew, in the two directions that
-hurt. Measured on the demo fleet that ships in the repository, before any change: with two,
+hurt. Measured on the demo fleet kept in the repository, before any change: with two,
 three or four entries, not one of its own gold questions reached `hit`. Every one was a
 `guess`, on the right file. A library that small could not route at all.
 
@@ -53,7 +54,7 @@ floor(N) = 0.616 × 6 × idf_unique(N)
 
 Read it as "a result has to score at least 62% of what a single word found in exactly one
 note would score in this library". At 226 entries that is 17.5 to the last decimal, by
-construction. At eleven it is 6.9. At four it is 4.1. At a thousand it is 26.4, which puts
+construction. At eleven it is 6.9. At four it is 4.1. At a thousand it is 23.0, which puts
 the word in fifty files back under it.
 
 One more rule, because scaling fixes the ruler and does not conjure one. **A fleet of one
@@ -77,10 +78,14 @@ did not move: 28 of 30 out-of-scope questions were still not answered confidentl
 two that got through are the same two medical baits, scoring above either floor. On the
 in-scope side, confident answers went from 6 to 12, out of the guess column.
 
-**A sweep from one entry to eleven.** From two up: every gold question a `hit` on the right
+**And a fourth check, after the change only: a sweep from one entry to eleven.** From two up: every gold question a `hit` on the right
 file, no wrong file at any size, every refusal holding.
 
 Every JSON reply carries the floor that actually applied to your fleet in `gate.floor`, and
-every surface that says "against a floor of" reads the same number. The full record, with
-every table and the revisit triggers, is
-[ADR-0036](https://github.com/richard-wollyce/ulpia/blob/main/decisions/0036-the-floor-scales-with-the-corpus.md).
+every surface that says "against a floor of" reads the same number. The floor is explained
+term by term, beside the two scorers it gates, in
+[How the Catalogue Ranks](/docs/how-it-works/#the-floor-term-by-term). The full record, with
+every table and the revisit triggers, is ADR-0036,
+[`decisions/0036-the-floor-scales-with-the-corpus.md`](https://github.com/richard-wollyce/ulpia/blob/main/decisions/0036-the-floor-scales-with-the-corpus.md),
+in a repository that is public under [Apache 2.0](https://github.com/richard-wollyce/ulpia/blob/main/LICENSE)
+and cloneable today.
