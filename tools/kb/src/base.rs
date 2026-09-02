@@ -10,7 +10,6 @@
 //! | Steve | `INDEX.md`  | `knowledge/`     |
 //! | Yaron | `MAPA.md`   | `conhecimento/`  |
 
-use std::collections::HashSet;
 use std::fs;
 use std::io;
 use std::path::{Path, PathBuf};
@@ -31,14 +30,92 @@ pub struct MdFile {
     /// File name without the `.md`, which is what a `[[wikilink]]` points at.
     pub stem: String,
     pub text: String,
-    /// Whether git tracks this file. `None` means git could not be asked, which is
-    /// a third state and not a synonym for `false`.
+    /// Whether this file is in the base's private layer, by the declaration in
+    /// [`private_layer`]. Two states, because there is no longer a way for privacy to
+    /// be unknown: it used to be asked of git, which could be absent, and absent was a
+    /// third state that refused whole bases. ADR-0034.
     ///
-    /// This exists because the tracked filter used to live only on the file walk,
-    /// so `kb index --all` wrote private files into the index and every later query
-    /// returned them whether or not `--all` was passed. The flag has to travel with
-    /// the file into the index, or the index cannot answer who is allowed to see it.
-    pub tracked: Option<bool>,
+    /// It travels with the file into the index on purpose: the filter used to live
+    /// only on the file walk, so `kb index --all` wrote private files into the index
+    /// and every later query returned them whether or not `--all` was passed. The
+    /// index has to be able to answer who is allowed to see a row.
+    pub private: bool,
+}
+
+/// What a base declares private, read from its manifest.
+#[derive(Debug, Clone, PartialEq)]
+pub enum PrivateLayer {
+    /// Every file. The person's base, ADR-0025, and any base saying `private = .`.
+    Whole,
+    /// These folders, relative to the base root, with the folder map as the default.
+    Folders(Vec<String>),
+}
+
+/// The folder map's private half, which is the declaration a base has when it makes
+/// none. `profile/`, `projects/` and `records/` describe a real person and real work.
+/// `inbox/` is deliberately not here: it is the short memory, served and labelled as
+/// such rather than hidden, because a fact the base has not judged yet is still a fact
+/// the owner's agents should be able to reach. ADR-0034.
+pub const PRIVATE_DEFAULT: &[&str] = &["profile", "projects", "records"];
+
+/// The manifest key. One line, folders separated by commas, a trailing slash optional,
+/// and `.` for the whole base.
+const PRIVATE_KEY: &str = "private";
+
+/// The base directory that is private as a whole by name, because that is the name
+/// `kb init --person` writes and the person's base carries no manifest of its own.
+const PERSON_DIR: &str = "person";
+
+/// Reads the private layer off `agent.txt`, or answers with the default.
+///
+/// **This replaces `git ls-files`, and the difference is who is asked.** Git answered
+/// "is this file tracked", which is a question about publication, and the answer was
+/// read as "may this be served", which is a different question with the same shape.
+/// The two agreed only while a repository existed, was committed, and was shipped with
+/// the base. A deployment bundle, a fresh folder, and a note written a minute ago all
+/// broke the agreement, each in the direction of serving nothing. A declaration read
+/// off disk cannot be absent, cannot be stale, and costs a file read instead of a
+/// subprocess per base per question.
+pub fn private_layer(root: &Path) -> PrivateLayer {
+    let manifest = fs::read_to_string(root.join("agent.txt")).unwrap_or_default();
+    for line in manifest.lines() {
+        let line = line.split('#').next().unwrap_or("").trim();
+        let Some((key, value)) = line.split_once('=') else { continue };
+        if key.trim() != PRIVATE_KEY {
+            continue;
+        }
+        let value = value.trim();
+        if value == "." {
+            return PrivateLayer::Whole;
+        }
+        let folders: Vec<String> = value
+            .split(',')
+            .map(|f| f.trim().trim_end_matches('/').to_string())
+            .filter(|f| !f.is_empty())
+            .collect();
+        return PrivateLayer::Folders(folders);
+    }
+
+    let is_person = root
+        .file_name()
+        .map(|n| n.to_string_lossy().eq_ignore_ascii_case(PERSON_DIR))
+        .unwrap_or(false);
+    if is_person {
+        return PrivateLayer::Whole;
+    }
+    PrivateLayer::Folders(PRIVATE_DEFAULT.iter().map(|s| s.to_string()).collect())
+}
+
+impl PrivateLayer {
+    /// Whether a base relative path, slash separated, is inside the private layer.
+    pub fn covers(&self, rel: &str) -> bool {
+        match self {
+            PrivateLayer::Whole => true,
+            PrivateLayer::Folders(folders) => {
+                folders.iter().any(|f| rel == f || rel.starts_with(&format!("{f}/")))
+            }
+        }
+    }
 }
 
 pub struct Base {
@@ -51,8 +128,6 @@ pub struct Base {
     /// Files that could not be read, with the reason. Reported rather than
     /// swallowed: a file skipped in silence is a check that silently did not run.
     pub unreadable: Vec<(String, String)>,
-    /// True when the file list was narrowed to what git tracks.
-    pub tracked_only: bool,
     /// `alias -> canonical` pairs read from `kb-aliases.txt` at the root.
     pub aliases: Vec<(String, String)>,
 }
@@ -95,10 +170,11 @@ pub fn has_map(dir: &Path) -> bool {
 }
 
 impl Base {
-    /// Discovers a base. Unless `all` is set, only files tracked by git are
-    /// considered: the private layer is gitignored by design, it is nobody's to
-    /// publish, and linting it drowns the findings that matter in noise from
-    /// files we would never edit anyway.
+    /// Discovers a base. Unless `all` is set, the private layer is left out: it
+    /// describes a real person and real work, it is nobody's to serve to a stranger,
+    /// and linting it drowns the findings that matter in noise from files we would
+    /// never edit anyway. Which files that is comes from [`private_layer`], read off
+    /// the base itself. Nothing outside the directory is consulted.
     pub fn discover(root: &Path, all: bool) -> io::Result<Base> {
         let mut base = Base {
             root: root.to_path_buf(),
@@ -106,29 +182,22 @@ impl Base {
             knowledge_dir: None,
             files: Vec::new(),
             unreadable: Vec::new(),
-            tracked_only: false,
             aliases: load_aliases(root),
         };
 
         collect(root, root, &mut base)?;
         base.files.sort_by(|a, b| a.rel.cmp(&b.rel));
 
-        // Ask git once, and mark every file, whether or not the list is about to be
-        // narrowed. Marking only when filtering would leave `--all` runs with no
-        // record of which files were private, which is exactly how the index came to
-        // hold private chunks that nothing downstream could recognise as private.
-        let tracked = tracked_files(root);
-        if let Some(set) = &tracked {
-            for f in &mut base.files {
-                f.tracked = Some(set.contains(&f.rel));
-            }
+        // Mark every file, whether or not the list is about to be narrowed. Marking
+        // only when filtering would leave `--all` runs with no record of which files
+        // were private, which is exactly how the index came to hold private chunks
+        // that nothing downstream could recognise as private.
+        let layer = private_layer(root);
+        for f in &mut base.files {
+            f.private = layer.covers(&f.rel);
         }
-
         if !all {
-            if tracked.is_some() {
-                base.files.retain(|f| f.tracked == Some(true));
-                base.tracked_only = true;
-            }
+            base.files.retain(|f| !f.private);
         }
 
         // Match against the names actually on disk, case sensitively, rather than
@@ -170,8 +239,9 @@ impl Base {
 ///
 /// A GUI process has no console, so Windows creates one for any console child it
 /// spawns. That is why the tray flashed a terminal on every fleet open, three times,
-/// once per `git ls-files`, and why one of them surfaced as ERROR_BROKEN_PIPE
-/// (0x800700e8) when the window it created went away underneath the pipe.
+/// once per `git ls-files` back when discovery asked git, and why one of them surfaced
+/// as ERROR_BROKEN_PIPE (0x800700e8) when the window it created went away underneath
+/// the pipe. Discovery no longer spawns anything (ADR-0034); `kb commit` still does.
 ///
 /// `CREATE_NO_WINDOW` is 0x08000000. Named rather than imported so this file keeps
 /// its zero dependency property, and behind cfg so nothing changes elsewhere.
@@ -183,33 +253,6 @@ pub fn quiet(program: &str) -> Command {
         cmd.creation_flags(0x0800_0000);
     }
     cmd
-}
-
-/// The set of paths git tracks in this base, relative and slash separated.
-///
-/// Returns None when git is missing or the directory is not a repository, in
-/// which case the caller keeps every file and says so in the report. A filter
-/// that quietly does nothing is worse than no filter.
-fn tracked_files(root: &Path) -> Option<HashSet<String>> {
-    let output = quiet("git")
-        .arg("-C")
-        .arg(root)
-        .arg("ls-files")
-        .output()
-        .ok()?;
-
-    if !output.status.success() {
-        return None;
-    }
-
-    let listing = String::from_utf8_lossy(&output.stdout);
-    let set: HashSet<String> = listing
-        .lines()
-        .map(|l| l.trim().to_string())
-        .filter(|l| !l.is_empty())
-        .collect();
-
-    if set.is_empty() { None } else { Some(set) }
 }
 
 fn collect(root: &Path, dir: &Path, base: &mut Base) -> io::Result<()> {
@@ -242,7 +285,7 @@ fn collect(root: &Path, dir: &Path, base: &mut Base) -> io::Result<()> {
                     .file_stem()
                     .map(|s| s.to_string_lossy().to_string())
                     .unwrap_or_default();
-                base.files.push(MdFile { rel, stem, text, tracked: None });
+                base.files.push(MdFile { rel, stem, text, private: false });
             }
             Err(e) => base.unreadable.push((rel, e.to_string())),
         }
@@ -291,6 +334,116 @@ mod tests {
 
         assert_eq!(base.map.as_deref(), Some("MAP.md"));
         assert!(base.map_file().is_some());
+    }
+
+    // -----------------------------------------------------------------------
+    // ADR-0034: the private layer is declared, not asked of git
+    // -----------------------------------------------------------------------
+
+    fn note(dir: &Path, rel: &str) {
+        let path = dir.join(rel);
+        fs::create_dir_all(path.parent().unwrap()).unwrap();
+        fs::write(path, "# note
+
+**Search for:** `x`
+").unwrap();
+    }
+
+    /// The first interaction with a memory layer: a folder, a note, a question. It
+    /// used to be refused until somebody ran `git init`, which for a database is the
+    /// equivalent of refusing to open until the user has set up a backup.
+    #[test]
+    fn a_folder_with_a_note_is_a_base_and_needs_no_repository() {
+        let dir = scratch("no-repo");
+        note(&dir, "knowledge/a.md");
+        assert!(!dir.join(".git").exists(), "the fixture has no repository on purpose");
+
+        let public = Base::discover(&dir, false).expect("discover");
+        assert_eq!(public.files.len(), 1, "the note is served without asking anybody");
+        assert!(!public.files[0].private);
+    }
+
+    /// The folder map is the default. A base that declares nothing behaves exactly as
+    /// every base already does, so no existing fleet changes behaviour on upgrade.
+    #[test]
+    fn the_folder_map_is_the_private_layer_when_nothing_is_declared() {
+        let dir = scratch("default-private");
+        for rel in [
+            "knowledge/public.md",
+            "inbox/fresh.md",
+            "profile/me.md",
+            "projects/client.md",
+            "records/sessions/today.md",
+        ] {
+            note(&dir, rel);
+        }
+
+        let public = Base::discover(&dir, false).expect("discover");
+        let served: Vec<&str> = public.files.iter().map(|f| f.rel.as_str()).collect();
+        assert!(served.contains(&"knowledge/public.md"), "{served:?}");
+        assert!(
+            served.contains(&"inbox/fresh.md"),
+            "the short memory is served, labelled, not hidden: {served:?}"
+        );
+        for hidden in ["profile/me.md", "projects/client.md", "records/sessions/today.md"] {
+            assert!(!served.contains(&hidden), "{hidden} is the private layer: {served:?}");
+        }
+
+        let all = Base::discover(&dir, true).expect("discover");
+        assert_eq!(all.files.len(), 5, "--all is the deliberate act that includes it");
+        assert!(all.files.iter().any(|f| f.rel == "profile/me.md" && f.private));
+        assert!(all.files.iter().any(|f| f.rel == "knowledge/public.md" && !f.private));
+    }
+
+    /// One line in the manifest replaces the default, and it is a replacement rather
+    /// than an addition: a base that wants `records/` served says so by leaving it out.
+    #[test]
+    fn a_declared_private_layer_replaces_the_default() {
+        let dir = scratch("declared-private");
+        fs::write(dir.join("agent.txt"), "name = Probe
+private = drafts/, records
+").unwrap();
+        for rel in ["knowledge/a.md", "drafts/b.md", "records/c.md", "profile/d.md"] {
+            note(&dir, rel);
+        }
+
+        let public = Base::discover(&dir, false).expect("discover");
+        let served: Vec<&str> = public.files.iter().map(|f| f.rel.as_str()).collect();
+        assert!(served.contains(&"knowledge/a.md"));
+        assert!(served.contains(&"profile/d.md"), "not declared, so served: {served:?}");
+        assert!(!served.contains(&"drafts/b.md"), "{served:?}");
+        assert!(!served.contains(&"records/c.md"), "with or without the slash: {served:?}");
+    }
+
+    /// The person is one base and every word of it is private, ADR-0025. The base
+    /// `kb init --person` writes is called `person`, and that name is the declaration.
+    #[test]
+    fn the_person_base_is_private_as_a_whole() {
+        let root = scratch("person-private");
+        let dir = root.join("person");
+        note(&dir, "core.md");
+        note(&dir, "work.md");
+
+        let public = Base::discover(&dir, false).expect("discover");
+        assert!(public.files.is_empty(), "nothing of the person is served without --all");
+
+        let all = Base::discover(&dir, true).expect("discover");
+        assert_eq!(all.files.len(), 2);
+        assert!(all.files.iter().all(|f| f.private));
+    }
+
+    /// `private = .` is the explicit spelling of the same thing, for a base with a
+    /// name of its own.
+    #[test]
+    fn a_dot_declares_the_whole_base_private() {
+        let dir = scratch("dot-private");
+        fs::write(dir.join("agent.txt"), "name = Vault
+private = .
+").unwrap();
+        note(&dir, "knowledge/a.md");
+
+        assert!(Base::discover(&dir, false).expect("discover").files.is_empty());
+        assert_eq!(Base::discover(&dir, true).expect("discover").files.len(), 1);
     }
 
     #[test]

@@ -57,9 +57,16 @@ use std::path::{Path, PathBuf};
 use crate::classify::Classifier;
 use crate::memory::Memory;
 
-/// Where unreviewed material waits. Not indexed, and that is the feature: a base that
-/// answers from unreviewed material is the failure this whole module exists against.
-/// `checks::is_exempt` holds the other half of this rule.
+/// Where unreviewed material waits. The short memory.
+///
+/// **This used to say "not indexed, and that is the feature", and it was never true.**
+/// Nothing excluded the deposit from the text index; it carried no `Search for:` line,
+/// so the router never named it, while the text scorer surfaced it whenever its words
+/// matched. ADR-0034 made the real behaviour the intended one: the deposit is served,
+/// and every surface labels a passage from it as short memory, so a model deciding to
+/// lean on it does so knowing it is recent and unjudged. `retrieve::layer_of` is the one
+/// place that rule lives, and `checks::is_exempt` keeps E02 quiet about the missing
+/// keyword line, because a deposit file is not supposed to have one.
 pub const DEPOSIT: &str = "inbox";
 
 /// The stage a promoted note carries until a person or a later pass distils it.

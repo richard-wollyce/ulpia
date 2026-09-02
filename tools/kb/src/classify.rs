@@ -602,6 +602,7 @@ mod tests {
             .map(|i| Retrieved {
                 base: "zed".into(),
                 path: format!("knowledge/systems/a-file-with-a-realistic-name-{i}.md"),
+                layer: crate::retrieve::Layer::Long,
                 title: String::new(),
                 purpose: String::new(),
                 score: 0.0,

@@ -30,29 +30,16 @@ const DIRS: &[&str] = &[
 pub struct Created {
     pub path: PathBuf,
     pub files: usize,
-    /// How the new base ended up under version control. Reported rather than assumed:
-    /// the privacy gate reads `git ls-files` per base, so a base no repository knows
-    /// about is a base whose private layer cannot be told apart from its public one.
-    pub vcs: Vcs,
 }
 
-/// What was done about version control, which is not a yes or no.
-///
-/// **A fleet is one repository and an agent is a directory in it**, so the interesting
-/// case is the one a boolean could not express: the base is already covered, and
-/// creating a second repository for it is worse than creating none.
-pub enum Vcs {
-    /// A repository was created for this base and given a first commit.
-    Initialised,
-    /// The base sits inside a repository that already existed. Nothing was created,
-    /// and the files were staged into that repository, which is what the privacy gate
-    /// needs: `git ls-files` reads the index, so staged is already visible.
-    Enclosing,
-    /// Nothing was done. For an agent that means a git step failed, which is worth a
-    /// warning. For the person's base it is deliberate, and that branch does not read
-    /// this field.
-    Untouched,
-}
+// **Nothing here touches git, and it used to, at length.** `kb init` ran `git init`,
+// staged the files and committed, because the privacy gate read `git ls-files` and an
+// agent with no repository was an agent the system it came from refused to serve. That
+// grew two more branches, one for an enclosing repository and one for an enclosing
+// repository that ignores the path, each found by a real failure. ADR-0034 removed the
+// question all three answered. What survives is the `.gitignore` written below, which
+// mirrors the private layer so that anybody who later chooses to version a fleet gets
+// the right ignores for free. A courtesy, not a dependency.
 
 #[derive(Debug)]
 pub enum InitError {
@@ -113,10 +100,7 @@ pub fn person(fleet: &Path, at: Option<&Path>) -> Result<Created, InitError> {
     write(&root.join("work.md"), PERSON_WORK)?;
     write(&root.join("presence.md"), PERSON_PRESENCE)?;
 
-    // No `git init` here, unlike an agent: the person's base is not its own
-    // repository, it lives inside the fleet's, so the privacy gate that matters is
-    // already the one the fleet repository provides.
-    Ok(Created { path: root, files: 5, vcs: Vcs::Untouched })
+    Ok(Created { path: root, files: 5 })
 }
 
 /// The directory the person's base lives in, beside the agents.
@@ -284,106 +268,13 @@ pub fn agent(fleet: &Path, name: &str, at: Option<&Path>) -> Result<Created, Ini
     write(&root.join(".gitignore"), GITIGNORE)?;
     files += 7;
 
-    // Not optional, and **not finished at `git init`**. The privacy gate reads
-    // `git ls-files`, which is empty in a repository with no commit, and an empty
-    // listing is indistinguishable from "git could not be asked". A freshly created
-    // agent would therefore be refused by the very system that created it, which is
-    // the kind of gap only found by running the thing end to end.
-    //
-    // **Unless a repository is already here, in which case creating another one is the
-    // bug.** A fleet is one repository, and until 2026-08-20 this ran `git init`
-    // regardless, so creating an agent from the fleet root left `fleet/<name>/.git`
-    // nested inside the fleet's own repository. Nothing complains at the time. What
-    // happens later is that `git add fleet/<name>` from the fleet records a **gitlink**,
-    // a pointer to a commit in a repository nobody pushes and no backup covers, so the
-    // fleet looks complete with one agent's contents outside it.
-    // **An enclosing repository that ignores this path is not enclosing it.** The first
-    // cold-clone run of the quickstart found the gap: the Ulpia repo itself gitignores
-    // fleet/, so `kb init` inside a clone detected the enclosing repo, ran an add that
-    // exits 0 while staging nothing (git add skips ignored paths silently), reported
-    // "the files are staged into it", and left the base with no git at all. The privacy
-    // gate then rightly refused to serve it, and `kb index` and `kb route` appeared to
-    // contradict each other for every stranger following the README.
-    //
-    // Ignored is the disowning, and the design already has an answer for a disowned
-    // path: it gets its own repository, which is exactly how the private fleet layer is
-    // meant to live inside the ignored directory. The gitlink concern in the comment
-    // above does not apply, because the enclosing repository ignores the path and will
-    // never `git add` it into a gitlink.
-    let vcs = if inside_work_tree(&root) && !ignored_by_enclosing(&root) {
-        // Staging is enough, and committing would be wrong: this command does not own
-        // the repository it just landed in, and the person who runs it writes the commit.
-        //
-        // **The `-- .` is the whole safety of this line.** Verified on git 2.50.1: from a
-        // subdirectory, `git add -A` stages the entire work tree, so without the pathspec
-        // this would sweep every other session's in-flight work into the index, which is
-        // the accident ADR-0021 exists to prevent.
-        if run_git(&root, &["add", "-A", "--", "."]) { Vcs::Enclosing } else { Vcs::Untouched }
-    } else if run_git(&root, &["init", "--quiet"])
-        && run_git(&root, &["add", "-A"])
-        && run_git(
-            &root,
-            &[
-                "-c",
-                "user.name=kb",
-                "-c",
-                "user.email=kb@localhost",
-                "commit",
-                "--quiet",
-                "-m",
-                "Create the agent, in the shape ADR-0011 defines",
-            ],
-        )
-    {
-        Vcs::Initialised
-    } else {
-        Vcs::Untouched
-    };
-
-    Ok(Created { path: root, files, vcs })
+    Ok(Created { path: root, files })
 }
 
 /// Whether `dir` is already inside somebody's work tree.
 ///
 /// Whether the enclosing repository ignores this path entirely.
 ///
-/// `git check-ignore -q .` exits 0 exactly when the path is ignored. An error running
-/// git at all reads as not-ignored, so the caller falls back to the enclosing branch,
-/// which was the old behaviour and the safe one when git is broken.
-fn ignored_by_enclosing(root: &Path) -> bool {
-    crate::base::quiet("git")
-        .current_dir(root)
-        .args(["check-ignore", "-q", "."])
-        .status()
-        .map(|s| s.success())
-        .unwrap_or(false)
-}
-
-/// Reads the answer off stdout rather than off the exit status, because `rev-parse`
-/// also succeeds while standing inside a `.git` directory and prints `false` there.
-/// It is captured rather than run through `run_git` for the plainer reason that
-/// `run_git` inherits stdout, and a probe that prints `true` into the middle of the
-/// command's own output is a probe that shows up in somebody's terminal.
-fn inside_work_tree(dir: &Path) -> bool {
-    crate::base::quiet("git")
-        .args(["rev-parse", "--is-inside-work-tree"])
-        .current_dir(dir)
-        .output()
-        .map(|o| o.status.success() && String::from_utf8_lossy(&o.stdout).trim() == "true")
-        .unwrap_or(false)
-}
-
-/// The identity is set per command rather than written into the repository config,
-/// so the first real commit uses whoever the machine says the author is. A generated
-/// identity that outlives generation is an author nobody chose.
-fn run_git(root: &Path, args: &[&str]) -> bool {
-    crate::base::quiet("git")
-        .args(args)
-        .current_dir(root)
-        .status()
-        .map(|s| s.success())
-        .unwrap_or(false)
-}
 
 /// Lowercase, digits and hyphens. The name becomes a directory and appears in every
 /// path afterwards, so anything needing a quote is rejected at the only moment it is
@@ -510,6 +401,9 @@ fn agent_txt(title: &str) -> String {
          # belong inside it.\n\n\
          name = {title}\n\
          role = \n\n\
+         # The private layer: folders served only with --all. This is the default, so the\n\
+         # line is here to be edited, not to be needed. `.` means the whole base. ADR-0034.\n\
+         # private = profile/, projects/, records/\n\n\
          # Where this agent stops. Read by the classifier: a roster of roles alone\n\
          # tells it what each agent does and never what none of them does, so an agent\n\
          # generated without this line is one the classifier cannot bound.\n\
@@ -643,80 +537,39 @@ mod tests {
         );
     }
 
-    /// The gap that `git init` alone left. `git ls-files` is empty in a repository
-    /// with no commit, and `tracked_files` cannot tell an empty listing from git
-    /// being unavailable, so `Memory::open` refused the agent it had just created.
+    /// The system must be able to serve what it just created, and it must do so
+    /// without having created a repository to make that possible. Three tests stood
+    /// here before ADR-0034, each pinning a branch of `git init` behaviour found by a
+    /// real failure; they went with the branches, and this is the property they were
+    /// all in service of.
     #[test]
-    fn a_generated_agent_can_be_opened_without_asking_for_the_private_layer() {
+    fn a_generated_agent_is_served_at_once_and_no_repository_was_created_for_it() {
         let fleet = scratch("openable");
         let made = agent(&fleet, "newton", None).expect("init");
-        assert!(
-            matches!(made.vcs, Vcs::Initialised),
-            "git has to be usable, or the privacy gate cannot run"
-        );
+        assert!(!made.path.join(".git").exists(), "no repository, by design");
 
         let base = crate::base::Base::discover(&made.path, false).expect("discover");
-        assert!(
-            base.tracked_only,
-            "a fresh agent must have tracked files, or Memory::open refuses it"
-        );
-        assert!(!base.files.is_empty(), "and the tracked set must not be empty");
+        assert!(!base.files.is_empty(), "the public files are there without asking anybody");
 
         crate::memory::Memory::open(&[&made.path], false)
             .expect("the system must be able to serve what it just created");
     }
 
-    /// The trap the unconditional `git init` set, found on 2026-08-20 when Apelles was
-    /// created from the fleet root and came out with `fleet/apelles/.git` nested inside
-    /// the fleet's own repository. Nothing complains at the time. Later, `git add` from
-    /// the fleet records a **gitlink** instead of the files, and one agent's contents
-    /// sit in a repository nobody pushes while the fleet looks complete.
+    /// The courtesy that survived: anybody who later versions the fleet gets ignores
+    /// that match the declared private layer, so the two cannot start out disagreeing.
     #[test]
-    fn an_agent_created_inside_a_repository_joins_it_instead_of_nesting() {
-        let root = scratch("enclosing");
-        assert!(run_git(&root, &["init", "--quiet"]), "the enclosing repository");
-        fs::write(root.join("elsewhere.txt"), "another session's work\n").expect("write");
-
-        let made = agent(&root, "newton", None).expect("init");
-
-        assert!(matches!(made.vcs, Vcs::Enclosing), "no second repository is created");
-        assert!(!made.path.join(".git").exists(), "and none is left on disk either");
-
-        // `git ls-files` is the privacy gate's own question, so it is the one asked here.
-        let out = crate::base::quiet("git")
-            .args(["ls-files"])
-            .current_dir(&root)
-            .output()
-            .expect("git");
-        let indexed = String::from_utf8_lossy(&out.stdout);
-        assert!(
-            indexed.contains("fleet/newton/index.md"),
-            "the new base has to be in the index or the gate cannot see it: {indexed}"
-        );
-        assert!(
-            !indexed.contains("elsewhere.txt"),
-            "and nothing outside it may be staged, or creating an agent sweeps another \
-             session's work into the index: {indexed}"
-        );
+    fn the_gitignore_written_mirrors_the_default_private_layer() {
+        let fleet = scratch("ignores");
+        let made = agent(&fleet, "newton", None).expect("init");
+        let ignores = fs::read_to_string(made.path.join(".gitignore")).expect("written");
+        for folder in crate::base::PRIVATE_DEFAULT {
+            assert!(
+                ignores.lines().any(|l| l.trim() == format!("{folder}/")),
+                "{folder}/ is in the private layer and must be ignored: {ignores}"
+            );
+        }
     }
 
-    /// The cold-clone case: the enclosing repository exists and IGNORES the fleet, so the
-    /// new base must get its own repository or it belongs to no git at all and the
-    /// privacy gate rightly serves nothing from it.
-    #[test]
-    fn an_enclosing_repository_that_ignores_the_path_does_not_capture_the_agent() {
-        let outer = scratch("enclosing-ignored");
-        assert!(run_git(&outer, &["init", "--quiet"]), "the enclosing repository");
-        std::fs::write(outer.join(".gitignore"), "/fleet/\n").expect("ignore rule");
-
-        let made = agent(&outer, "orphan", None).expect("init");
-        assert!(
-            matches!(made.vcs, Vcs::Initialised),
-            "an ignored path is a disowned path, and a disowned agent initialises its own \
-             repository",
-        );
-        assert!(made.path.join(".git").exists(), "the repository is real, not reported");
-    }
 
     #[test]
     fn a_generated_agent_is_a_base_the_fleet_finds() {

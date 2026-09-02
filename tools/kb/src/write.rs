@@ -60,32 +60,15 @@ pub struct Written {
     pub map: PathBuf,
     pub section: String,
     pub section_created: bool,
-    pub staged: Staged,
 }
 
-/// What happened when the new files were offered to git.
-///
-/// **Staging is part of writing here, and that is not tidiness.** `kb` reads
-/// `git ls-files` to know what is public, so an untracked note is a note the router
-/// will not serve. Without this step the loop does not close: a model writes a
-/// memory, the write reports success, and the next question cannot find it. Measured
-/// exactly that way on 2026-08-17 against a fresh `kb init`.
-///
-/// Staged and not committed, deliberately. `git ls-files` reads the index, so
-/// staging is enough to make the note findable, while what the history says stays a
-/// human decision. It is also visible in `git status` and undone with one command.
-#[derive(Debug, PartialEq)]
-pub enum Staged {
-    /// Tracked now, so the router can serve it.
-    Yes,
-    /// A `.gitignore` rule covers it. **Not an error.** The note landed in a private
-    /// folder and a private note is one the public scope is supposed to skip.
-    Ignored,
-    /// No git here, so nothing knows what is public. `Memory::open` refuses such a
-    /// base outright unless the private layer was asked for.
-    NoGit,
-    Failed(String),
-}
+// **There is no staging step any more, and there was one for a reason worth keeping.**
+// While `kb` asked `git ls-files` what it may serve, an untracked note was a note the
+// router would not find, so `write` ran `git add` on what it had just written or the
+// loop did not close: a model wrote a memory, the write reported success, and the next
+// question could not see it. Measured on 2026-08-17 against a fresh `kb init`. ADR-0034
+// removed the question the step existed to answer: a note is served the moment it is on
+// disk, because the private layer is a declaration and not a listing.
 
 #[derive(Debug)]
 pub enum WriteError {
@@ -196,45 +179,7 @@ pub fn note(fleet: &Path, agent: &str, slug: &str, spec: &Note) -> Result<Writte
         return Err(WriteError::Io(map_path, e));
     }
 
-    let staged = stage(&root, &note_path, &map_path);
-    Ok(Written { note: note_path, map: map_path, section, section_created, staged })
-}
-
-fn stage(root: &Path, note: &Path, map: &Path) -> Staged {
-    // **A pathspec is resolved relative to `-C`, not to the shell's directory**, so the
-    // paths this function is handed have to lose the root prefix before git sees them.
-    // Without this, `kb write <agent> <slug> <fleet-root>` built `fleet/apelles/knowledge/
-    // masters.md`, handed it to `git -C fleet/apelles add`, and git looked for
-    // `fleet/apelles/fleet/apelles/knowledge/masters.md` and failed the whole call. The
-    // command still reported the note as written, so the note existed, was untracked, and
-    // therefore invisible to the router: exactly the unreachable file this module exists
-    // to prevent, produced by the step that exists to prevent it. Found on 2026-08-20 by
-    // creating an agent from the fleet root, which is the only way anybody creates one.
-    let note = note.strip_prefix(root).unwrap_or(note);
-    let map = map.strip_prefix(root).unwrap_or(map);
-    let out = crate::base::quiet("git")
-        .arg("-C")
-        .arg(root)
-        .arg("add")
-        .arg(note)
-        .arg(map)
-        .output();
-
-    let out = match out {
-        Ok(o) => o,
-        Err(_) => return Staged::NoGit,
-    };
-    if out.status.success() {
-        return Staged::Yes;
-    }
-    let err = String::from_utf8_lossy(&out.stderr);
-    if err.contains("ignored by one of your .gitignore") {
-        return Staged::Ignored;
-    }
-    if err.contains("not a git repository") {
-        return Staged::NoGit;
-    }
-    Staged::Failed(err.trim().to_string())
+    Ok(Written { note: note_path, map: map_path, section, section_created })
 }
 
 /// The agent's directory, accepting both shapes ADR-0011 and ADR-0008 leave open:

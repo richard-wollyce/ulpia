@@ -7,6 +7,10 @@
 name = Skeleton
 role = 
 
+# The private layer: folders served only with --all. This is the default, so the
+# line is here to be edited, not to be needed. `.` means the whole base. ADR-0034.
+# private = profile/, projects/, records/
+
 # Where this agent stops. Read by the classifier: a roster of roles alone
 # tells it what each agent does and never what none of them does, so an agent
 # generated without this line is one the classifier cannot bound.

@@ -289,9 +289,11 @@ impl Store {
                 hash        TEXT NOT NULL,
                 provenance  TEXT,
                 stage       TEXT,
-                -- 1 tracked, 0 known untracked, NULL git could not be asked.
-                -- NULL is a third state on purpose: it means unknown, not public.
-                tracked     INTEGER,
+                -- 1 in the base's declared private layer, 0 otherwise. Two states,
+                -- because the declaration is read off disk and cannot be absent.
+                -- The column this replaced, `tracked`, had a third: NULL for git
+                -- could not be asked, and that third state is what ADR-0034 removed.
+                private     INTEGER NOT NULL DEFAULT 0,
                 PRIMARY KEY (base, path)
             );
 
@@ -305,15 +307,15 @@ impl Store {
             ",
         )?;
 
-        // An index built before `tracked` existed cannot say which of its rows came
-        // from a `--all` run, and a row whose privacy is unknowable must not be
-        // served on the strength of a guess. If the column had to be added, the file
-        // predates the fix: throw the contents away and let the next sync rebuild
+        // An index built before `private` existed carries `tracked` instead, which was
+        // git's answer and not the declaration's, so none of its rows can say who may
+        // see them under the current rule. If the column had to be added, the file
+        // predates ADR-0034: throw the contents away and let the next sync rebuild
         // them. The index is derived by ADR-0003, so this costs seconds and buys the
-        // only honest answer.
+        // only honest answer. The old column stays in the old file, unread.
         let added = self
             .conn
-            .execute("ALTER TABLE files ADD COLUMN tracked INTEGER", [])
+            .execute("ALTER TABLE files ADD COLUMN private INTEGER NOT NULL DEFAULT 0", [])
             .is_ok();
         if added {
             self.conn
@@ -367,7 +369,7 @@ impl Store {
             };
 
             tx.execute(
-                "INSERT OR REPLACE INTO files (base, path, hash, provenance, stage, tracked)
+                "INSERT OR REPLACE INTO files (base, path, hash, provenance, stage, private)
                  VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
                 params![
                     base_name,
@@ -375,7 +377,7 @@ impl Store {
                     hash,
                     field("provenance"),
                     field("stage"),
-                    file.tracked.map(|t| t as i64)
+                    file.private as i64
                 ],
             )?;
 
@@ -451,7 +453,7 @@ impl Store {
              LEFT JOIN files f
                     ON f.base = chunks.base AND f.path = chunks.path
              WHERE chunks MATCH ?1
-               AND (?3 = 1 OR f.tracked IS NOT 0)
+               AND (?3 = 1 OR f.private = 0)
              ORDER BY score
              LIMIT ?2",
         )?;
@@ -562,12 +564,12 @@ mod tests {
         dir
     }
 
-    fn md(rel: &str, text: &str, tracked: Option<bool>) -> crate::base::MdFile {
+    fn md(rel: &str, text: &str, private: bool) -> crate::base::MdFile {
         crate::base::MdFile {
             rel: rel.into(),
             stem: rel.rsplit('/').next().unwrap().trim_end_matches(".md").into(),
             text: text.into(),
-            tracked,
+            private,
         }
     }
 
@@ -578,7 +580,6 @@ mod tests {
             knowledge_dir: None,
             files,
             unreadable: Vec::new(),
-            tracked_only: false,
             aliases: Vec::new(),
         }
     }
@@ -604,7 +605,7 @@ mod tests {
                 text.push_str(&format!("## s{i}\n\nubiquitous filler\n\n"));
             }
         }
-        let base = base_with(&dir, vec![md("knowledge/big.md", &text, Some(true))]);
+        let base = base_with(&dir, vec![md("knowledge/big.md", &text, false)]);
         store.sync(&base, "zed").expect("sync");
 
         let both = store
@@ -623,15 +624,15 @@ mod tests {
     }
 
     #[test]
-    fn an_untracked_file_stays_out_of_a_public_search() {
+    fn a_private_file_stays_out_of_a_public_search() {
         let dir = scratch("public-scope");
         let mut store = Store::open(&dir.join("i.db")).expect("open");
 
         let base = base_with(
             &dir,
             vec![
-                md("knowledge/public.md", "# Public\n\nthe calorie floor is public\n", Some(true)),
-                md("profile/private.md", "# Private\n\nthe calorie floor is private\n", Some(false)),
+                md("knowledge/public.md", "# Public\n\nthe calorie floor is public\n", false),
+                md("profile/private.md", "# Private\n\nthe calorie floor is private\n", true),
             ],
         );
         store.sync(&base, "zed").expect("sync");
@@ -641,11 +642,11 @@ mod tests {
         let public = store.search(&terms, 10, Scope::Public).expect("search");
         assert!(
             public.iter().all(|h| h.path != "profile/private.md"),
-            "a file git is known to ignore must never reach a public search"
+            "a file in the declared private layer must never reach a public search"
         );
         assert!(
             public.iter().any(|h| h.path == "knowledge/public.md"),
-            "the tracked file must still come back, or the filter is just breakage"
+            "the public file must still come back, or the filter is just breakage"
         );
 
         let all = store.search(&terms, 10, Scope::All).expect("search");
@@ -655,25 +656,35 @@ mod tests {
         );
     }
 
-    /// Unknown is not ignored. A base outside a git repository has no tracked
-    /// information for any file, and the file walk keeps those files, so a public
-    /// search has to keep them too. Folding NULL into "private" would make
-    /// `kb route --hybrid` silently return nothing outside a repository.
+    /// **An index that carries git's answer is emptied, not trusted.** Before ADR-0034
+    /// the files table had a `tracked` column with three states, and none of them means
+    /// what `private` means now. Opening such a file has to report a rebuild and serve
+    /// nothing from the old rows, because a row whose privacy was decided by a rule that
+    /// no longer exists is a row nobody can vouch for.
     #[test]
-    fn unknown_tracking_is_not_treated_as_ignored() {
-        let dir = scratch("unknown-scope");
-        let mut store = Store::open(&dir.join("i.db")).expect("open");
+    fn an_index_from_before_the_declaration_is_emptied_and_says_so() {
+        let dir = scratch("pre-declaration");
+        let path = dir.join("i.db");
+        {
+            let conn = rusqlite::Connection::open(&path).expect("raw open");
+            conn.execute_batch(
+                "CREATE TABLE files (base TEXT NOT NULL, path TEXT NOT NULL, hash TEXT NOT NULL,
+                                     provenance TEXT, stage TEXT, tracked INTEGER,
+                                     PRIMARY KEY (base, path));
+                 CREATE VIRTUAL TABLE chunks USING fts5(base UNINDEXED, path UNINDEXED,
+                                     heading_path, text);
+                 INSERT INTO files VALUES ('zed', 'knowledge/old.md', 'h', NULL, NULL, 1);
+                 INSERT INTO chunks VALUES ('zed', 'knowledge/old.md', 'Old', 'vulkan prefill');",
+            )
+            .expect("an index in the old shape");
+        }
 
-        let base = base_with(
-            &dir,
-            vec![md("knowledge/note.md", "# Note\n\nvulkan prefill was measured\n", None)],
-        );
-        store.sync(&base, "zed").expect("sync");
-
+        let store = Store::open(&path).expect("open");
+        assert!(store.rebuilt, "the caller has to be told, or an empty answer reads as coverage");
         let hits = store
-            .search(&["vulkan".to_string()], 5, Scope::Public)
+            .search(&["vulkan".to_string()], 5, Scope::All)
             .expect("search");
-        assert_eq!(hits.len(), 1, "a file with unknown tracking stays visible");
+        assert!(hits.is_empty(), "nothing decided under the old rule is served");
     }
 
     /// `provenance` and `stage` were written into `files` from the first version and
@@ -689,7 +700,7 @@ mod tests {
             vec![md(
                 "knowledge/sourced.md",
                 "---\nprovenance: external\nstage: raw\n---\n\n# Sourced\n\nvulkan prefill measured\n",
-                Some(true),
+                false,
             )],
         );
         store.sync(&base, "zed").expect("sync");

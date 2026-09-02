@@ -316,10 +316,52 @@ pub fn run(base: &Base) -> Vec<Finding> {
         }
     }
 
+    check_ignores(base, &mut findings);
+
     findings.sort_by(|a, b| {
         (a.file.clone(), a.line, a.code).cmp(&(b.file.clone(), b.line, b.code))
     });
     findings
+}
+
+/// W08: a `.gitignore` is here and does not cover a folder the base declares private.
+///
+/// `kb` publishes nothing and asks git nothing (ADR-0034), so on its own this cannot
+/// leak a file. What it can do is let two declarations drift: the manifest says a
+/// folder is private, the ignore file a person may later push with says nothing about
+/// it, and the day they run `git add -A` the folder is in the history. A warning and
+/// never a refusal, because git is optional here and a base with no ignore file at all
+/// is a base that has made no promise to git.
+///
+/// A base that is private as a whole is skipped: there is no folder list to compare,
+/// and whether such a base is versioned at all is the person's call.
+fn check_ignores(base: &Base, findings: &mut Vec<Finding>) {
+    let Ok(ignores) = std::fs::read_to_string(base.root.join(".gitignore")) else { return };
+    let folders = match crate::base::private_layer(&base.root) {
+        crate::base::PrivateLayer::Whole => return,
+        crate::base::PrivateLayer::Folders(f) => f,
+    };
+    let covered: Vec<String> = ignores
+        .lines()
+        .map(|l| l.split('#').next().unwrap_or("").trim())
+        .map(|l| l.trim_start_matches('/').trim_end_matches('/').to_string())
+        .filter(|l| !l.is_empty())
+        .collect();
+    for folder in folders {
+        if !covered.iter().any(|c| c == &folder) {
+            findings.push(Finding {
+                level: Level::Warning,
+                code: "W08",
+                file: ".gitignore".into(),
+                line: 0,
+                message: format!(
+                    "`{folder}/` is declared private and this .gitignore does not cover it. \
+                     kb serves nothing from it without --all and publishes nothing ever, \
+                     so this is a warning; a repository pushed from here would publish it"
+                ),
+            });
+        }
+    }
 }
 
 /// Checks that only apply to a distilled note inside the knowledge folder.
@@ -375,7 +417,7 @@ fn check_reachable(file: &MdFile, findings: &mut Vec<Finding>) {
                 file: file.rel.clone(),
                 line: 0,
                 message: format!(
-                    "thin keyword line: {} terms. A question uses words the writer did not                      think of, so a short list is a file only reachable by luck. Aim for                      thirty, in both languages, including the words somebody types from                      inside the problem",
+                    "thin keyword line: {} terms. A question uses words the writer did not think of, so a short list is a file only reachable by luck. Aim for thirty, in both languages, including the words somebody types from inside the problem",
                     keywords.len()
                 ),
             });
@@ -508,6 +550,48 @@ fn check_note(_base: &Base, file: &MdFile, findings: &mut Vec<Finding>) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn scratch(name: &str) -> std::path::PathBuf {
+        let dir = std::env::temp_dir()
+            .join("kb-checks-tests")
+            .join(format!("{}-{name}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).expect("scratch");
+        dir
+    }
+
+    /// The one place the declaration and git can still disagree, since git stopped
+    /// being asked: an ignore file somebody wrote by hand that forgets a private
+    /// folder. A warning, because git is optional and nothing here publishes.
+    #[test]
+    fn a_gitignore_that_misses_a_declared_private_folder_is_warned_about() {
+        let dir = scratch("w08");
+        std::fs::write(dir.join("agent.txt"), "name = Probe\nprivate = drafts/, profile\n")
+            .expect("manifest");
+        std::fs::write(dir.join(".gitignore"), "# mine\n.kb/\n/profile/\n").expect("ignores");
+        std::fs::create_dir_all(dir.join("knowledge")).expect("mkdir");
+
+        let base = Base::discover(&dir, true).expect("discover");
+        let mut findings = Vec::new();
+        check_ignores(&base, &mut findings);
+
+        assert_eq!(findings.len(), 1, "{:?}", findings.iter().map(|f| &f.message).collect::<Vec<_>>());
+        assert_eq!(findings[0].code, "W08");
+        assert!(findings[0].message.contains("`drafts/`"), "{}", findings[0].message);
+        assert!(matches!(findings[0].level, Level::Warning), "git is optional, so never an error");
+    }
+
+    #[test]
+    fn no_gitignore_is_no_promise_and_no_warning() {
+        let dir = scratch("w08-none");
+        std::fs::write(dir.join("agent.txt"), "name = Probe\n").expect("manifest");
+        std::fs::create_dir_all(dir.join("knowledge")).expect("mkdir");
+
+        let base = Base::discover(&dir, true).expect("discover");
+        let mut findings = Vec::new();
+        check_ignores(&base, &mut findings);
+        assert!(findings.is_empty(), "a base that never mentioned git owes git nothing");
+    }
 
     #[test]
     fn finds_a_plain_link() {

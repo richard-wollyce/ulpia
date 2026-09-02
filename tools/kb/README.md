@@ -7,9 +7,9 @@ of truth and that any index is **derived** from them. This is the first derived 
 store anything, it reads the files and reports what the conventions promise while nothing was
 checking.
 
-It knows agents by shape, not by configuration: any base under `fleet/` with tracked
-markdown is served, `kb init` generates one, and every file declares its own
-`Search for:` keyword line. The examples below use a three-agent fleet named
+It knows agents by shape, not by configuration: any directory with markdown in it is a
+base and is served, `kb init` generates one in the full shape, and every file declares
+its own `Search for:` keyword line. No repository is needed and none is consulted. The examples below use a three-agent fleet named
 `zed`, `steve` and `yaron`, which is also the worked example the rest of this
 repository uses.
 
@@ -33,6 +33,51 @@ involved**: instant, free, explainable, and incapable of inventing a file that d
 prints which words matched, so a bad ranking can be diagnosed instead of guessed at, and it says
 plainly when nothing matched rather than returning a confident guess.
 
+## What is in the box, and the pain each piece answers
+
+Fifteen verbs. Each exists because something went wrong without it, and the table says what.
+A verb whose pain you do not have is a verb you do not need to learn.
+
+| Verb | The pain | What it does | What it never does |
+|---|---|---|---|
+| `route` | "Which of my notes answers this?" is a question people answer by grepping and models answer by guessing | Scores the question against every note's `Search for:` line and its text, names the owner agent, returns the passages and a verdict: `hit`, `guess` or `nothing` | Calls a model. Invents a file. Returns a rank one for a question the base does not cover |
+| `answer` | Retrieval hands you passages; you still have to read them | Runs `route`, then hands only what was served to the model named in `fleet.txt`, which must cite it or say the passages do not hold the answer | Reaches the model on a `nothing` verdict. Lets the model see anything retrieval did not serve |
+| `remember` | "Is this worth writing down, or do I already have it?" | Measures a claim against the base and proposes ADD, UPDATE or NOOP, with the overlapping passage as evidence | Writes. Decides. Proposes DELETE, because absence and falsehood look the same to a word count |
+| `write` | A note without its keyword line is a note nothing can find, and people forget the line | Writes the note with its `Search for:` header and its map entry in one step, and refuses without keys | Writes half: a failed map entry deletes the note again |
+| `promote` | Raw material piles up in an inbox and nobody distils it | Two promoters, three questions, unanimity: the first proposes notes without seeing the base, the second decides without seeing the first's reasoning. Writes at stage `captured` | Writes on a split decision. Starts over another run's lock when `--lock` is given |
+| `check` | A broken link, a missing keyword line, an em dash: each one is invisible until it costs an hour | Lints every base: E01 broken link, E02 not indexed, W06 thin keywords, and the house rules | Fixes anything. Touches a file |
+| `index` | Full text search needs an index, and an index that drifts from the files lies | Builds one SQLite file per base from the markdown, content hashed so unchanged files cost nothing | Holds anything that cannot be rebuilt from the files. Runs in the background |
+| `eval` | "Does retrieval work?" answered by feel | Grades the router against a gold file of questions and expected answers, including questions it is supposed to refuse, and prints hit, guess and refusal rates | Grades a gold file that names files the fleet does not have |
+| `boot` | Every session starts as nobody, and picking an agent by reading a conditional woke the wrong one | On a hook, routes the incoming message across the fleet, picks the owner, and injects that agent's constitution before the model reads anything | Picks an agent when no base covers the message. It says so instead |
+| `blocks` | A constitution is several files, and assembling them by hand drifts | Assembles the resident blocks in order and reports what is missing | Invents a block that is not on disk |
+| `fleet` | "Who is in this fleet and what does each one do?" | Reads `fleet.txt` and every `agent.txt`, and prints the roster | Reads the index. Identity is never derived from retrieval |
+| `init` | An agent created by hand is missing the one file that makes it findable | Generates a base with the shape the router needs, or a person base with the questions a fleet must answer about its human | Writes a word about the person. The skeleton is empty on purpose |
+| `commit` | Two sessions writing one repository, and `git add -A` sweeping a stranger's work into your message | Commits exactly the paths named, then reads the commit back and prints what it left dirty | Offers a flag meaning everything |
+| `serve` | Other people's runtimes need the same answers, not a port of the pipeline | Speaks MCP over stdio: `kb_route`, `kb_retrieve`, `kb_remember`, `kb_fleet`, all through the same `Memory` the CLI uses | Writes to stdout anything that is not protocol. Serves a base the caller did not name |
+| `ui` | Reading a base through a terminal is reading a library through a keyhole | A local reading room over the same contract: shelves, books, broken citations shown rather than hidden | Serves a file discovery did not produce, however the path is spelled |
+
+### How the pieces make two memories
+
+The verbs above are one system, and the shape of it is two memories with a filter between.
+
+| | Where it lives | What feeds it | What reads it |
+|---|---|---|---|
+| **Short memory**, fresh and unjudged | `inbox/` in each agent, plus `kb-misses.txt`, the questions the base could not answer | Files a person drops, and, once session capture is built, what a session produced | `promote` |
+| **The filter** | `promote`, with `remember` as its measure | The short memory | Nobody. It writes or it refuses |
+| **Long memory**, the library | `knowledge/` in each agent, with a `Search for:` line on every note | `write`, `promote`, and a person editing markdown | `route`, `answer`, `boot`, `serve`, `ui`, every question anybody asks |
+
+Both memories are searched, and that is the decision rather than a gap. The router routes to the
+library: a note without a `Search for:` line has no index entry, and the short memory has none by
+design. The text scorer reaches both, so a raw drop in `inbox/` can surface as a passage, and when it
+does it arrives **labelled**: `memory: "short"` in the JSON, `[SHORT MEMORY: recent, not distilled]`
+on the passage header the model reads, `[short memory]` on the terminal line. The rule travels with
+the label: a model may use it, and if it does it says the claim comes from short memory. Hiding the
+deposit would lose real facts; serving it unmarked would let a raw drop read as settled knowledge;
+serving it marked leaves the decision where it belongs, with whoever is reading, made consciously.
+[ADR-0034](../../decisions/0034-git-leaves-the-runtime.md). A fact enters the library by one of three
+doors, a person writing it, `write` writing it on their behalf, or `promote` admitting it unanimously,
+and each door leaves provenance on the note saying which.
+
 ### `kb route --json`: the same answer, for a program
 
 ```
@@ -49,6 +94,7 @@ always fuses and `--hybrid` adds nothing on top of it.
 {
   "question": "how do I roll back",
   "verdict": "hit",
+  "gate": { "served": true, "ranked_by_text_only": false, "floor": 17.5 },
   "confidence": { "agreement": 2, "keyword_score": 24.7, "margin": 2.13 },
   "agent": { "name": "zed", "score": 0.0328, "files": 1, "margin": null,
              "contenders": 1, "totals": [{ "agent": "zed", "score": 0.0328 }] },
@@ -57,6 +103,7 @@ always fuses and `--hybrid` adds nothing on top of it.
   "skipped": [],
   "index_was_rebuilt": false,
   "suggestions": [],
+  "miss": null,
   "results": [{ "base": "zed", "path": "knowledge/deploy-checklist.md",
                 "title": "...", "purpose": "...", "score": 0.032787,
                 "keyword_score": 24.7, "why": ["keywords #1", "text #1"],
@@ -66,16 +113,36 @@ always fuses and `--hybrid` adds nothing on top of it.
 }
 ```
 
-Four things in there will bite a caller that assumes otherwise, so they are stated rather than
+Five things in there will bite a caller that assumes otherwise, so they are stated rather than
 discovered:
 
 - **`verdict` is `hit`, `guess` or `nothing`**, measured against a keyword floor of 17.5 that is
   calibrated in the open (see `SCORE_FLOOR` in `memory.rs`). A small base produces `guess` often, and
   `guess` means show it and say it is weak, not hide it.
-- **`skipped` names bases that were left out** because git could not be consulted there. A caller
-  reading stdout alone would otherwise see an empty `results` and conclude the base does not cover the
-  question, when in fact nothing was searched. See the deployment section below, where this is the
-  default outcome rather than an edge case.
+- **Branch on `gate.served`, never on `results.length`.** A refused answer still carries its
+  candidates, because the verdict comes from the keyword scorer and the results come from both, so
+  `verdict: "nothing"` with a full array is an ordinary outcome rather than a contradiction.
+  `gate.ranked_by_text_only` separates the two refusals a caller has to handle differently: `true`
+  means the text scorer ranked files the keyword lines missed, which is a base whose `Search for:`
+  terms need a word, and `false` with an empty `results` means nothing ranked anywhere. `gate.floor`
+  is what `confidence.keyword_score` was measured against, so the gate can be argued with rather than
+  guessed at. This field exists because the first integrator to parse this output had to reconstruct
+  the rule from a paragraph of `--help`, and either reading of it loses answers.
+- **`skipped` names bases that were left out.** Empty since ADR-0034: the one reason a base used to
+  be left out, git not answering for its privacy, no longer exists. The field stays because callers
+  read it, and it is where a future reason to leave a base out will be named. A caller reading stdout
+  alone should still check it rather than conclude from an empty `results` that nothing covers the
+  question.
+- **`results[].memory` is `short` or `long`.** `short` is the deposit, `inbox/`: recent, unjudged,
+  not yet in the library, served on purpose and labelled on purpose so a model leaning on it does so
+  knowing what it holds. A caller that wants only settled knowledge filters on `long`.
+- **`miss` is the recall loss, handed back rather than only logged.** `null` when the answer was
+  served. On a refusal it carries the question, the words the base does know, the date, the path the
+  log was written to, and `recorded`, which is `false` when the write failed and `error` says why.
+  The log lives beside the fleet by design, so a deployment with a read only filesystem cannot keep
+  one: persist this object where your own stack already writes, or set `KB_MISSES_PATH` to a file in
+  the one writable directory a function runtime gives you. Without it, the recall loss log on the
+  surface with the most real questions in it stays empty, which is what the first deployment measured.
 - **`agent.margin` is `null` when only one agent scored.** That is JSON's encoding of infinity, and it
   means maximum confidence, not a missing field.
 - **Scores are rounded to six decimals.** The keyword score is an `f32`, so widening it to `f64` would
@@ -207,6 +274,45 @@ delete on its own; the constraint is that the reason goes in the commit message.
 A useful side effect, found on the first real run: asking about the calorie floor returned containment
 1.00 from **two** files, which is the base telling you a fact is written down twice.
 
+#### `--json`: the proposal, for an agent that cannot write
+
+```
+kb remember "the rollback path is written down before the deploy" fleet/zed --json
+```
+
+```json
+{
+  "claim": "the rollback path is written down before the deploy",
+  "proposal": "NOOP",
+  "reason": "5 of 5 words are already present in one chunk. ...",
+  "evidence": [{ "base": "zed", "path": "knowledge/deploy-checklist.md",
+                 "heading_path": "...", "excerpt": "...", "containment": 1.0,
+                 "shared": ["rollback", "..."], "missing": [] }],
+  "notice": "kb measured overlap. Whether the older text is now wrong is judgement ..."
+}
+```
+
+**This is the write side's one reachable half, and reaching it is the point.** `write`, `promote` and
+the inbox all assume a repository on disk with permission to write, which a hosted agent never has:
+its filesystem is read only and its instance is gone a second later. `remember` assumes none of that.
+It is deterministic, needs no model, and writes nothing, so it can run at the moment the fact appears,
+in the conversation, on the machine that has none of the repository.
+
+So the pattern for a hosted consumer is: **ask at the moment, queue the proposal, apply it later.**
+
+1. Call `kb remember <claim> --json` when something in the conversation looks like it should be kept.
+2. Store the object. It is self contained and stable, so it can be queued, versioned and reviewed.
+3. On a machine that has the repository, act on it. `ADD` means `kb write <agent> <slug> --keys ...`
+   with the claim as the body. `UPDATE` means edit `evidence[0].base/evidence[0].path`, which is the
+   passage the overlap was measured against. `NOOP` means drop it: the base already says this.
+
+`notice` carries the same caveat the terminal prints, so a model reading this through another surface
+is told what a person is told: overlap is measured, judgement is not, and DELETE is never proposed.
+
+Errors take the same shape `route` uses, `{"claim": ..., "error": ...}` on stdout with exit 1, because
+a program calling one command and a program calling the other should not have to learn two ways to
+fail.
+
 ### `kb::memory::Memory`: the contract
 
 `kb` is a library as well as a binary. **Start at `Memory`**: three verbs over a set of bases, and the
@@ -229,8 +335,10 @@ listed at the bottom of this file happened: alias expansion reaching one scorer 
 the two oversampling factors drifting apart. `mcp.rs` did assemble it by hand for one commit, and that
 is exactly why it does not any more.
 
-`Memory::open` refuses a base whose privacy is unknowable, meaning git could not be consulted, unless
-the caller explicitly asked for the private layer. Unknown is not public.
+`Memory::open` reads each base's private layer off the base itself: a `private =` line in
+`agent.txt`, or `profile/`, `projects/` and `records/` when there is none. Those folders are served
+only with `--all`. Nothing outside the directory is consulted, so there is no such thing as a base
+whose privacy is unknown, and a folder with a note in it is served the moment it exists. ADR-0034.
 
 #### A fleet root, accepted and never required
 
@@ -272,13 +380,12 @@ Three tools, all read only:
 There is no write tool yet, deliberately. A write reached by a model is a different security surface
 and gets built on purpose rather than while the retrieval side is still warm.
 
-**The private layer stays out unless asked.** `profile/`, `projects/` and `records/` are gitignored
-because they are private, and what a tool returns travels to whatever model is reasoning, so the
-default is what git tracks. `--all` includes them and is a deliberate act visible in the client's
-config file.
-
-**It refuses to start when git cannot be consulted.** Then every file's privacy is unknown, and
-unknown is not public. Either the base is a git repository or `--all` says you meant it.
+**The private layer stays out unless asked.** `profile/`, `projects/` and `records/` are the
+declared private layer of every base that declares nothing else, and what a tool returns travels to
+whatever model is reasoning, so the default leaves them out. `--all` includes them and is a
+deliberate act visible in the client's config file. Nothing is asked of git, and a folder with notes
+in it is served as it stands (ADR-0034). The deposit, `inbox/`, is served in both scopes and every
+passage from it says `[short memory: ...]` in the tool's text.
 
 Registering it with Claude Code, project scope, from `.mcp.json` at the repository root:
 
@@ -344,36 +451,54 @@ That works on a server as well as on a laptop, and four things about it will sur
 deploys it without reading this. Each one says what it stands on, because three of the four are cheap
 to assume and expensive to be wrong about.
 
-**1. Git decides what is public, so a deployment without git serves nothing.** *Run.*
+**1. A bundle needs no `.git`, and `--all` means what it says.** *Run, on 2026-09-01: `examples/demo`
+copied outside any repository, indexed and routed without `--all`, three agents served.*
 
-The privacy filter asks `git ls-files` from inside each base. No `.git` in the bundle, or no `git` on
-the host, and the answer is "unknown", which is not "public": every base is left out with a notice on
-stderr, and the reply is an empty result set. Reproduced by copying `examples/demo` outside any
-repository and routing against it. Two ways through, and they are not equal:
+This used to be the first thing a deployment hit: `kb` asked `git ls-files` what it may serve, a
+bundle has no `.git`, and every base was left out with an empty result set. The first integration
+passed `--all` to get past it, which is the wrong reason to pass it. ADR-0034 removed the question.
+The private layer is a declaration in each base, `profile/`, `projects/` and `records/` unless
+`agent.txt` says otherwise, and it is read off the files you shipped. So: ship the base, ship the
+`.kb/` index you built, and pass `--all` only if the consumer is meant to see the private layer. A
+hosted agent for other people almost never is.
 
-- **Deploy a base that is entirely publishable and pass `--all`.** The privacy boundary moves from
-  "git says tracked" to "this bundle contains nothing private", which is a real guarantee only if you
-  built the bundle that way. Recommended, because it is checkable at build time.
-- **Ship `.git` and the git binary.** Keeps the original guarantee and pays for it in bundle size and
-  in a runtime dependency most serverless images do not have. Unverified here.
-
-Either way, read `skipped` in `kb route --json`. It is the field that separates "the base does not
-cover this" from "no base was searched".
-
-**2. The filesystem is usually read only, and that is survivable.** *Read the source. Not run against a
-read-only filesystem.*
+**2. The filesystem is usually read only, and that is survivable, but the recall loss log is not
+free.** *Run, on 2026-08-30, against a log path that could not be written. Not run against a read-only
+mount.*
 
 The index is built before the deploy, by `kb index`, and only read at runtime. The one file written on
-a query is `kb-misses.txt`, the recall loss log, and a failed write there prints on stderr and does
-not fail the query. So a read-only deployment answers correctly and loses the miss log. Writes to the
-base itself, `kb write` and `kb promote`, do not belong on that machine at all.
+a query is `kb-misses.txt`, the recall loss log, and a failed write there prints on stderr, returns
+the reason in `miss.error`, and does not fail the query. Writes to the base itself, `kb write` and
+`kb promote`, do not belong on that machine at all.
 
-**3. Every process start pays the cold open.** *Measured on a laptop, not on a deployment.*
+**Losing that log is worse than it sounds, so do one of these two things.** It is the only record of
+what the base failed to answer, and the first deployment of this ran for a window with six real
+questions and kept none of them, while the log in the repository held two lines written earlier on a
+laptop. Either read `miss` out of `kb route --json` and store it where your stack already writes, or
+export `KB_MISSES_PATH=/tmp/kb-misses.txt` and accept that it lives as long as the instance does. The
+first survives the instance; the second costs one line of configuration.
 
-From `benchmarks/latency`: 136.4 ms to open the fleet and answer the first question, then p50 0.68 ms
-warm over 1000 samples. Spawning `kb route --json` per request pays the 136 ms every time. Keeping one
-`kb serve` process alive and speaking MCP to it pays it once per process. Start with the spawn,
-because it is four lines of code, and move to the long-lived process when the number starts mattering.
+**3. Every process start pays the cold open, and what that costs depends on the operating system far
+more than on the base.** *Two of the three numbers below were run here. The one that matters most for
+a deployment was not, and is marked.*
+
+| what | where | number |
+|---|---|---|
+| open the fleet and answer the first question, in process | Windows laptop, `examples/demo`, 2026-08-23 | 136.4 ms, then warm p50 0.68 ms over 1000 samples |
+| spawn `kb route --json`, open, answer | the same laptop, release build, 40 samples after 3 warm-ups, 2026-08-30 | p50 **184.8 ms**, min 145.8, p90 252.2 |
+| the same spawn and answer | Linux, WSL2 on x86-64, a 9 entry base, 40 executions, 2026-08-29 | p50 **9.6 ms**, of which about 6 ms is process creation |
+
+**The last row is somebody else's measurement and we have not reproduced it.** It comes from the first
+integration of this into a serverless function, and it is in the table because it is the only figure
+here taken on the operating system a deployment actually runs.
+
+The gap between the second row and the third is about twentyfold, and it is the reason this section
+used to give bad advice: it quoted the 136 ms as what "spawning per request pays every time", which is
+a Windows number generalised to Linux, where the whole spawn and answer costs less than the rounding.
+**So: on Linux, do not engineer around the spawn.** Four lines of `execFile` per request, and the
+process costs less than one round trip to anything. On Windows, and in a loop on any platform, measure
+before you decide: `kb serve` speaks MCP over stdio and pays the open once per process, which does not
+fit a stateless HTTP handler and does fit a long-lived worker.
 
 **4. Match the libc, or link none.** *Run, in CI, on 2026-08-28.*
 
@@ -443,6 +568,18 @@ cargo build --release
 ```
 
 The binary lands in `target/release/kb.exe`.
+
+**There are prebuilt binaries, and this file used not to say so.** Tagged releases carry
+`kb-linux-x64`, statically linked against musl so it depends on nothing outside the file, and
+`kb-windows-x64.exe`, each with a `.sha256` beside it. Both are built and checked by
+`.github/workflows/release.yml`. The first integrator to deploy this developed on Windows, wrapped the
+build gate in a script that skips silently off Linux, and did their measuring inside WSL, because
+nothing they read told them a Windows binary was published. A binary nobody can find is a binary
+nobody has.
+
+**There is no macOS build.** Not an oversight being hidden: nobody here runs macOS, so a published
+artifact would be one nothing has ever executed, which is worth less than its absence. Build from
+source there, or open an issue and it gets added to the matrix.
 
 Historical note, because it cost an hour and the mechanism generalises: this used to require calling
 the rustup toolchain by absolute path. A Chocolatey Rust package with an incomplete MinGW environment

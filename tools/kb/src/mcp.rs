@@ -25,11 +25,13 @@
 //! different security surface and gets built deliberately, not as an afterthought
 //! while the retrieval side is still warm.
 //!
-//! One file is written, and saying "nothing is written" hid it: a miss in `kb_route`
-//! or `kb_retrieve` calls `Memory::record_miss`, which appends the question and the
-//! terms offered back to `kb-misses.txt` beside the fleet manifest. That is a log of
-//! what could not be answered, not knowledge, and it is the record ADR-0016's
-//! successor reads to find out which gaps are real.
+//! One file is written, and saying "nothing is written" hid it: a refusal in
+//! `kb_route` or `kb_retrieve` calls `Memory::recall_loss`, which appends the question
+//! and the terms offered back to `kb-misses.txt` beside the fleet manifest. That is a
+//! log of what could not be answered, not knowledge, and it is the record ADR-0016's
+//! successor reads to find out which gaps are real. **Which questions count is decided
+//! on the contract and not here**: these two tools used to decide it themselves, from
+//! the length of two different lists, so one base had two definitions of one number.
 
 use std::io::{BufRead, Write};
 use std::path::{Path, PathBuf};
@@ -62,11 +64,11 @@ pub fn serve(paths: &[&str], all: bool, top: usize) -> ExitCode {
     let owned: Vec<PathBuf> = paths.iter().map(PathBuf::from).collect();
     let refs: Vec<&Path> = owned.iter().map(|p| p.as_path()).collect();
 
-    // Everything the server knows about the base comes through Memory, including what
-    // happens when git could not be consulted: `Memory::open` leaves that base out and
-    // says so on stderr, and the open succeeds with the rest. Rebuilding the pipeline
-    // here is how a second caller ends up expanding aliases for one scorer and not the
-    // other, which has already happened once in this codebase.
+    // Everything the server knows about the base comes through Memory, including which
+    // files are private: the declaration is read off each base by `Memory::open`, and
+    // nothing here is consulted about it. Rebuilding the pipeline here is how a second
+    // caller ends up expanding aliases for one scorer and not the other, which has
+    // already happened once in this codebase.
     let memory = match Memory::open(&refs, all) {
         Ok(m) => m,
         Err(e) => {
@@ -76,7 +78,7 @@ pub fn serve(paths: &[&str], all: bool, top: usize) -> ExitCode {
     };
 
     if memory.index_was_rebuilt {
-        eprintln!("kb serve: an index predated the tracked column and was emptied.");
+        eprintln!("kb serve: an index predated the private column (ADR-0034) and was emptied.");
         eprintln!("    Run `kb index` before relying on retrieval.");
     }
 
@@ -305,13 +307,18 @@ impl Server {
         // a person or a model, never in a loop, and a ranked list with no evidence
         // beside it is the whole defect being fixed here.
         let confidence = self.memory.ask(question, top).confidence;
+
+        // The recall loss is decided on the contract, from the verdict, and asked
+        // unconditionally: this surface used to decide it here, from the length of the
+        // keyword list, while `retrieve` below decided it from the fused one. Two tools
+        // over one base, counting different populations into one file.
+        let loss = self.memory.recall_loss(question, &confidence);
+        let looked_like: &[String] = loss.as_ref().map_or(&[], |m| &m.looked_like);
         if hits.is_empty() {
             if self.memory.is_empty() {
                 return nothing_to_search();
             }
-            let looked_like = self.memory.suggest(question, SUGGEST_LIMIT);
-            self.memory.record_miss(question, &looked_like);
-            return no_match(question, &looked_like);
+            return no_match(question, looked_like);
         }
 
         let mut out = format!("Files to open for: {question}\n\n");
@@ -336,13 +343,18 @@ impl Server {
         // is the same work and carries the evidence back.
         let answer = self.memory.ask(question, top);
         let found = answer.found;
+
+        // Same call, same decision, and this is the surface where the old one had the
+        // hole: a question the text scorer answered and the gate refused arrived here
+        // with a full `found`, was served to the model as passages, and was recorded
+        // nowhere.
+        let loss = self.memory.recall_loss(question, &answer.confidence);
+        let looked_like: &[String] = loss.as_ref().map_or(&[], |m| &m.looked_like);
         if found.is_empty() {
             if self.memory.is_empty() {
                 return nothing_to_search();
             }
-            let looked_like = self.memory.suggest(question, SUGGEST_LIMIT);
-            self.memory.record_miss(question, &looked_like);
-            return no_match(question, &looked_like);
+            return no_match(question, looked_like);
         }
 
         let mut out = format!("Passages for: {question}\n\n");
@@ -386,6 +398,9 @@ impl Server {
             out.push_str(&format!("## {}/{}", f.base, f.path));
             if !f.title.is_empty() {
                 out.push_str(&format!("  ({})", f.title));
+            }
+            if f.layer == crate::retrieve::Layer::Short {
+                out.push_str("  [short memory: recent, not distilled, not yet in the library]");
             }
             out.push_str(&format!("\n   ranked by: {}\n", f.why.join(" + ")));
 
@@ -441,14 +456,6 @@ impl Server {
 // ---------------------------------------------------------------------------
 // Wire helpers
 // ---------------------------------------------------------------------------
-
-/// How many candidate terms a miss offers back.
-///
-/// Small on purpose. The whole keyword space is 849 terms and about 12 KB on this
-/// fleet, and handing all of it over on every miss would make the failure path the
-/// most expensive reply the server produces. A shortlist is what a caller can act
-/// on; a dump is something it has to route through a second time.
-const SUGGEST_LIMIT: usize = 8;
 
 /// The answer when there is nothing to search, which is not the answer when
 /// something was searched and missed.
@@ -642,6 +649,111 @@ mod tests {
         assert_eq!(
             string_arg(&args, "question").unwrap(),
             "por que o poke é caro em proteína?"
+        );
+    }
+
+    /// A base with one note the text scorer can reach and the keyword scorer cannot:
+    /// its keys, its title and its purpose are about an animal, its body is about
+    /// deploys. Indexed, because `retrieve` reads chunks and `Memory::open` builds no
+    /// index of its own.
+    ///
+    /// Written out again here rather than shared with `main.rs`, which has the same
+    /// fixture: the binary and the library are two crates, and a `#[cfg(test)]` helper
+    /// in one is not compiled into the other. Duplicating fifteen lines of fixture is
+    /// the cheaper of the two honest options.
+    fn served_fleet(name: &str) -> (std::path::PathBuf, Server) {
+        let root = std::env::temp_dir()
+            .join("kb-mcp-miss-tests")
+            .join(format!("{}-{name}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&root);
+        let agent = root.join("probe");
+        std::fs::create_dir_all(agent.join("knowledge")).expect("mkdir");
+        std::fs::write(agent.join("MAP.md"), "# MAP\n").expect("map");
+        std::fs::write(
+            agent.join("knowledge").join("striped.md"),
+            "# Zebra\n\n**Search for:** `zebra`, `quagga`\n\n\
+             **Exists to:** hold one striped animal\n\n\
+             ## Body\n\nA rollback without downtime keeps the previous release serving.\n",
+        )
+        .expect("note");
+
+        let base = crate::base::Base::discover(&agent, true).expect("discover");
+        let mut db = crate::store::Store::open(&crate::memory::index_path(&agent)).expect("index");
+        db.sync(&base, "probe").expect("sync");
+        drop(db);
+
+        let memory = Memory::open(&[agent.as_path()], true).expect("opens");
+        (agent, Server { memory, top: 4 })
+    }
+
+    /// F-02, on the surface where it actually bit. `retrieve` decided what to record
+    /// by asking whether the fused list was empty, so a question the text scorer
+    /// answered and the gate refused was served to the model as passages and recorded
+    /// as nothing at all. That is the loss the log most needs, because the base holds
+    /// the answer and only its keys are wrong, which is the cheapest fix there is.
+    #[test]
+    fn a_refusal_over_a_full_result_set_is_recorded_by_this_surface_too() {
+        let (root, server) = served_fleet("retrieve");
+        let log = crate::misses::path_in(&root);
+
+        let out = server.retrieve("rollback sem downtime", 4);
+        assert!(out.contains("Passages for"), "the text scorer found it: {out}");
+
+        let written = std::fs::read_to_string(&log).expect("the refusal was recorded");
+        assert!(written.contains("rollback sem downtime"), "{written}");
+    }
+
+    /// And the same question through the other tool records the same thing. The two
+    /// used to test different lists, so which door a question came through decided
+    /// whether it counted.
+    #[test]
+    fn both_tools_agree_about_what_a_recall_loss_is() {
+        let (root, server) = served_fleet("both");
+        let log = crate::misses::path_in(&root);
+
+        server.route("rollback sem downtime", 4);
+        let after_route = std::fs::read_to_string(&log).expect("route recorded it");
+        assert!(after_route.contains("rollback sem downtime"), "{after_route}");
+
+        server.retrieve("rollback sem downtime", 4);
+        let after_both = std::fs::read_to_string(&log).expect("retrieve recorded it too");
+        assert!(
+            after_both.contains("2    "),
+            "one question, counted twice, not two lines: {after_both}"
+        );
+    }
+
+    /// The label reaches the one surface a model actually queries. A raw drop in the
+    /// deposit is served, and the model is told what it is holding.
+    #[test]
+    fn a_passage_from_the_deposit_is_served_with_its_label_on() {
+        let (root, server) = served_fleet("short-memory");
+        std::fs::create_dir_all(root.join("inbox")).expect("mkdir");
+        std::fs::write(
+            root.join("inbox").join("dropped.md"),
+            "# Dropped\n\nthe quagga population doubled last spring\n",
+        )
+        .expect("drop");
+        // The fixture indexed before the drop existed; index it the way `kb index` would.
+        let base = crate::base::Base::discover(&root, true).expect("discover");
+        let mut db = crate::store::Store::open(&crate::memory::index_path(&root)).expect("index");
+        db.sync(&base, "probe").expect("sync");
+        drop(db);
+        let server = Server { memory: Memory::open(&[root.as_path()], true).expect("opens"), top: server.top };
+
+        let out = server.retrieve("quagga population", 4);
+        assert!(out.contains("inbox/dropped.md"), "the deposit is served: {out}");
+        assert!(out.contains("[short memory: recent, not distilled"), "and labelled: {out}");
+    }
+
+    /// A served answer is not a loss, on this surface as on every other.
+    #[test]
+    fn a_question_the_base_answers_is_not_recorded() {
+        let (root, server) = served_fleet("answered");
+        server.retrieve("zebra", 4);
+        assert!(
+            !crate::misses::path_in(&root).exists(),
+            "the keyword scorer ranked it, so nothing was lost"
         );
     }
 }

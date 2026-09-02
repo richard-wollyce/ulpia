@@ -843,7 +843,7 @@ fn api_check(state: &State) -> Value {
 ///
 /// This is an allowlist, not a sanitiser. There is no path arithmetic to get wrong:
 /// the rel string either equals one that `Base::discover` returned, respecting the
-/// tracked-only rule, or nothing is served. Traversal is unrepresentable rather
+/// declared private layer, or nothing is served. Traversal is unrepresentable rather
 /// than rejected.
 fn file_text(state: &State, base: &str, rel: &str) -> Option<String> {
     let (_, b) = state.bases.iter().find(|(n, _)| n.eq_ignore_ascii_case(base))?;

@@ -39,11 +39,57 @@ pub struct Passage {
     pub stage: Option<String>,
 }
 
+/// Which memory a file belongs to, which decides how much a reader should lean on it.
+///
+/// **The short memory is served, and that is a decision, not an oversight.** The
+/// deposit, `inbox/`, holds what nobody has judged yet: files a person dropped, and
+/// later what a session captured. It used to be described as not indexed, and it never
+/// was excluded; it simply carried no `Search for:` line, so the router never named it
+/// while the text scorer could still surface it. Hiding it would lose real facts, and
+/// serving it unmarked would let a raw drop read as settled knowledge. So it is served
+/// with the label on, at every surface, and the model makes the call knowing what it
+/// holds. ADR-0034.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Layer {
+    /// The deposit: recent, unjudged, not distilled, and not yet in the library.
+    Short,
+    /// The library: a note that carries its own keys, written or promoted on purpose.
+    Long,
+}
+
+impl Layer {
+    /// The wire name. A contract, like `Verdict::label`: a caller branches on it.
+    pub fn label(&self) -> &'static str {
+        match self {
+            Layer::Short => "short",
+            Layer::Long => "long",
+        }
+    }
+}
+
+/// Which memory a base relative path is in. One rule, here, so every surface that
+/// renders a passage agrees about which ones carry the label.
+pub fn layer_of(path: &str) -> Layer {
+    let deposit = crate::promote::DEPOSIT;
+    let normalised = path.replace('\\', "/");
+    if normalised == deposit
+        || normalised.starts_with(&format!("{deposit}/"))
+        || normalised.contains(&format!("/{deposit}/"))
+    {
+        Layer::Short
+    } else {
+        Layer::Long
+    }
+}
+
 /// One file, with the passages that matched inside it.
 #[derive(Debug, Clone)]
 pub struct Retrieved {
     pub base: String,
     pub path: String,
+    /// Short or long memory, from the path. Travels with the file so no surface has
+    /// to work it out again, which is how two of them would come to disagree.
+    pub layer: Layer,
     /// From the map entry, when the keyword scorer ranked this file. Empty when only
     /// the text scorer found it.
     pub title: String,
@@ -158,6 +204,7 @@ fn blank(key: &(String, String)) -> Retrieved {
     Retrieved {
         base: key.0.clone(),
         path: key.1.clone(),
+        layer: layer_of(&key.1),
         title: String::new(),
         purpose: String::new(),
         score: 0.0,
@@ -195,6 +242,36 @@ mod tests {
             provenance: Some("agent".into()),
             stage: Some("distilled".into()),
         }
+    }
+
+    /// The rule that decides the label, pinned at the edges: the deposit itself, a
+    /// file inside it, a nested deposit, and a folder whose name merely contains the
+    /// word. Every surface that renders a passage reads this one function, so the
+    /// edges are tested here and nowhere else.
+    #[test]
+    fn the_deposit_is_the_short_memory_and_nothing_else_is() {
+        assert_eq!(layer_of("inbox/dropped.md"), Layer::Short);
+        assert_eq!(layer_of("inbox/articles/paper.md"), Layer::Short);
+        assert_eq!(layer_of("inbox"), Layer::Short);
+        assert_eq!(layer_of("knowledge/inbox/x.md"), Layer::Short, "a nested deposit");
+        assert_eq!(layer_of("knowledge/note.md"), Layer::Long);
+        assert_eq!(layer_of("inboxes/note.md"), Layer::Long, "a name that merely contains it");
+        assert_eq!(layer_of("records/sessions/today.md"), Layer::Long);
+    }
+
+    /// A fused result carries the layer, so a caller reading passages does not have
+    /// to reconstruct it from the path with a rule of its own.
+    #[test]
+    fn a_result_from_the_deposit_carries_the_short_label() {
+        let text = vec![
+            store_hit("zed", "inbox/fresh.md", "Top", "a claim nobody judged"),
+            store_hit("zed", "knowledge/settled.md", "Top", "a claim somebody did"),
+        ];
+        let out = fuse(&[], &text, 5);
+        let fresh = out.iter().find(|r| r.path == "inbox/fresh.md").expect("present");
+        let settled = out.iter().find(|r| r.path == "knowledge/settled.md").expect("present");
+        assert_eq!(fresh.layer, Layer::Short);
+        assert_eq!(settled.layer, Layer::Long);
     }
 
     /// The regression this whole module was extracted to make testable. A long file

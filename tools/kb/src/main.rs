@@ -21,7 +21,7 @@ usage:
     kb check [path]... [--strict] [--all]
     kb index [path]... [--json] [--all]
     kb route <question> [path]... [--top N] [--hybrid] [--json] [--all]
-    kb remember <claim> [path]... [--all]
+    kb remember <claim> [path]... [--all] [--json]
     kb init <name> [fleet-root]
     kb init --person [fleet-root]
     kb write <agent> <slug> [fleet-root] --keys <a, b> --summary <one line> [--folder F]
@@ -37,7 +37,11 @@ usage:
     path        base to work on, defaults to the current directory
     --emit      blocks: print the assembled resident constitution instead of the report
     --strict    check: count warnings toward the exit code
-    --all       include files git does not track, normally the private layer
+    --all       include the private layer: the folders a base declares with a
+                `private =` line in agent.txt, or profile/, projects/ and records/
+                when it declares nothing. `.` declares the whole base, and the
+                person's base is whole by name. Nothing else is consulted, and no
+                repository is needed (ADR-0034)
     --top N     how many candidates to carry, default 5. route, boot, eval,
                 promote and serve all read it
     --keys      write: the words a real question would use. Required, no way to skip
@@ -96,21 +100,30 @@ half behind.
 Each agent keeps its own index at <agent>/.kb/index.db. There is no shared index
 and no --db flag: which database you get used to depend on where you were standing,
 and that cost three separate incidents.
-    --json      index: print the index entries as JSON instead of building the index.
+    --json      remember: print the proposal, its evidence and its caveat as one line
+                of JSON, which is what lets an agent with no writable filesystem ask
+                whether a fact is worth keeping, queue the answer, and apply it later
+                on a machine that has the repository.
+                index: print the index entries as JSON instead of building the index.
                 route: print the whole answer as one line of JSON on stdout, which is
                 what a program calls instead of parsing prose meant for a terminal. It
                 always fuses both scorers, because the verdict is agreement between
                 them, so --hybrid adds nothing on top of it. Diagnostics stay on
                 stderr, and a base that was left out is named in `skipped` rather than
                 only on stderr, because a caller that reads stdout alone must not read
-                an empty result set as a base that does not cover the question
+                an empty result set as a base that does not cover the question.
+                Branch on `gate.served`, never on the length of `results`: a refused
+                answer still carries its candidates, and `gate.ranked_by_text_only`
+                says whether they came from the text scorer alone, which is a base
+                whose keys missed rather than a base without the subject. A refusal
+                also carries `miss`, the recall loss itself, so a caller on a read only
+                filesystem can keep what it could not write
     --hybrid    route: fuse the keyword scorer with full text search over chunks
 
 serve speaks MCP over stdio, so Claude Code, Claude Desktop or any other MCP client
-can search the base. It never serves what git ignores unless --all says so, and a
-base where git could not be consulted is left out of the open with a notice on
-stderr rather than served, because unknown is not public. The rest of the fleet
-still opens: one husk from a rename in progress used to close every base.
+can search the base. It never serves the private layer unless --all says so. The
+deposit, inbox/, is served and every passage from it is labelled short memory, so
+a model leaning on a fact nobody has judged yet does so knowing that.
 
 checks:
     E01 broken-link     a [[link]] with no file behind it
@@ -118,6 +131,7 @@ checks:
     W01 ambiguous-link  a [[link]] matching more than one file
     W02 no-search-line  a map entry with no Search for line, where a map exists
     W06 thin-keywords   a `Search for:` line too short to be found by a real question
+    W08 unignored       a .gitignore is here and misses a folder declared private
     W07 dead-key        a key that reaches neither the keyword nor the phrase index
     W03 dash            an em dash or en dash, which house style forbids
     W04 front-matter    front matter declaring source or type with no evidence_tier
@@ -277,7 +291,7 @@ fn main() -> ExitCode {
             }
             let claim = positional[0];
             let paths = paths_or_default(&positional[1..]);
-            cmd_remember(claim, &paths, all)
+            cmd_remember(claim, &paths, all, json)
         }
         other => {
             eprintln!("kb: unknown command '{other}'\n");
@@ -385,18 +399,6 @@ fn cmd_write(agent: &str, slug: &str, fleet: &Path, args: &[String]) -> ExitCode
             if made.section_created {
                 println!("  that section did not exist and was created");
             }
-            match made.staged {
-                write::Staged::Yes => println!("  staged, so the router can serve it"),
-                write::Staged::Ignored => println!(
-                    "  a .gitignore rule covers it, so it stays private and the public
-                       scope will not serve it. That is the private layer working."
-                ),
-                write::Staged::NoGit => eprintln!(
-                    "  NOT staged: no git here, so nothing can tell which files are
-                       private, and kb refuses to open such a base at all. Run `git init`."
-                ),
-                write::Staged::Failed(ref e) => eprintln!("  NOT staged: {e}"),
-            }
             // Said rather than done. The index is derived and rebuilding it is cheap,
             // but a command that quietly rewrote a database while you were writing a
             // note is a command that does two things under one name.
@@ -418,23 +420,7 @@ fn cmd_init(name: &str, fleet: &Path) -> ExitCode {
         Ok(made) => {
             println!("created {}", made.path.display());
             println!("  {} files and directories", made.files);
-            match made.vcs {
-                init::Vcs::Initialised => println!("  git initialised"),
-                // Said out loud rather than left implicit, because the alternative was
-                // a repository nested inside the fleet's own, and nothing complains
-                // about that until a gitlink is committed months later.
-                init::Vcs::Enclosing => {
-                    println!("  a repository already covers this path, so none was created:");
-                    println!("  the files are staged into it and yours is the commit to write.");
-                }
-                // Not cosmetic. The privacy gate reads `git ls-files` per base, so a
-                // base outside git has no knowable private layer and `Memory::open`
-                // refuses to serve it.
-                init::Vcs::Untouched => {
-                    eprintln!("  git could NOT be run here. Put this base under a repository");
-                    eprintln!("  before serving the agent, or its private layer is unknowable.");
-                }
-            }
+            println!("  served as it stands: no repository is needed, and none was created");
             println!();
             println!("Next: fill in agent.txt's role, then index.md. Both are placeholders,");
             println!("and a generated file left unedited is a file nobody owns.");
@@ -534,11 +520,7 @@ fn check_one(
     }
 
     let map = base.map.clone().unwrap_or_else(|| "none".to_string());
-    let scope = if base.tracked_only {
-        "tracked files"
-    } else {
-        "files, git not consulted"
-    };
+    let scope = if all { "files, private layer included" } else { "public files" };
     println!("{}  ({} {scope}, map: {map})", label(&base), base.files.len());
 
     for (file, reason) in &base.unreadable {
@@ -632,9 +614,14 @@ fn cmd_index(paths: &[&str], all: bool, json: bool) -> ExitCode {
 /// It reaches a typo or a cognate, because trigram overlap is a measure of spelling.
 /// It never reaches a translation, and the line printed with it says so, because a
 /// suggestion whose limits are not stated gets read as the whole answer.
-fn print_suggestions(memory: &memory::Memory, question: &str) {
-    let words = memory.suggest(question, 8);
-    memory.record_miss(question, &words);
+///
+/// **Prints and decides nothing.** It took the memory and worked out the miss itself,
+/// which put the recording on whichever branch happened to call it, and the hybrid
+/// branch calls it only when the fused list is empty. So a refusal over passages it
+/// went on to print recorded nothing, which is the same defect one level down from the
+/// one `Memory::recall_loss` was extracted to fix. The caller asks the contract; this
+/// puts words on a terminal.
+fn print_suggestions(words: &[String]) {
     if words.is_empty() {
         return;
     }
@@ -684,16 +671,13 @@ fn cmd_route(
             // went wrong from an exit code. The human line above stays: it costs
             // nothing and it is what shows up in a deployment's logs.
             if as_json {
-                let mut out = json::Value::obj();
-                out.set("question", question.into());
-                out.set("error", e.to_string().into());
-                println!("{}", out.to_string());
+                println!("{}", open_error_as_json("question", question, &e.to_string()).to_string());
             }
             return ExitCode::from(1);
         }
     };
     if memory.index_was_rebuilt {
-        eprintln!("kb: an index predated the tracked column and was emptied. Run `kb index`.");
+        eprintln!("kb: an index predated the private column (ADR-0034) and was emptied. Run `kb index`.");
     }
 
     if as_json {
@@ -712,13 +696,28 @@ fn cmd_route(
     // surface gets it instead of this one.
     println!();
 
+    // **One `ask`, for the verdict, on both branches.** The ranked list below is still
+    // the keyword scorer's, and this costs a second pass over the corpus to get the
+    // number that decides whether the question was a recall loss. `mcp.rs` already pays
+    // it for the same reason and states it: this is called once per question by a
+    // person, never in a loop. Deriving the loss from the length of whichever list a
+    // branch happened to hold is what gave one measurement four definitions.
+    let answer = memory.ask(question, top);
+
+    // **Asked unconditionally, because the branches below decide what to print and
+    // that is a different question from whether the base failed to reach an answer.**
+    // Hanging the record off a printing branch is exactly how this measurement came to
+    // have four definitions, and doing it one level lower cost a run to catch.
+    let loss = memory.recall_loss(question, &answer.confidence);
+    let looked_like: &[String] = loss.as_ref().map_or(&[], |m| &m.looked_like);
+
     if !hybrid {
         let hits = memory.route(question, top);
         if hits.is_empty() {
             if !print_if_nothing_to_search(&memory) {
                 println!("  nothing matched. Either the base does not cover it, or the");
                 println!("  Search for lines do not carry the words a real question uses.");
-                print_suggestions(&memory, question);
+                print_suggestions(looked_like);
             }
             return ExitCode::SUCCESS;
         }
@@ -735,13 +734,16 @@ fn cmd_route(
         return ExitCode::SUCCESS;
     }
 
-    let found = memory.retrieve(question, top);
+    // `Memory::retrieve` is `Memory::ask` minus the confidence, over the same expansion
+    // and the same two scorers, so the answer already in hand is the same list for no
+    // extra work. The same substitution `mcp.rs` made, for the same reason.
+    let found = &answer.found;
     if found.is_empty() {
         if !print_if_nothing_to_search(&memory) {
             println!("  nothing matched, in either scorer. Either the base does not cover");
             println!("  it, or the Search for lines do not carry the words a real question");
             println!("  uses.");
-            print_suggestions(&memory, question);
+            print_suggestions(looked_like);
         }
         return ExitCode::SUCCESS;
     }
@@ -755,8 +757,12 @@ fn cmd_route(
         println!();
     }
 
-    for f in &found {
-        println!("  {:>5.3}  {:<8} {:<44} {}", f.score, f.base, f.path, f.why.join(" + "));
+    for f in found {
+        let layer = match f.layer {
+            kb::retrieve::Layer::Short => "  [short memory]",
+            kb::retrieve::Layer::Long => "",
+        };
+        println!("  {:>5.3}  {:<8} {:<44} {}{layer}", f.score, f.base, f.path, f.why.join(" + "));
         if let Some(p) = f.passages.first() {
             println!("         {}: {}", p.heading_path, p.excerpt.replace("
 ", " ").trim());
@@ -779,31 +785,77 @@ fn cmd_route(
 /// every machine surface answers from the contract, so `kb serve`, `kb boot` and this
 /// cannot drift into three different opinions about one question.
 ///
-/// Three fields exist for callers that are not sitting at a terminal, and each one is
+/// Five fields exist for callers that are not sitting at a terminal, and each one is
 /// a failure that has already happened somewhere:
 ///
-/// - `skipped` names bases left out because git could not be consulted. A caller
-///   reading stdout alone would otherwise see `results: []` and conclude the base does
-///   not cover the question, when in fact nothing was searched. That is the exact
-///   shape a deployment hits: no `.git` in the bundle means no base is served.
+/// - `gate` says whether `results` passed the verdict, whether the text scorer was the
+///   only thing that ranked them, and what floor the score was measured against. It
+///   exists because the first integrator to parse this could not tell a refusal over
+///   real candidates from a question the base does not cover: both arrive as
+///   `verdict: "nothing"` with an array beside them, and the rule that settles it was
+///   written only in prose a program does not read.
+/// - `skipped` names bases left out. Empty since ADR-0034, because the one reason a
+///   base was ever left out, git not answering for its privacy, is gone; it stays so a
+///   caller reading stdout alone has one field to check before reading `results: []`
+///   as "the base does not cover this", which is the exact mistake a deployment used
+///   to make when a bundle without `.git` served nothing.
 /// - `suggestions` carries what the miss path prints, so a caller can offer the words
 ///   the base does know instead of a dead end.
+/// - `miss` is the recall loss itself, whole, for a caller with nowhere to write. The
+///   log lives beside the fleet, which is right on a machine somebody owns and
+///   impossible on a hosted one, and the failure used to reach the caller as a line on
+///   a child process's stderr. `recorded` says whether the file holds this too.
 /// - `agent.margin` is `null` when only one agent scored. That is JSON's encoding of
 ///   infinity, and it means maximum confidence, not missing data.
-fn route_as_json(question: &str, memory: &memory::Memory, top: usize) -> ExitCode {
+///
+/// **Returns the value instead of printing it, and the split is not cosmetic.** While
+/// this printed, the contract an integrator parses had nothing under it: the first
+/// report of its shape came back from somebody's production deployment, and two of the
+/// findings in `reports/2026-08-29-first-integration.md` are about fields that say the
+/// wrong thing to a caller who is not sitting at a terminal. A payload a test can hold
+/// is the precondition for changing any of them on purpose.
+fn route_payload(question: &str, memory: &memory::Memory, top: usize) -> json::Value {
     let answer = memory.ask(question, top);
+    let refused = answer.confidence.verdict == memory::Verdict::Nothing;
 
-    let suggestions = if answer.found.is_empty() && !memory.is_empty() {
-        let words = memory.suggest(question, 8);
-        memory.record_miss(question, &words);
-        words
-    } else {
-        Vec::new()
-    };
+    // **On the verdict, not on the list length, and that was the defect.** The two
+    // agree only while the scorers do. A question the text scorer ranked and the
+    // keyword scorer did not has a full `results` array and a refusal, and this
+    // branch used to read the array: the refusal the caller had to help somebody
+    // recover from was the one case that got no vocabulary back, and the recall loss
+    // that rides with it was the one loss the log never counted. F-06 and F-02 in
+    // `reports/2026-08-29-first-integration.md`. The decision itself is on the
+    // contract now, so this surface no longer holds an opinion about it.
+    let loss = memory.recall_loss(question, &answer.confidence);
+    let suggestions: Vec<String> = loss.as_ref().map(|m| m.looked_like.clone()).unwrap_or_default();
 
     let mut out = json::Value::obj();
     out.set("question", question.into());
     out.set("verdict", answer.confidence.verdict.label().into());
+
+    // **What the verdict alone could not say.** `verdict` answers "did the keyword
+    // scorer rank anything" and `results` answers "did either of them", so a caller
+    // holding both could not tell a refusal over real candidates from a subject the
+    // base does not cover. Both arrive as `nothing` with a `results` array, and they
+    // call for opposite work: the first is a keys problem in a base that may hold the
+    // answer, the second is a coverage problem.
+    //
+    // Three facts rather than one enum, because each is separately checkable and none
+    // of them needs versioning the day a fourth state appears:
+    //
+    // - `served` is our own rule, stated rather than left to be re-derived from a
+    //   string. It was written only in the prose of `--help`, and an integrator who
+    //   read `results.length > 0` instead served passages we had refused.
+    // - `ranked_by_text_only` is the mechanism and not a diagnosis. It says which
+    //   scorer found the file, which is a fact. Whether the base really covers the
+    //   subject is not something a word match knows.
+    // - `floor` is what `keyword_score` was measured against, so the gate can be
+    //   disagreed with without guessing its threshold.
+    let mut gate = json::Value::obj();
+    gate.set("served", (!refused).into());
+    gate.set("ranked_by_text_only", (refused && !answer.found.is_empty()).into());
+    gate.set("floor", score(memory::SCORE_FLOOR as f64));
+    out.set("gate", gate);
 
     let mut confidence = json::Value::obj();
     confidence.set("agreement", answer.confidence.agreement.into());
@@ -870,12 +922,72 @@ fn route_as_json(question: &str, memory: &memory::Memory, top: usize) -> ExitCod
         "suggestions",
         json::Value::Arr(suggestions.into_iter().map(Into::into).collect()),
     );
+
+    // **Self contained on purpose.** `question` and `looked_like` repeat what is
+    // already at the top level, because this object exists to be copied whole into
+    // somebody else's store by a caller that has nowhere of its own to write, and
+    // making every such caller reassemble it from four fields is how two of them end
+    // up keeping different records. `recorded` and `error` are the half that could
+    // not be said at all before: a failed write reached the caller as a line on the
+    // stderr of a child process, which in a function's logs is not reaching anybody.
+    out.set(
+        "miss",
+        match &loss {
+            Some(m) => {
+                let mut miss = json::Value::obj();
+                miss.set("question", m.question.as_str().into());
+                miss.set(
+                    "looked_like",
+                    json::Value::Arr(
+                        m.looked_like.iter().map(|w| w.as_str().into()).collect(),
+                    ),
+                );
+                miss.set("date", m.date.as_str().into());
+                miss.set("log", m.log.display().to_string().into());
+                miss.set("recorded", m.recorded().into());
+                miss.set(
+                    "error",
+                    match &m.error {
+                        Some(e) => e.as_str().into(),
+                        None => json::Value::Null,
+                    },
+                );
+                miss
+            }
+            None => json::Value::Null,
+        },
+    );
     out.set(
         "results",
         json::Value::Arr(answer.found.iter().map(retrieved_as_json).collect()),
     );
 
-    println!("{}", out.to_string());
+    out
+}
+
+/// The one line of JSON a program gets when the base could not be opened.
+///
+/// **Shared, because the two commands disagreed.** `route` printed this object and
+/// `remember` printed nothing at all on stdout, so a caller of one got a failure it
+/// could parse and a caller of the other got exit 1 and silence, with the sentence
+/// only on stderr. A machine surface that fails unreadably is a machine surface that
+/// fails silently, which is the shape `skipped` and `error` exist to prevent.
+///
+/// The input field is named after the input, `question` or `claim`, because a caller
+/// correlating a failure with what it sent needs the thing it sent.
+fn open_error_as_json(input_field: &str, input: &str, error: &str) -> json::Value {
+    let mut out = json::Value::obj();
+    out.set(input_field, input.into());
+    out.set("error", error.into());
+    out
+}
+
+/// One line on stdout, and nothing else in here.
+///
+/// Everything worth testing moved into [`route_payload`]. What is left is the part a
+/// test would have to capture stdout to see, which is the part with nothing in it.
+fn route_as_json(question: &str, memory: &memory::Memory, top: usize) -> ExitCode {
+    println!("{}", route_payload(question, memory, top).to_string());
     ExitCode::SUCCESS
 }
 
@@ -903,6 +1015,9 @@ fn retrieved_as_json(f: &kb::retrieve::Retrieved) -> json::Value {
     let mut out = json::Value::obj();
     out.set("base", f.base.as_str().into());
     out.set("path", f.path.as_str().into());
+    // Short or long memory, so a caller building a prompt can carry the label a
+    // model needs, and a caller that wants only settled knowledge can filter on it.
+    out.set("memory", f.layer.label().into());
     out.set("title", f.title.as_str().into());
     out.set("purpose", f.purpose.as_str().into());
     out.set("score", score(f.score));
@@ -1111,12 +1226,18 @@ fn cmd_answer(question: &str, paths: &[&str], all: bool, top: usize, mode: answe
 
     let a = memory.ask(question, top.max(mode.files()));
 
+    // **Unconditional, and it used to be absent.** This path suggested and moved on, so
+    // a question that got all the way to the answerer and was refused left no trace in
+    // the recall loss log. Outside the branch for the reason `cmd_route` records above:
+    // a branch that decides what to print is not the thing that knows what was lost.
+    let loss = memory.recall_loss(question, &a.confidence);
+    let looked_like: &[String] = loss.as_ref().map_or(&[], |m| &m.looked_like);
+
     if !answer::worth_asking(&a.confidence, &a.found) {
         // The same refusal `kb route` gives, with the same suggestions: absence is an
         // answer, and it costs zero model calls.
         println!("nothing in the library matched. Either it does not cover this, or the");
         println!("Search for lines do not carry the words the question used.");
-        let looked_like = memory.suggest(question, 8);
         if !looked_like.is_empty() {
             println!("  it does know: {}", looked_like.join(", "));
         }
@@ -1380,7 +1501,7 @@ fn cmd_eval(gold_path: &Path, paths: &[&str], all: bool, top: usize, classify: b
         }
     };
     if memory.index_was_rebuilt {
-        eprintln!("kb: an index predated the tracked column and was emptied. Run `kb index`.");
+        eprintln!("kb: an index predated the private column (ADR-0034) and was emptied. Run `kb index`.");
     }
 
     // Before any grading. A gold file pointing at files that moved produces a precise
@@ -1480,7 +1601,7 @@ fn cmd_eval(gold_path: &Path, paths: &[&str], all: bool, top: usize, classify: b
         pct(s.routed_hits, s.ownable)
     );
     println!(
-        "       keyword {}/{}  ({:.0}%), the deterministic fold alone, which is the fallback          when no classifier answers",
+        "       keyword {}/{}  ({:.0}%), the deterministic fold alone, which is the fallback when no classifier answers",
         s.keyword_agent_hits,
         s.ownable,
         pct(s.keyword_agent_hits, s.ownable)
@@ -1494,7 +1615,7 @@ fn cmd_eval(gold_path: &Path, paths: &[&str], all: bool, top: usize, classify: b
     );
     if s.ownable < s.answerable {
         println!(
-            "       ({} question(s) excluded: answered only from an attached base, which              can be read but cannot be the agent who answers)",
+            "       ({} question(s) excluded: answered only from an attached base, which can be read but cannot be the agent who answers)",
             s.answerable - s.ownable
         );
     }
@@ -1537,9 +1658,13 @@ fn cmd_eval(gold_path: &Path, paths: &[&str], all: bool, top: usize, classify: b
     // and graded whichever one `find` returned. The set holds three, the per-question table
     // grades all three, and two of them could regress to Hit without this line moving.
     if s.abstention_expected > 0 {
+        // **Two columns, because one number was read two ways.** "Abstained on 4/4"
+        // folded a `guess` in with silence, and a `guess` is served with a warning by
+        // every surface here. Refused and hedged are different safety properties, and
+        // the third column is the one that is simply wrong, so the three close.
         println!(
-            "       abstained on {}/{} question(s) the set says to decline",
-            s.abstention_correct, s.abstention_expected
+            "       of {} question(s) the set says to decline: refused {}, hedged {}, answered {}",
+            s.abstention_expected, s.abstention_refused, s.abstention_hedged, s.abstention_answered
         );
         if s.classified_asked > 0 {
             println!(
@@ -1670,20 +1795,85 @@ fn cmd_blocks(path: &str, emit: bool) -> ExitCode {
 // remember
 // ---------------------------------------------------------------------------
 
-fn cmd_remember(claim: &str, paths: &[&str], all: bool) -> ExitCode {
+/// `kb remember --json`: the proposal as one line, for a caller that is not a person.
+///
+/// **The judgement was already here and unreachable from code.** `--json` is parsed
+/// once for the whole process and this command dropped it, so the flag was accepted,
+/// ignored, and answered with terminal prose. The first integrator to want exactly
+/// this piece, the one that decides whether a fact is worth storing, measured it by
+/// hand and could not wire it up. F-04 in `reports/2026-08-29-first-integration.md`.
+///
+/// **Nothing here decides anything**, which is what makes it useful to a hosted agent:
+/// `remember::assess` measures overlap and proposes, it writes nothing, and it needs
+/// no model. So a consumer with a read only filesystem can ask the question at the
+/// moment the fact appears, keep the proposal, and apply it later with `kb write` on a
+/// machine that has the repository. The caveat travels as `notice` for the same reason
+/// `kb answer` rides its warning into its output: a model reading this through another
+/// surface is told what a person reading the terminal is told.
+///
+/// Takes the assessment rather than the memory, so the three outcomes can be pinned
+/// without arguing with the classifier about which one a fixture produces. What
+/// `assess` decides is its own business and is tested beside it.
+fn remember_payload(claim: &str, assessment: &remember::Assessment) -> json::Value {
+    let mut out = json::Value::obj();
+    out.set("claim", claim.into());
+    out.set("proposal", assessment.outcome.label().into());
+    out.set("reason", assessment.reason.as_str().into());
+    out.set(
+        "evidence",
+        json::Value::Arr(
+            assessment
+                .evidence
+                .iter()
+                .map(|e| {
+                    let mut v = json::Value::obj();
+                    v.set("base", e.base.as_str().into());
+                    v.set("path", e.path.as_str().into());
+                    v.set("heading_path", e.heading_path.as_str().into());
+                    v.set("excerpt", e.excerpt.as_str().into());
+                    // The same rounding as every other number here: 4/7 widened to an
+                    // f64 prints seventeen digits of precision a ratio over a handful
+                    // of words never had.
+                    v.set("containment", score(e.containment));
+                    v.set(
+                        "shared",
+                        json::Value::Arr(e.shared.iter().map(|w| w.as_str().into()).collect()),
+                    );
+                    v.set(
+                        "missing",
+                        json::Value::Arr(e.missing.iter().map(|w| w.as_str().into()).collect()),
+                    );
+                    v
+                })
+                .collect(),
+        ),
+    );
+    out.set("notice", remember::DISCLAIMER.into());
+    out
+}
+
+fn cmd_remember(claim: &str, paths: &[&str], all: bool, as_json: bool) -> ExitCode {
     let given: Vec<&Path> = paths.iter().map(Path::new).collect();
     let memory = match memory::Memory::open(&given, all) {
         Ok(m) => m,
         Err(e) => {
             eprintln!("kb: {e}");
+            if as_json {
+                println!("{}", open_error_as_json("claim", claim, &e.to_string()).to_string());
+            }
             return ExitCode::from(1);
         }
     };
     if memory.index_was_rebuilt {
-        eprintln!("kb: an index predated the tracked column and was emptied. Run `kb index`.");
+        eprintln!("kb: an index predated the private column (ADR-0034) and was emptied. Run `kb index`.");
     }
 
     let a = memory.remember(claim);
+
+    if as_json {
+        println!("{}", remember_payload(claim, &a).to_string());
+        return ExitCode::SUCCESS;
+    }
 
     println!("claim: {claim}");
     println!("proposal: {}", a.outcome.label());
@@ -1856,6 +2046,7 @@ with a body"];
         let f = kb::retrieve::Retrieved {
             base: "zed".into(),
             path: "knowledge/deploy.md".into(),
+            layer: kb::retrieve::Layer::Long,
             title: "Deploys".into(),
             purpose: "what a deploy needs".into(),
             score: 0.032,
@@ -1872,6 +2063,7 @@ with a body"];
         };
 
         let out = retrieved_as_json(&f).to_string();
+        assert!(out.contains("\"memory\":\"long\""), "{out}");
         assert!(out.contains("\"score\":0.032"), "{out}");
         assert!(out.contains("\"keyword_score\":11.23"), "{out}");
         assert!(out.contains("\"heading_path\":\"Deploys > Rollback\""), "{out}");
@@ -1879,5 +2071,588 @@ with a body"];
         // Absent, not omitted. A caller reading the key gets null and knows the note
         // declares no stage, which is a different fact from a key that is not there.
         assert!(out.contains("\"stage\":null"), "{out}");
+    }
+
+    // -----------------------------------------------------------------------
+    // The route payload, as a value rather than as a line of stdout
+    //
+    // Everything below exists because `route_as_json` printed. A function that
+    // prints can be read by a person and by nothing else, so the JSON contract an
+    // integrator parses had no test under it at all: the first report of its shape
+    // came from a deployment. See `reports/2026-08-29-first-integration.md`.
+    // -----------------------------------------------------------------------
+
+    /// One note on disk, in the shape the index actually reads.
+    ///
+    /// `title`, `keys` and `purpose` are separate arguments rather than one blob
+    /// because the keyword scorer reads all three and the text scorer reads none of
+    /// them. A helper that filled them from each other would make the two scorers
+    /// agree by construction, which is precisely the condition these tests need to
+    /// be able to break.
+    fn note(title: &str, keys: &str, purpose: &str, body: &str) -> String {
+        format!("# {title}\n\n**Search for:** {keys}\n\n**Exists to:** {purpose}\n\n## Body\n\n{body}\n")
+    }
+
+    /// A one agent fleet on disk, indexed the way `kb index` indexes it.
+    ///
+    /// Built rather than assembled in memory because the behaviour under test is a
+    /// disagreement between two independent scorers, and a hand written `Answer`
+    /// agrees with itself by construction.
+    ///
+    /// The sync is not optional. `Memory::open` reads an index and never builds one,
+    /// so a fixture that skips it has a working keyword scorer and a text scorer that
+    /// finds nothing, which is the exact asymmetry these tests exist to catch.
+    /// Returns the fleet root beside the memory, because `record_miss` writes there and
+    /// a test that recomputed the path would be asserting against its own copy of the
+    /// formula rather than against the one the code uses.
+    fn indexed_fleet(name: &str, notes: &[(&str, String)]) -> (std::path::PathBuf, memory::Memory) {
+        let dir = std::env::temp_dir()
+            .join("kb-route-payload-tests")
+            .join(format!("{}-{name}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        let agent = dir.join("fleet").join("probe");
+        std::fs::create_dir_all(agent.join("knowledge")).expect("mkdir");
+        std::fs::write(agent.join("agent.txt"), "name = Probe\nrole = testing\n").expect("agent");
+        std::fs::write(agent.join("MAP.md"), "# MAP\n").expect("map");
+        for (stem, text) in notes {
+            // A bare stem lands in `knowledge/`; a key with a slash is a path from the
+            // agent root, which is how a test puts a file in the deposit.
+            let path = if stem.contains('/') {
+                agent.join(stem)
+            } else {
+                agent.join("knowledge").join(format!("{stem}.md"))
+            };
+            std::fs::create_dir_all(path.parent().expect("a parent")).expect("mkdir");
+            std::fs::write(path, text).expect("note");
+        }
+
+        let base = Base::discover(&agent, true).expect("discover");
+        let mut db = store::Store::open(&memory::index_path(&agent)).expect("index");
+        db.sync(&base, "probe").expect("sync");
+        drop(db);
+
+        let memory = memory::Memory::open(&[dir.as_path()], true).expect("opens");
+        (dir, memory)
+    }
+
+    /// Four notes so the idf denominator is not degenerate: with two entries in the
+    /// corpus a unique term is worth `ln(2)` and no realistic question clears
+    /// `SCORE_FLOOR`, which would make a hit untestable for a reason that has nothing
+    /// to do with what is being tested.
+    fn one_note_the_keyword_scorer_can_reach() -> Vec<(&'static str, String)> {
+        vec![
+            (
+                "rollback",
+                note(
+                    "Rollback",
+                    "`rollback`, `deploy`, `downtime`, `release`",
+                    "say how a deploy is undone",
+                    "Keep the previous version serving while the new one takes traffic.",
+                ),
+            ),
+            ("pasta", note("Pasta", "`pasta`, `tomato`", "hold one recipe", "Salt the water.")),
+            ("zebra", note("Zebra", "`zebra`, `quagga`", "hold one animal", "Stripes differ.")),
+            ("tide", note("Tide", "`tide`, `harbour`", "hold one port note", "It turns twice.")),
+        ]
+    }
+
+    /// A note the text scorer can reach and the keyword scorer cannot: its keys, its
+    /// title and its purpose are about an animal, and its body is about deploys.
+    fn one_note_only_the_text_scorer_can_reach() -> Vec<(&'static str, String)> {
+        vec![
+            (
+                "striped",
+                note(
+                    "Zebra",
+                    "`zebra`, `quagga`",
+                    "hold one striped animal",
+                    "A rollback without downtime keeps the previous release serving.",
+                ),
+            ),
+            ("pasta", note("Pasta", "`pasta`, `tomato`", "hold one recipe", "Salt the water.")),
+            ("tide", note("Tide", "`tide`, `harbour`", "hold one port note", "It turns twice.")),
+        ]
+    }
+
+    /// The same shape, with one key a question is likely to spell slightly wrong. The
+    /// suggester measures spelling, so a base with no orthographic neighbour of any
+    /// question word has nothing honest to offer and correctly offers nothing, which
+    /// would make an empty `suggestions` prove the wrong thing.
+    fn one_note_whose_key_is_a_near_miss() -> Vec<(&'static str, String)> {
+        vec![
+            (
+                "striped",
+                note(
+                    "Striped animals",
+                    "`zebras`, `quaggas`",
+                    "hold one animal",
+                    "A rollback without downtime keeps the previous release serving.",
+                ),
+            ),
+            ("pasta", note("Pasta", "`pasta`, `tomato`", "hold one recipe", "Salt the water.")),
+            ("tide", note("Tide", "`tide`, `harbour`", "hold one port note", "It turns twice.")),
+        ]
+    }
+
+    fn text_of(v: &json::Value, key: &str) -> String {
+        match v.get(key) {
+            Some(json::Value::Str(s)) => s.clone(),
+            other => panic!("{key} is not a string: {other:?}"),
+        }
+    }
+
+    fn len_of(v: &json::Value, key: &str) -> usize {
+        match v.get(key) {
+            Some(json::Value::Arr(a)) => a.len(),
+            other => panic!("{key} is not an array: {other:?}"),
+        }
+    }
+
+    fn flag_of(v: &json::Value, path: [&str; 2]) -> bool {
+        match v.get(path[0]).and_then(|o| o.get(path[1])) {
+            Some(json::Value::Bool(b)) => *b,
+            other => panic!("{}.{} is not a boolean: {other:?}", path[0], path[1]),
+        }
+    }
+
+    fn num_of(v: &json::Value, path: [&str; 2]) -> f64 {
+        match v.get(path[0]).and_then(|o| o.get(path[1])) {
+            Some(json::Value::Num(n)) => *n,
+            other => panic!("{}.{} is not a number: {other:?}", path[0], path[1]),
+        }
+    }
+
+    /// The contract, listed by name. A field that leaves the payload breaks a caller
+    /// silently, because a missing key and a key holding `null` read the same way in
+    /// most languages, so the field list is pinned rather than described.
+    #[test]
+    fn the_whole_documented_contract_is_in_the_value_the_printer_is_handed() {
+        let (_, memory) = indexed_fleet("shape", &one_note_the_keyword_scorer_can_reach());
+        let out = route_payload("como faco rollback de um deploy sem downtime na release", &memory, 4);
+
+        for key in [
+            "question",
+            "verdict",
+            "gate",
+            "confidence",
+            "agent",
+            "keyword_top",
+            "indexed",
+            "skipped",
+            "index_was_rebuilt",
+            "suggestions",
+            "results",
+        ] {
+            assert!(out.get(key).is_some(), "{key} left the payload: {}", out.to_string());
+        }
+
+        assert_eq!(text_of(&out, "verdict"), "hit", "{}", out.to_string());
+        assert!(len_of(&out, "results") > 0, "{}", out.to_string());
+        assert!(flag_of(&out, ["gate", "served"]), "{}", out.to_string());
+        assert!(!flag_of(&out, ["gate", "ranked_by_text_only"]), "{}", out.to_string());
+        assert_eq!(
+            len_of(&out, "suggestions"),
+            0,
+            "a hit offers no vocabulary, it offers the answer"
+        );
+    }
+
+    /// F-01 in `reports/2026-08-29-first-integration.md`, from the other side. The
+    /// verdict answers "did the keyword scorer rank anything" and `results` answers
+    /// "did either scorer", and until this landed the payload said which question it
+    /// had answered nowhere: a caller reading `results.length > 0` served passages we
+    /// consider not found, and one trusting the verdict discarded passages we did find.
+    ///
+    /// The two refusals must be told apart, because they call for opposite work. One
+    /// is a keys problem in a base that may well hold the answer; the other is a base
+    /// that does not cover the subject.
+    #[test]
+    fn a_result_the_gate_refused_says_so_and_says_it_differently_from_an_uncovered_question() {
+        let (_, memory) = indexed_fleet("gated", &one_note_only_the_text_scorer_can_reach());
+
+        let gated = route_payload("rollback sem downtime", &memory, 4);
+        let uncovered = route_payload("qual a taxa de juros do trimestre", &memory, 4);
+
+        assert_eq!(text_of(&gated, "verdict"), "nothing", "{}", gated.to_string());
+        assert!(
+            len_of(&gated, "results") > 0,
+            "the text scorer found the note: {}",
+            gated.to_string()
+        );
+        assert!(!flag_of(&gated, ["gate", "served"]), "{}", gated.to_string());
+        assert!(
+            flag_of(&gated, ["gate", "ranked_by_text_only"]),
+            "the state the verdict was hiding: {}",
+            gated.to_string()
+        );
+
+        assert_eq!(text_of(&uncovered, "verdict"), "nothing", "{}", uncovered.to_string());
+        assert_eq!(len_of(&uncovered, "results"), 0, "{}", uncovered.to_string());
+        assert!(!flag_of(&uncovered, ["gate", "served"]), "{}", uncovered.to_string());
+        assert!(
+            !flag_of(&uncovered, ["gate", "ranked_by_text_only"]),
+            "nothing ranked at all, so nothing ranked by text alone: {}",
+            uncovered.to_string()
+        );
+
+        assert_ne!(
+            gated.get("gate"),
+            uncovered.get("gate"),
+            "one field a caller can branch on, which is the whole finding"
+        );
+    }
+
+    /// A `guess` is served and says it is weak. The gate reports the rule the type
+    /// already states at `memory::Verdict::Guess`: dropping weak results loses real
+    /// answers and saying "this is a guess" loses nothing, so a warning is not a
+    /// filter. It is the subtle one, because `served` is false for exactly one of the
+    /// three verdicts and a reader expects it to be false for two.
+    #[test]
+    fn a_guess_is_served_because_a_warning_is_not_a_filter() {
+        let (_, memory) = indexed_fleet("guess", &one_note_the_keyword_scorer_can_reach());
+        let out = route_payload("downtime", &memory, 4);
+
+        assert_eq!(text_of(&out, "verdict"), "guess", "{}", out.to_string());
+        assert!(flag_of(&out, ["gate", "served"]), "{}", out.to_string());
+        assert!(!flag_of(&out, ["gate", "ranked_by_text_only"]), "{}", out.to_string());
+    }
+
+    /// The floor travels so a caller can disagree with the gate without guessing what
+    /// it was measured against. Asserted through `memory::SCORE_FLOOR` rather than
+    /// through the literal 17.5, because the constant has already moved twice and a
+    /// literal here would pin the payload to a number the gate no longer uses.
+    #[test]
+    fn the_floor_in_the_payload_is_the_one_the_verdict_was_measured_against() {
+        let (_, memory) = indexed_fleet("floor", &one_note_the_keyword_scorer_can_reach());
+
+        for question in ["como faco rollback de um deploy sem downtime na release", "downtime", "xyzzy"] {
+            let out = route_payload(question, &memory, 4);
+            assert_eq!(
+                num_of(&out, ["gate", "floor"]),
+                memory::SCORE_FLOOR as f64,
+                "{question}: {}",
+                out.to_string()
+            );
+
+            let score = num_of(&out, ["confidence", "keyword_score"]);
+            let floor = num_of(&out, ["gate", "floor"]);
+            assert_eq!(
+                text_of(&out, "verdict") == "hit",
+                score >= floor,
+                "the floor in the payload has to be the one that decided: {}",
+                out.to_string()
+            );
+        }
+    }
+
+    /// F-06. `suggestions` was computed only when the fused list was empty, so the
+    /// case it was built for, a refusal the person on screen has to recover from,
+    /// was the case where it returned nothing.
+    #[test]
+    fn suggestions_arrive_whenever_the_gate_refuses_including_over_a_full_result_set() {
+        let (_, memory) = indexed_fleet("suggest", &one_note_whose_key_is_a_near_miss());
+        let out = route_payload("zebra sem downtime", &memory, 4);
+
+        assert_eq!(text_of(&out, "verdict"), "nothing", "{}", out.to_string());
+        assert!(len_of(&out, "results") > 0, "the text scorer found it: {}", out.to_string());
+        assert!(
+            len_of(&out, "suggestions") > 0,
+            "the base knows `zebras` and was asked about `zebra`: {}",
+            out.to_string()
+        );
+    }
+
+    /// The honesty property, which the fix above must not buy its way past: a base
+    /// with no orthographic neighbour of any question word offers nothing rather than
+    /// the nearest thing it has. A suggester that always answers is one nobody can
+    /// use, because trigram overlap measures spelling and never meaning.
+    #[test]
+    fn a_base_with_nothing_that_looks_like_the_question_still_suggests_nothing() {
+        let (_, memory) = indexed_fleet("honest", &one_note_whose_key_is_a_near_miss());
+        let out = route_payload("qual a taxa de juros do trimestre", &memory, 4);
+
+        assert_eq!(text_of(&out, "verdict"), "nothing");
+        assert_eq!(len_of(&out, "suggestions"), 0, "{}", out.to_string());
+    }
+
+    // -----------------------------------------------------------------------
+    // `kb remember --json`, F-04
+    //
+    // The judgement underneath is `remember::assess` and it is tested there. What
+    // is tested here is that all of it reaches a program: the flag was parsed
+    // process wide and silently dropped on this command, so the one piece of the
+    // write side a hosted agent could have called was unreachable from code.
+    // -----------------------------------------------------------------------
+
+    fn one_piece_of_evidence() -> remember::Evidence {
+        remember::Evidence {
+            base: "zed".into(),
+            path: "knowledge/metrics.md".into(),
+            heading_path: "Metrics > ROAS".into(),
+            excerpt: "the roas here is net of fees".into(),
+            containment: 4.0 / 7.0,
+            shared: vec!["roas".into(), "liquido".into()],
+            missing: vec!["reembolso".into()],
+        }
+    }
+
+    #[test]
+    fn a_proposal_serialises_every_field_the_prose_prints() {
+        let assessment = remember::Assessment {
+            outcome: remember::Outcome::Update,
+            reason: "4 of 7 words already appear in one passage".into(),
+            evidence: vec![one_piece_of_evidence()],
+        };
+
+        let out = remember_payload("o roas liquido desconta taxa", &assessment);
+
+        assert_eq!(text_of(&out, "claim"), "o roas liquido desconta taxa");
+        assert_eq!(text_of(&out, "proposal"), "UPDATE");
+        assert_eq!(text_of(&out, "reason"), "4 of 7 words already appear in one passage");
+        assert!(
+            text_of(&out, "notice").contains("DELETE"),
+            "the caveat rides the output, so a model reading this is told what a person is told"
+        );
+
+        let evidence = match out.get("evidence") {
+            Some(json::Value::Arr(a)) => a.clone(),
+            other => panic!("evidence is not an array: {other:?}"),
+        };
+        assert_eq!(evidence.len(), 1);
+        let e = &evidence[0];
+        assert_eq!(e.get("base"), Some(&json::Value::Str("zed".into())));
+        assert_eq!(e.get("path"), Some(&json::Value::Str("knowledge/metrics.md".into())));
+        assert_eq!(e.get("heading_path"), Some(&json::Value::Str("Metrics > ROAS".into())));
+        assert_eq!(e.get("excerpt"), Some(&json::Value::Str("the roas here is net of fees".into())));
+        assert_eq!(
+            e.get("shared"),
+            Some(&json::Value::Arr(vec!["roas".into(), "liquido".into()]))
+        );
+        assert_eq!(e.get("missing"), Some(&json::Value::Arr(vec!["reembolso".into()])));
+    }
+
+    /// Through the same rounding every other number in this binary goes through.
+    /// `4/7` as an `f64` prints seventeen digits, which is precision a containment
+    /// ratio over a handful of words never had.
+    #[test]
+    fn containment_is_rounded_the_way_every_other_number_is() {
+        let assessment = remember::Assessment {
+            outcome: remember::Outcome::Update,
+            reason: String::new(),
+            evidence: vec![one_piece_of_evidence()],
+        };
+        let out = remember_payload("c", &assessment).to_string();
+        assert!(out.contains("\"containment\":0.571429"), "{out}");
+    }
+
+    /// The wire names, pinned. A caller branches on these and they are separate from
+    /// whatever the terminal happens to print, for the same reason `Verdict::label`
+    /// is separate from the sentences the terminal writes.
+    #[test]
+    fn the_three_outcomes_travel_by_their_wire_names() {
+        for (outcome, name) in [
+            (remember::Outcome::Add, "ADD"),
+            (remember::Outcome::Update, "UPDATE"),
+            (remember::Outcome::Noop, "NOOP"),
+        ] {
+            let a = remember::Assessment { outcome, reason: String::new(), evidence: vec![] };
+            assert_eq!(text_of(&remember_payload("c", &a), "proposal"), name);
+        }
+    }
+
+    /// Empty and present, never absent. A caller reading the key gets a list with
+    /// nothing in it and knows the base holds nothing close; a missing key reads as a
+    /// parse problem.
+    #[test]
+    fn no_overlap_is_an_empty_array_and_not_a_missing_key() {
+        let a = remember::Assessment {
+            outcome: remember::Outcome::Add,
+            reason: "nothing in the base overlaps this".into(),
+            evidence: vec![],
+        };
+        let out = remember_payload("o yago treina as tercas", &a);
+        assert_eq!(out.get("evidence"), Some(&json::Value::Arr(vec![])), "{}", out.to_string());
+    }
+
+    /// The wiring, over a real base: the judgement reaches the payload rather than
+    /// the payload being right about an assessment nobody produced. What the
+    /// classifier decides is `remember.rs`'s business and is tested there, so this
+    /// asserts only that a real overlap arrives with real evidence behind it.
+    #[test]
+    fn a_claim_the_base_already_holds_comes_back_with_the_passage_it_overlaps() {
+        let (_, memory) = indexed_fleet("remember", &one_note_the_keyword_scorer_can_reach());
+        let out = remember_payload(
+            "keep the previous version serving while the new one takes traffic",
+            &memory.remember("keep the previous version serving while the new one takes traffic"),
+        );
+
+        assert_eq!(text_of(&out, "proposal"), "NOOP", "{}", out.to_string());
+        match out.get("evidence") {
+            Some(json::Value::Arr(a)) => assert!(!a.is_empty(), "{}", out.to_string()),
+            other => panic!("evidence is not an array: {other:?}"),
+        }
+    }
+
+    /// **One error shape for both commands.** `route` printed a parseable object on
+    /// stdout and `remember` printed nothing at all, so a program calling one got a
+    /// failure it could read and a program calling the other got an exit code and
+    /// silence. The input field is named after the input, because a caller correlating
+    /// a failure with what it sent needs the thing it sent.
+    #[test]
+    fn both_commands_fail_in_the_same_readable_shape() {
+        let route = open_error_as_json("question", "como faco rollback", "cannot open the index");
+        assert_eq!(route.get("question"), Some(&json::Value::Str("como faco rollback".into())));
+        assert_eq!(route.get("error"), Some(&json::Value::Str("cannot open the index".into())));
+
+        let remember = open_error_as_json("claim", "o roas aqui e liquido", "cannot read the base");
+        assert_eq!(remember.get("claim"), Some(&json::Value::Str("o roas aqui e liquido".into())));
+        assert_eq!(remember.get("error"), Some(&json::Value::Str("cannot read the base".into())));
+    }
+
+    /// The label reaches the payload, per result, so a program building a prompt can
+    /// carry it and a program that wants only settled knowledge can filter on it. Two
+    /// notes, one in the deposit and one in the library, both reachable by the text
+    /// scorer, and the field tells them apart.
+    #[test]
+    fn each_result_says_which_memory_it_came_from() {
+        let (_, memory) = indexed_fleet(
+            "layers",
+            &[
+                ("settled", note("Settled", "`quagga`", "hold one animal", "the quagga is extinct")),
+                (
+                    "inbox/dropped.md",
+                    "# Dropped\n\nthe quagga population doubled last spring\n".to_string(),
+                ),
+            ],
+        );
+        let out = route_payload("quagga population", &memory, 4);
+        let results = match out.get("results") {
+            Some(json::Value::Arr(a)) => a.clone(),
+            other => panic!("results is not an array: {other:?}"),
+        };
+        let memory_of = |path: &str| {
+            results
+                .iter()
+                .find(|r| r.get("path") == Some(&json::Value::Str(path.into())))
+                .and_then(|r| r.get("memory").cloned())
+        };
+        assert_eq!(memory_of("inbox/dropped.md"), Some(json::Value::Str("short".into())), "{}", out.to_string());
+        assert_eq!(memory_of("knowledge/settled.md"), Some(json::Value::Str("long".into())), "{}", out.to_string());
+    }
+
+    /// F-03. The payload carries the loss itself, so a caller with nowhere to write
+    /// can persist it where its own stack already writes. Self contained on purpose:
+    /// `question` and `looked_like` repeat what is already at the top level, because
+    /// this object is designed to be copied whole into somebody else's store rather
+    /// than reassembled from four fields by every caller that tries.
+    #[test]
+    fn a_refusal_hands_the_caller_the_loss_it_can_persist_itself() {
+        let (root, memory) = indexed_fleet("payload-miss", &one_note_whose_key_is_a_near_miss());
+        let out = route_payload("zebra sem downtime", &memory, 4);
+
+        let miss = out.get("miss").expect("the field exists");
+        assert_eq!(
+            miss.get("question"),
+            Some(&json::Value::Str("zebra sem downtime".into())),
+            "{}",
+            out.to_string()
+        );
+        assert_eq!(miss.get("recorded"), Some(&json::Value::Bool(true)), "{}", out.to_string());
+        assert_eq!(miss.get("error"), Some(&json::Value::Null), "{}", out.to_string());
+        assert_eq!(
+            miss.get("log"),
+            Some(&json::Value::Str(root.join(kb::misses::MISSES_TXT).display().to_string())),
+            "{}",
+            out.to_string()
+        );
+        match miss.get("looked_like") {
+            Some(json::Value::Arr(a)) => assert!(!a.is_empty(), "{}", out.to_string()),
+            other => panic!("looked_like is not an array: {other:?}"),
+        }
+        assert!(miss.get("date").is_some(), "{}", out.to_string());
+    }
+
+    /// Null rather than absent, and never an empty object. A caller branching on the
+    /// key has to be able to tell "no loss" from "a loss with nothing in it", and a
+    /// missing key reads as neither in most languages.
+    #[test]
+    fn an_answer_that_was_served_carries_no_miss() {
+        let (_, memory) = indexed_fleet("payload-hit", &one_note_the_keyword_scorer_can_reach());
+        let out = route_payload("como faco rollback de um deploy sem downtime na release", &memory, 4);
+
+        assert_eq!(text_of(&out, "verdict"), "hit");
+        assert_eq!(out.get("miss"), Some(&json::Value::Null), "{}", out.to_string());
+    }
+
+    /// **Found by running it, not by the tests above.** Moving the recording inside
+    /// `print_suggestions` left it riding on a branch that asks a different question:
+    /// the hybrid terminal path prints the miss message only when the fused list is
+    /// empty, so a refusal over passages it went on to print recorded nothing. The
+    /// decision has to be asked unconditionally and the branches left to choose only
+    /// what they print, which is the same shape `mcp.rs` needed.
+    #[test]
+    fn the_hybrid_terminal_path_records_a_refusal_it_still_prints_passages_for() {
+        let (root, _) = indexed_fleet("hybrid", &one_note_only_the_text_scorer_can_reach());
+        let log = root.join(kb::misses::MISSES_TXT);
+        let path = root.to_str().expect("a utf-8 scratch path");
+
+        cmd_route("rollback sem downtime", &[path], true, 4, true, false);
+
+        let written = std::fs::read_to_string(&log).expect("the refusal was recorded");
+        assert!(written.contains("rollback sem downtime"), "{written}");
+    }
+
+    /// And the plain terminal path, which prints no passages at all, records the same
+    /// question. One question, one line, counted twice: the log counts distinct
+    /// questions, so two surfaces asking the same thing must not become two entries.
+    #[test]
+    fn the_plain_terminal_path_records_the_same_question_the_hybrid_one_does() {
+        let (root, _) = indexed_fleet("terminal", &one_note_only_the_text_scorer_can_reach());
+        let log = root.join(kb::misses::MISSES_TXT);
+        let path = root.to_str().expect("a utf-8 scratch path");
+
+        cmd_route("rollback sem downtime", &[path], true, 4, false, false);
+        cmd_route("rollback sem downtime", &[path], true, 4, true, false);
+
+        let written = std::fs::read_to_string(&log).expect("the refusal was recorded");
+        assert!(written.contains("2    "), "one question counted twice: {written}");
+    }
+
+    /// **`kb answer` refused and recorded nothing, which was a fourth definition.** It
+    /// printed the same apology `kb route` prints and offered the same vocabulary, and
+    /// then dropped the loss on the floor: `suggest` without `record_miss`. Found while
+    /// unifying the other three, and it is the surface where the omission costs most,
+    /// because a question that reaches the answerer is a question somebody actually
+    /// wanted answered.
+    #[test]
+    fn the_answerer_records_the_refusal_it_used_to_only_apologise_for() {
+        let (root, _) = indexed_fleet("answered", &one_note_only_the_text_scorer_can_reach());
+        let log = root.join(kb::misses::MISSES_TXT);
+        let path = root.to_str().expect("a utf-8 scratch path");
+
+        // Verdict `nothing`, so this returns before it can reach for a model.
+        cmd_answer("rollback sem downtime", &[path], true, 4, answer::Mode::Fast);
+
+        let written = std::fs::read_to_string(&log).expect("the refusal was recorded");
+        assert!(written.contains("rollback sem downtime"), "{written}");
+    }
+
+    /// The recall loss log travels with the suggestion, so moving one moved the other.
+    /// This is the first half of F-02: the question that reached nothing while the
+    /// text scorer held the file is exactly the loss the log exists to count, and it
+    /// was the one case never recorded. The other half, making every surface agree on
+    /// the definition, is step 3 of the report.
+    #[test]
+    fn a_refusal_over_a_full_result_set_is_recorded_as_a_recall_loss() {
+        let (root, memory) = indexed_fleet("miss", &one_note_only_the_text_scorer_can_reach());
+        let log = root.join(kb::misses::MISSES_TXT);
+        assert!(!log.exists(), "nothing has missed yet");
+
+        let out = route_payload("rollback sem downtime", &memory, 4);
+        assert_eq!(text_of(&out, "verdict"), "nothing");
+        assert!(len_of(&out, "results") > 0);
+
+        let written = std::fs::read_to_string(&log).expect("the miss log was written");
+        assert!(written.contains("rollback sem downtime"), "{written}");
     }
 }

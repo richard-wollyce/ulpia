@@ -434,3 +434,17 @@
   text declarations of what it may use. The fold takes the best file of each species and sums
   the species, which is the second answer to the volume problem, the first having been
   measured dead. Ingestion may only ever write memory, as a rule in code.
+
+- **[[0034-git-leaves-the-runtime]]** 🟢 accepted 2026-09-01.
+  **`kb` stops asking git what it may serve.** The oracle refused folders without `git init`,
+  hid every note until it was tracked, served nothing from a deployment bundle, shelled out once
+  per base per question, and was bypassed by `--all` on every surface the owner actually uses.
+  A base declares its private layer in `agent.txt`, defaulting to `profile/, projects/,
+  records/`. The deposit is served and every passage from it is labelled short memory, so the
+  model decides consciously. Git stays as an optional tool for whoever versions a fleet.
+
+- **[[0035-the-session-feeds-the-deposit]]** 🟡 proposed 2026-09-01.
+  **Nothing writes into the short memory, and two surfaces record no recall loss.** ADR-0030
+  named session capture as its unbuilt half. `kb boot` and `kb ui` call `ask` and never
+  `recall_loss`, so the surface every message passes through counts nothing. What a session
+  leaves in the deposit, without a model, and why the trigger stays the idle hook.

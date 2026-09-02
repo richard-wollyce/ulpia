@@ -391,12 +391,29 @@ pub struct Summary {
     pub hits_demoted: usize,
     /// Denominator for `hits_demoted`: keyword hits, since that is what the gate judges.
     pub gate_denominator: usize,
-    /// Abstain rows the deterministic gate correctly refused to call a hit.
+    /// Abstain rows the gate refused outright: verdict `nothing`, nothing served.
     ///
     /// **Plural, and it was singular.** The summary found the FIRST abstain row and graded
     /// only that one, while the gold set holds three and the per-question table grades all
     /// of them. Two outcomes could regress to Hit without the summary moving.
-    pub abstention_correct: usize,
+    ///
+    /// **And it was one column, which is worse than being singular.** It counted anything
+    /// that was not a `Hit`, so a `guess` scored as silence. A `guess` is served, with a
+    /// warning, by every consumer and by this codebase's own type: dropping weak results
+    /// loses real answers and saying "this is a guess" loses nothing. So a run reporting
+    /// "abstained on 4 of 4" could mean the router said nothing four times or served
+    /// doctrine four times with a hedge, and both readings quoted the same figure.
+    /// Refusing and hedging are different safety properties and anybody deciding whether
+    /// this is fit to put in front of people needs them apart. F-05 in
+    /// `reports/2026-08-29-first-integration.md`.
+    pub abstention_refused: usize,
+    /// Abstain rows served with a warning: verdict `guess`. Not silence, and not a
+    /// failure either, which is why it gets a column of its own rather than being
+    /// folded into one of the two beside it.
+    pub abstention_hedged: usize,
+    /// Abstain rows the gate called a hit, which is the outright failure. The three
+    /// columns account for the whole denominator.
+    pub abstention_answered: usize,
     pub abstention_expected: usize,
     /// The same question asked of the classifier, when one ran.
     pub classified_abstention_correct: usize,
@@ -454,9 +471,17 @@ pub fn summarise(rows: &[Row]) -> Summary {
         misses_total: miss_scores.len(),
         hits_demoted,
         gate_denominator: hit_scores.len(),
-        abstention_correct: abstains
+        abstention_refused: abstains
             .iter()
-            .filter(|r| r.confidence.verdict != Verdict::Hit)
+            .filter(|r| r.confidence.verdict == Verdict::Nothing)
+            .count(),
+        abstention_hedged: abstains
+            .iter()
+            .filter(|r| r.confidence.verdict == Verdict::Guess)
+            .count(),
+        abstention_answered: abstains
+            .iter()
+            .filter(|r| r.confidence.verdict == Verdict::Hit)
             .count(),
         abstention_expected: abstains.len(),
         classified_abstention_correct: abstains
@@ -540,7 +565,49 @@ mod tests {
         let s = summarise(&[r]);
         assert_eq!(s.answerable, 0, "it is not part of the accuracy denominator");
         assert_eq!(s.abstention_expected, 1, "the row is counted");
-        assert_eq!(s.abstention_correct, 1, "and graded, and every one of them is now");
+        assert_eq!(s.abstention_refused, 1, "and graded, and every one of them is now");
+    }
+
+    /// **The same number was read two ways, which is F-05 in
+    /// `reports/2026-08-29-first-integration.md`.** This counted anything that was not
+    /// a `Hit` as an abstention, so a `guess` that served two files scored as silence.
+    /// A consumer treats `guess` as "serve it and say it is weak", which the type says
+    /// too: a warning is never a filter. So one run supported "it stayed quiet" and
+    /// "it answered", and both readings quoted the same figure.
+    ///
+    /// Refusing and hedging are two different safety properties. Anybody deciding
+    /// whether this is fit to put in front of people needs them apart.
+    #[test]
+    fn hedging_and_refusing_are_counted_apart_because_they_are_not_the_same_answer() {
+        let mut refused = row("nao coberta", &[], None, None);
+        refused.confidence.verdict = Verdict::Nothing;
+        let mut hedged = row("tambem nao coberta", &[], None, None);
+        hedged.confidence.verdict = Verdict::Guess;
+
+        let s = summarise(&[refused, hedged]);
+
+        assert_eq!(s.abstention_expected, 2);
+        assert_eq!(s.abstention_refused, 1, "only the one that said nothing");
+        assert_eq!(s.abstention_hedged, 1, "the guess served files, with a warning");
+    }
+
+    /// And a row the gate called a hit is neither, so the three account for the whole
+    /// denominator. Arithmetic that does not close is how a column goes missing
+    /// without anybody noticing.
+    #[test]
+    fn the_abstention_columns_sum_back_to_their_denominator() {
+        let mut refused = row("a", &[], None, None);
+        refused.confidence.verdict = Verdict::Nothing;
+        let mut hedged = row("b", &[], None, None);
+        hedged.confidence.verdict = Verdict::Guess;
+        let mut answered = row("c", &[], None, None);
+        answered.confidence.verdict = Verdict::Hit;
+
+        let s = summarise(&[refused, hedged, answered]);
+
+        assert_eq!(s.abstention_expected, 3);
+        assert_eq!(s.abstention_refused + s.abstention_hedged + s.abstention_answered, 3);
+        assert_eq!(s.abstention_answered, 1, "a question the set says to decline, answered");
     }
 
     /// The baseline has to be the strongest fixed choice available, not a convenient

@@ -138,8 +138,7 @@ jobs:
             them: check it after vendoring, because a binary committed into another
             repository is a binary nobody can tell apart from a different one.
 
-            `kb` reads the markdown on every run and shells out to `git` to decide which
-            files are private. Where git cannot be consulted, and a deployment bundle
-            without `.git` is exactly that, every base is left out and the answer is
-            empty. See "Running it somewhere that is not your machine" in
-            `tools/kb/README.md`.
+            `kb` reads the markdown on every run and reads each base's private layer off
+            the base itself, so a deployment bundle needs no `.git` and no git binary.
+            Pass `--all` only if the consumer is meant to see the private layer. See
+            "Running it somewhere that is not your machine" in `tools/kb/README.md`.

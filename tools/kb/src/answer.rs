@@ -85,6 +85,9 @@ pub fn prompt(question: &str, answer: &Answer, mode: Mode) -> String {
            plainly and say what is missing. \"The library does not hold this\" is a \
            correct and complete answer.\n\
          - Cite the file path after the claim it supports, in parentheses.\n\
+         - A passage marked SHORT MEMORY is recent and nobody has judged or distilled \
+           it yet. You may use it. If you do, say that the claim comes from short \
+           memory, so the reader knows it is fresh rather than settled.\n\
          - Answer in the language the question was asked in. Be brief: the reader \
            asked a question, not for a report.\n\n",
     );
@@ -103,12 +106,20 @@ pub fn prompt(question: &str, answer: &Answer, mode: Mode) -> String {
 
     out.push_str("THE PASSAGES:\n");
     for f in answer.found.iter().take(mode.files()) {
+        // The label rides on every passage header rather than once per file, because
+        // a model reading passage four does not reliably remember what was said above
+        // passage one.
+        let layer = match f.layer {
+            crate::retrieve::Layer::Short => " [SHORT MEMORY: recent, not distilled]",
+            crate::retrieve::Layer::Long => "",
+        };
         for p in f.passages.iter().take(2) {
             out.push_str(&format!(
-                "\n--- {}/{} ({})\n{}\n",
+                "\n--- {}/{} ({}){}\n{}\n",
                 f.base,
                 f.path,
                 if p.heading_path.is_empty() { "top" } else { &p.heading_path },
+                layer,
                 p.text.trim()
             ));
         }
@@ -253,6 +264,7 @@ mod tests {
         Retrieved {
             base: base.into(),
             path: path.into(),
+            layer: crate::retrieve::layer_of(path),
             title: String::new(),
             purpose: String::new(),
             score: 1.0,
@@ -304,6 +316,26 @@ mod tests {
         assert!(p.contains("The library does not hold this"));
         assert!(p.contains("a guess; the match may be a coincidence"));
         assert!(p.contains("treat every passage as a lead"));
+    }
+
+    /// The short memory reaches the model with its label on and a rule about it, so
+    /// the decision to lean on a fresh, unjudged fact is the model's and is conscious.
+    /// The library passage in the same prompt carries no label, because the absence
+    /// is the signal for the settled half.
+    #[test]
+    fn a_short_memory_passage_is_labelled_and_the_rule_for_it_is_in_the_prompt() {
+        let a = answer_with(
+            vec![
+                hit("zed", "inbox/dropped.md", "the vendor changed the price yesterday"),
+                hit("zed", "knowledge/pricing.md", "the price is set quarterly"),
+            ],
+            Verdict::Hit,
+            30.0,
+        );
+        let p = prompt("what is the price", &a, Mode::Fast);
+        assert!(p.contains("inbox/dropped.md (H) [SHORT MEMORY: recent, not distilled]"), "{p}");
+        assert!(p.contains("knowledge/pricing.md (H)\n"), "the library passage is unlabelled: {p}");
+        assert!(p.contains("say that the claim comes from short memory"), "{p}");
     }
 
     #[test]

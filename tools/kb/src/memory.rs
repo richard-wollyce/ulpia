@@ -100,6 +100,41 @@ pub const SCORE_FLOOR: f32 = 17.5;
 /// next person to propose margin gating should meet it before spending the work.
 pub const MIN_MARGIN: f32 = 1.5;
 
+/// A question the base could not answer, handed back to whoever asked.
+///
+/// **It travels rather than only landing in a file, and that is the change F-03
+/// asked for.** The log lives beside the fleet, which works on a machine somebody
+/// owns and cannot work on a hosted one: the filesystem is read only, the instance is
+/// gone a second later, and the failure to write reached the caller as one line on the
+/// stderr of a child process. The measured result was a recall loss log holding two
+/// lines from a laptop while six real questions went unrecorded in production.
+///
+/// So the loss is returned whether or not it could be stored, with `error` saying why
+/// when it could not. A caller with nowhere to write can persist this where its own
+/// stack already writes, and one that can write gets the same object plus a file.
+#[derive(Debug, Clone)]
+pub struct RecallLoss {
+    pub question: String,
+    /// The vocabulary the base does know that looks like what was asked. Empty is an
+    /// honest answer: trigram overlap measures spelling, so a base with no
+    /// orthographic neighbour of any question word has nothing to offer.
+    pub looked_like: Vec<String>,
+    /// The day it was seen, in the log's own format, so a caller storing this
+    /// elsewhere keeps the field the log would have kept.
+    pub date: String,
+    /// Where the log was written, or where the attempt was made.
+    pub log: std::path::PathBuf,
+    /// Why the write failed, when it did.
+    pub error: Option<String>,
+}
+
+impl RecallLoss {
+    /// Whether the log holds this too, or whether the caller is the only copy.
+    pub fn recorded(&self) -> bool {
+        self.error.is_none()
+    }
+}
+
 /// What the router is willing to claim about its own top result.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Verdict {
@@ -252,9 +287,10 @@ pub struct Memory {
     /// `fleet.txt` lives, and the identity tier reads it: after expansion only the
     /// agent directories remain, and the fleet's own name is not in any of them.
     pub opened: Vec<PathBuf>,
-    /// Bases that could not be opened and were left out, with the fleet still open.
-    /// Empty in every ordinary run. Non-empty means somebody is mid rename or a directory
-    /// in the fleet root is not a base at all, and the caller should say so out loud.
+    /// Bases that were left out, with the fleet still open. Empty since ADR-0034: the one
+    /// reason a base used to be skipped, git not answering for its privacy, no longer
+    /// exists. Kept on the contract because `kb route --json` carries it and a caller
+    /// reads it; it is the field a future reason to leave a base out belongs in.
     pub skipped: Vec<PathBuf>,
     /// True when any index had to be discarded on open. The caller has to surface
     /// this: an emptied index answers "nothing matched", which reads as "the base
@@ -265,24 +301,33 @@ pub struct Memory {
 #[derive(Debug)]
 pub enum OpenError {
     Unreadable(PathBuf, std::io::Error),
-    /// Git could not be consulted, so no file's privacy is known, and unknown is not
-    /// public. Only raised when the caller did not ask for the private layer.
-    PrivacyUnknowable(PathBuf),
-    Store(String),
+    /// The index could not be opened. Carries whether one was there at all, because
+    /// that decides what the reader should do next and the underlying error does not
+    /// say: `Store::open` creates the index's parent before opening, so a base whose
+    /// `.kb/` never shipped fails as a permission error on a read only filesystem, and
+    /// permission is the proximate cause and the wrong thing to go and fix.
+    Store { path: PathBuf, reason: String, existed: bool },
 }
 
 impl std::fmt::Display for OpenError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             OpenError::Unreadable(p, e) => write!(f, "cannot read {}: {e}", p.display()),
-            OpenError::PrivacyUnknowable(p) => write!(
+            // **The cause first, then the fix, then the symptom.** This said only the
+            // symptom, and a deployment that had left `.kb/` out of its bundle read
+            // `cannot open the index: Permission denied (os error 13)` and went looking
+            // at file permissions. The underlying error stays, in brackets, because it
+            // is what distinguishes one cause from another when the guess is wrong.
+            OpenError::Store { path, reason, existed: false } => write!(
                 f,
-                "refusing to open {}: git could not be consulted, so there is no way to tell \
-                 which files are private. Either make it a git repository, or ask for the \
-                 private layer explicitly.",
-                p.display()
+                "cannot open the index at {}: nothing has been indexed here yet. \
+                 Run `kb index` on the base, and make sure the .kb/ directory it \
+                 writes reaches the machine that answers the question. ({reason})",
+                path.display()
             ),
-            OpenError::Store(e) => write!(f, "cannot open the index: {e}"),
+            OpenError::Store { path, reason, existed: true } => {
+                write!(f, "cannot open the index at {}: {reason}", path.display())
+            }
         }
     }
 }
@@ -302,51 +347,30 @@ impl Memory {
         let mut index_was_rebuilt = false;
         // Bases the open had to leave out. Carried on the Memory rather than logged, so a
         // surface can say which ones went missing instead of quietly answering from fewer.
-        let mut skipped: Vec<PathBuf> = Vec::new();
+        // Nothing fills it since ADR-0034; see the field's own comment.
+        let skipped: Vec<PathBuf> = Vec::new();
 
         for root in expand_roots(paths) {
             let base = Base::discover(&root, private)
                 .map_err(|e| OpenError::Unreadable(root.clone(), e))?;
 
-            if !private && !base.tracked_only {
-                // **The base is skipped, not served, and the fleet stays open.**
-                //
-                // Refusing to serve a base whose privacy git cannot answer for is the whole
-                // point and it is unchanged: unknown is not public. What changed is the
-                // blast radius. This used to return, so one unreadable directory closed
-                // every base in the fleet, and after the discovery predicate became
-                // structural on 2026-08-20 that started happening for an ordinary reason:
-                // any husk left in the fleet root is a base, and a rename in progress leaves
-                // husks. It happened twice the same day, once to a profile directory whose
-                // index was locked and once to another session renaming two agents, where
-                // `fleet/aldo` held nothing but its `.kb` and took the fleet down with it.
-                //
-                // A base that contributes nothing is a base that contributes nothing. The
-                // guarantee is per base and skipping keeps it; failing the open turned one
-                // directory's problem into everybody's.
-                //
-                // **The notice is emitted here, and it used to be emitted by one caller.**
-                // `skipped_bases()` was read only by `cmd_route`, so `kb serve`, `kb boot`,
-                // `kb ui`, `kb eval`, `kb check` and `kb index` all opened a fleet with an
-                // agent missing and said nothing. That is the combination `boot.rs` names as
-                // the most expensive to find: degraded and silent. Putting the sentence at
-                // the skip rather than at a caller is what makes forgetting it impossible;
-                // the accessor stays for callers that want to render it their own way.
-                //
-                // stderr, not stdout, because `kb serve` speaks JSON-RPC on stdout and
-                // `kb index --json` is parsed by machines.
-                eprintln!(
-                    "kb: left out {}: git could not be consulted there, so its files could be \
-                     private and none are being served. A husk left by a rename in progress \
-                     looks exactly like this, and so does a base nobody has committed yet.",
-                    root.display()
-                );
-                skipped.push(root);
-                continue;
-            }
+            // **There is no longer a base that cannot be served.** This is where a base
+            // git could not answer for was left out, with a notice, under the rule that
+            // unknown is not public. ADR-0034 removed the question: the private layer is a
+            // declaration read off the base itself, so it cannot be unknown, and a folder
+            // with a note in it is served the moment it exists. `skipped` stays on the
+            // contract, empty, because callers read it and a field that vanishes breaks
+            // them; the day a base is left out for some other reason, it is the field to
+            // name it in.
 
-            let store =
-                Store::open(&index_path(&root)).map_err(|e| OpenError::Store(e.to_string()))?;
+            // Asked before the open, because opening is what creates it.
+            let index = index_path(&root);
+            let existed = index.exists();
+            let store = Store::open(&index).map_err(|e| OpenError::Store {
+                path: index.clone(),
+                reason: e.to_string(),
+                existed,
+            })?;
             index_was_rebuilt |= store.rebuilt;
 
             entries.extend(index::build(&base));
@@ -423,24 +447,59 @@ impl Memory {
         self.entries.is_empty()
     }
 
-    /// Records a question the free stage could not answer. See [`crate::misses`].
+    /// How many words the base offers back on a miss.
     ///
-    /// On the contract rather than at each call site, for the reason the module
-    /// header gives: `mcp.rs` and `main.rs` both have a miss path, and two callers
-    /// building the same behaviour separately is how they came to disagree twice
-    /// before. Writing is confined to this one method and touches nothing a query
-    /// reads.
+    /// Small on purpose. The whole keyword space is 849 terms and about 12 KB on this
+    /// fleet, and handing all of it over on every miss would make the failure path the
+    /// most expensive reply any surface produces. A shortlist is what a caller can act
+    /// on; a dump is something it has to route through a second time.
     ///
-    /// **An empty base is never recorded.** A miss with nothing to search is not a
-    /// recall loss, and counting it would corrupt the only number the log exists to
-    /// produce.
-    pub fn record_miss(&self, question: &str, looked_like: &[String]) {
-        if self.is_empty() {
-            return;
+    /// One number, here, because it lived in two places: `mcp.rs` had its own constant
+    /// with this reasoning attached and `main.rs` had the literal 8 with none, and two
+    /// surfaces free to choose meant one question could be answered two ways.
+    pub const SUGGEST_LIMIT: usize = 8;
+
+    /// **The recall loss path, whole, for every surface: decide, record, and answer
+    /// with the vocabulary to offer.** Empty when this was not a loss.
+    ///
+    /// A refusal is the loss. A `guess` is not: it was served, with a warning, and a
+    /// question that reached the caller is not a question the base failed to reach.
+    /// That line is a decision and not an obvious truth, so it is pinned by a test:
+    /// moving it changes what `kb-misses.txt` counts, and both of ADR-0006's and
+    /// ADR-0013's revisit triggers are measured against that file.
+    ///
+    /// **Why the whole path and not just the writing.** The writing was already here,
+    /// with a comment saying two callers building it separately is how they came to
+    /// disagree twice. They disagreed a third time anyway, because only the writing
+    /// moved and the *deciding* stayed at the call site: `route --json` and the MCP
+    /// `retrieve` tool asked whether the fused list was empty, the terminal `route` and
+    /// the MCP `route` tool asked the keyword list, and `kb answer` suggested without
+    /// ever recording at all. Four definitions of one measurement, and the surface a
+    /// deployment uses had the hole in it: a question the text scorer answered and the
+    /// gate refused went unrecorded everywhere it mattered, which is exactly the loss
+    /// worth having, because the base holds the answer and only its keys are wrong.
+    /// F-02 in `reports/2026-08-29-first-integration.md`.
+    ///
+    /// A predicate would not have fixed it. Surfaces would have kept pairing it with
+    /// their own `suggest` and their own write, which is three chances to differ. One
+    /// call, one behaviour, nothing left at the call site to get wrong.
+    pub fn recall_loss(&self, question: &str, confidence: &Confidence) -> Option<RecallLoss> {
+        if self.is_empty() || confidence.verdict != Verdict::Nothing {
+            return None;
         }
-        if let Some(root) = self.opened.first() {
-            crate::misses::record(root, question, looked_like, &crate::misses::today());
-        }
+        let looked_like = self.suggest(question, Self::SUGGEST_LIMIT);
+        let date = crate::misses::today();
+        let root = self.opened.first().cloned().unwrap_or_default();
+        let log = crate::misses::path_in(&root);
+        let error = crate::misses::record(&root, question, &looked_like, &date).err();
+
+        Some(RecallLoss {
+            question: question.to_string(),
+            looked_like,
+            date,
+            log,
+            error,
+        })
     }
 
     /// What the base knows that looks like what was asked, for when nothing matched.
@@ -1272,6 +1331,160 @@ mod tests {
         dir
     }
 
+    /// A base holding one findable note, opened. Enough for the recall loss tests,
+    /// which need `is_empty()` to be false and a root to write into. No index is
+    /// synced because none of this reads chunks: the decision under test is made from
+    /// the verdict, which is the entire point of it.
+    fn one_note_base(name: &str) -> (PathBuf, Memory) {
+        let root = scratch(name).join("probe");
+        std::fs::create_dir_all(root.join("knowledge")).expect("mkdir");
+        std::fs::write(root.join("MAP.md"), "# MAP\n").expect("map");
+        std::fs::write(
+            root.join("knowledge").join("zebra.md"),
+            "# Zebra\n\n**Search for:** `zebra`, `quagga`\n\n**Exists to:** hold one animal\n",
+        )
+        .expect("note");
+        let memory = Memory::open(&[root.as_path()], true).expect("opens");
+        (root, memory)
+    }
+
+    fn saying(v: Verdict) -> Confidence {
+        Confidence { verdict: v, agreement: 0, keyword_score: 0.0, margin: 0.0 }
+    }
+
+    /// **The definition of a recall loss lives here and nowhere else.** F-02 in
+    /// `reports/2026-08-29-first-integration.md`: the writing was already on the
+    /// contract and the deciding was not, so six surfaces held four different opinions
+    /// about which questions the log counts. Two tested list length on the keyword
+    /// ranking, two on the fused one, `kb answer` suggested without ever recording, and
+    /// the log that the two live revisit triggers are measured against counted a
+    /// different population depending on which door the question came through.
+    ///
+    /// A refusal is the loss. A `guess` is not, today, and that is a decision rather
+    /// than an oversight: it changes what the file counts, so it gets settled with a
+    /// measurement and not in a commit message. This test is what makes changing it
+    /// deliberate.
+    #[test]
+    fn only_a_refusal_is_a_recall_loss_and_the_decision_lives_on_the_contract() {
+        let (root, memory) = one_note_base("recall-loss");
+        let log = crate::misses::path_in(&root);
+
+        assert!(memory.recall_loss("uma pergunta respondida", &saying(Verdict::Hit)).is_none());
+        assert!(memory.recall_loss("uma pergunta chutada", &saying(Verdict::Guess)).is_none());
+        assert!(!log.exists(), "an answer that was served is not a loss: {}", log.display());
+
+        let loss = memory
+            .recall_loss("uma pergunta sobre zebras", &saying(Verdict::Nothing))
+            .expect("a refusal is a recall loss");
+        assert_eq!(loss.looked_like, vec!["zebra".to_string()], "the vocabulary comes with it");
+        assert_eq!(loss.question, "uma pergunta sobre zebras");
+        assert_eq!(loss.log, log, "and it says where it went");
+        assert!(loss.recorded(), "the base is writable here: {:?}", loss.error);
+
+        let written = std::fs::read_to_string(&log).expect("the refusal was recorded");
+        assert!(written.contains("uma pergunta sobre zebras"), "{written}");
+        assert!(!written.contains("chutada"), "a guess was served, so it is not a loss: {written}");
+    }
+
+    /// **The loss comes back whether or not it could be stored, which is the whole
+    /// point of F-03.** A hosted consumer has no writable path beside its base, so the
+    /// only copy that will ever exist is the one it is handed. Reporting the failure
+    /// on stderr and returning nothing is how a deployment ends up with a recall loss
+    /// log holding two lines written months earlier on somebody's laptop.
+    #[test]
+    fn a_loss_that_could_not_be_written_is_still_returned_and_says_why() {
+        let (root, memory) = one_note_base("recall-loss-readonly");
+        // A directory where the log has to go, which no write can succeed against on
+        // either platform. Simulating the read only filesystem itself is not portable.
+        std::fs::create_dir_all(crate::misses::path_in(&root)).expect("mkdir");
+
+        let loss = memory
+            .recall_loss("uma pergunta sobre zebras", &saying(Verdict::Nothing))
+            .expect("the loss happened even though the log did not");
+
+        assert!(!loss.recorded(), "nothing could have been written");
+        assert!(loss.error.is_some(), "and the caller is told why");
+        assert_eq!(
+            loss.looked_like,
+            vec!["zebra".to_string()],
+            "the vocabulary still reaches the caller: a failed write is not a failed query"
+        );
+    }
+
+    /// **An error that names a symptom sends the reader to the wrong problem.** A
+    /// deployment whose bundle left `.kb/` behind got
+    /// `cannot open the index: Permission denied (os error 13)`, and permission is the
+    /// true proximate cause and the misleading one: `Store::open` creates the index's
+    /// parent directory before opening, so on a read only filesystem a missing index
+    /// fails as a permission error. The integrator passes our text straight to the
+    /// person on screen, which is what a good integrator does and what this should be
+    /// written for. F-07 in `reports/2026-08-29-first-integration.md`.
+    #[test]
+    fn an_index_that_was_never_built_names_the_command_that_builds_it() {
+        let base = scratch("index-missing").join("probe");
+        std::fs::create_dir_all(&base).expect("mkdir");
+        std::fs::write(base.join("agent.txt"), "name = Probe\n").expect("agent");
+        // A file where `.kb/` has to go, so creating the index directory cannot
+        // succeed. A read only mount produces the same failure and is not portable.
+        std::fs::write(base.join(".kb"), "not a directory").expect("blocker");
+
+        let said = match Memory::open(&[base.as_path()], true) {
+            Err(e) => e.to_string(),
+            Ok(_) => panic!("the index cannot be opened"),
+        };
+
+        assert!(said.contains("kb index"), "it names the fix: {said}");
+        assert!(
+            said.to_lowercase().contains("not been built") || said.contains("nothing has been indexed"),
+            "it names the cause before the symptom: {said}"
+        );
+        assert!(
+            said.contains(&index_path(&base).display().to_string()),
+            "and where it was looking: {said}"
+        );
+    }
+
+    /// The other branch, which must not give that advice: an index that is there and
+    /// will not open is not fixed by building one, and sending somebody to `kb index`
+    /// for it is the same defect wearing the opposite sign.
+    #[test]
+    fn an_index_that_exists_and_will_not_open_reports_the_reason_and_no_wrong_advice() {
+        let base = scratch("index-broken").join("probe");
+        std::fs::create_dir_all(&base).expect("mkdir");
+        std::fs::write(base.join("agent.txt"), "name = Probe\n").expect("agent");
+        // A directory where the database file has to be: it exists, and no connection
+        // can be opened to it.
+        std::fs::create_dir_all(index_path(&base)).expect("blocker");
+
+        let said = match Memory::open(&[base.as_path()], true) {
+            Err(e) => e.to_string(),
+            Ok(_) => panic!("the index cannot be opened"),
+        };
+
+        assert!(!said.contains("kb index"), "building one is not the fix here: {said}");
+        assert!(said.contains("cannot open the index"), "{said}");
+    }
+
+    /// A miss against a library nobody has filled in is a fact about the library. The
+    /// log exists to say whether this design converges, and counting these would
+    /// corrupt the one number it produces.
+    #[test]
+    fn an_empty_base_is_not_a_recall_loss_because_there_was_nothing_to_miss() {
+        // No `Search for:` line anywhere, not even in a map: an entry is built from
+        // that line and from nothing else since ADR-0028, so this base indexes to zero.
+        let base = scratch("recall-loss-empty").join("hollow");
+        std::fs::create_dir_all(base.join("knowledge")).expect("mkdir");
+        std::fs::write(base.join("agent.txt"), "name = Hollow\n").expect("agent");
+        std::fs::write(base.join("knowledge").join("draft.md"), "# Draft\n\nnothing yet.\n")
+            .expect("note");
+
+        let memory = Memory::open(&[base.as_path()], true).expect("opens");
+        assert!(memory.is_empty(), "the fixture has no indexable note");
+
+        assert!(memory.recall_loss("qualquer coisa", &saying(Verdict::Nothing)).is_none());
+        assert!(!crate::misses::path_in(&base).exists(), "nothing to miss, nothing recorded");
+    }
+
     /// Builds a `Retrieved` for the gate tests. Named fields on purpose: the gate
     /// reads three of them and a positional helper would let a future field land in
     /// the wrong slot silently.
@@ -1279,6 +1492,7 @@ mod tests {
         Retrieved {
             base: base.into(),
             path: format!("{base}/p.md"),
+            layer: crate::retrieve::Layer::Long,
             title: String::new(),
             purpose: String::new(),
             score: fused,
@@ -1301,14 +1515,14 @@ mod tests {
     #[test]
     fn agreement_between_the_scorers_is_what_separates_a_hit_from_a_guess() {
         let both = Retrieved {
-            base: "yaron".into(), path: "p".into(), title: String::new(),
+            base: "yaron".into(), path: "p".into(), layer: crate::retrieve::Layer::Long, title: String::new(),
             purpose: String::new(), score: 0.032,
             keyword_score: 12.0,
             why: vec!["keywords #2".into(), "text #5".into()],
             matched: vec![], passages: vec![],
         };
         let one = Retrieved {
-            base: "steve".into(), path: "q".into(), title: String::new(),
+            base: "steve".into(), path: "q".into(), layer: crate::retrieve::Layer::Long, title: String::new(),
             purpose: String::new(), score: 0.016,
             keyword_score: 0.0,
             why: vec!["text #1".into()],
@@ -1563,33 +1777,22 @@ mod tests {
         assert_eq!(expand_roots(&[&empty]), vec![empty]);
     }
 
-    /// The guarantee the privacy gate exists for: a base outside git has no knowable
-    /// private layer, so **nothing in it is served**.
-    ///
-    /// **What changed on 2026-08-20 is the blast radius, not the guarantee.** This used to
-    /// assert a refusal that closed the whole fleet, and once the discovery predicate became
-    /// structural that started firing for ordinary reasons: any husk in the fleet root is a
-    /// base, and a rename in progress leaves husks. It happened twice in one day. The base
-    /// is now skipped and named, which serves nothing from it exactly as before and stops
-    /// one directory's problem from becoming every base's.
+    /// **The test this replaces asserted the opposite, and the opposite was the defect.**
+    /// It pinned that a base outside git is skipped and nothing in it is served, under
+    /// the rule that unknown is not public. ADR-0034: a memory layer that refuses a
+    /// folder until somebody runs `git init` fails at the first interaction anybody has
+    /// with it, and the rule protected nothing in daily use because every owner surface
+    /// passes `--all`. A folder with a note in it is a base, and it serves the note.
     #[test]
-    fn a_base_outside_git_is_skipped_and_named_rather_than_closing_the_fleet() {
+    fn a_base_outside_git_is_served_because_privacy_is_declared_not_asked() {
         let root = scratch("nogit");
         let base = make_base(&root, "loose");
+        assert!(!base.join(".git").exists(), "the fixture has no repository on purpose");
 
-        let m = Memory::open(&[&base], false).expect("the fleet still opens");
-        assert!(m.agents.is_empty(), "nothing from an unknowable base is served");
-        assert_eq!(m.entry_count(), 0, "and none of its entries reach the index");
-        assert_eq!(
-            m.skipped_bases(),
-            &[base.clone()],
-            "and it is named, because skipping in silence is the failure this repository \
-             keeps finding"
-        );
-
-        // Asking for it explicitly is allowed: that is the deliberate act.
-        let m = Memory::open(&[&base], true).expect("private open");
-        assert_eq!(m.scope(), Scope::All);
-        assert!(m.skipped_bases().is_empty(), "nothing was skipped when it was asked for");
+        let m = Memory::open(&[&base], false).expect("opens without asking anybody");
+        assert_eq!(m.agents.len(), 1, "the base is served");
+        assert!(m.entry_count() > 0, "and its entries reach the index");
+        assert!(m.skipped_bases().is_empty(), "nothing was left out");
+        assert_eq!(m.scope(), Scope::Public);
     }
 }

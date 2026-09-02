@@ -148,7 +148,9 @@ your PATH or call it by that path in everything below.
 
 Building it yourself is the honest default for a tool that reads your notes, and it is not
 the only way. Tagged releases carry a prebuilt `kb-linux-x64` and `kb-windows-x64.exe`,
-each with a `.sha256` beside it:
+each with a `.sha256` beside it. **There is no macOS build**: nobody here runs macOS, so a
+published artifact would be one nothing has ever executed, which is worth less than its
+absence. Build from source there.
 
 ```
 gh release download kb-v0.1.0 -R richard-wollyce/ulpia -p "kb-linux-x64*"
@@ -200,53 +202,35 @@ Then create your own first agent:
 kb init yaron
 ```
 
-That writes the full agent shape, initialises git inside the agent, and makes the
-first commit, so the agent it creates can be opened by the system that created it.
-When a git repository already covers that path and does not ignore it, no repository is
-created: the files are staged into the one that is there and the first commit is yours to
-write. The tool says which of the two happened.
+That writes the full agent shape and nothing else: no repository is created and none is
+needed. The agent it creates is served by the system that created it, as it stands.
 
-Now write a note. **The order of the next four steps is the order, and getting it wrong
-fails silently**, which is the one thing worth reading twice on this page:
+Now write a note. Three steps, and only one order between them matters:
 
 ```
 1. write   fleet/yaron/knowledge/creatina.md, with a **Search for:** line at the top
-2. commit  kb commit fleet/yaron/knowledge/creatina.md -m "the dose"
-3. index   kb index .
-4. ask     kb route "quanto de creatina por dia" .
+2. index   kb index .
+3. ask     kb route "quanto de creatina por dia" .
 ```
 
-**Anything git does not track is not served**, because unknown is not public. That rule is
-load bearing and it has no exception, so a note written and not committed is a note the
-router will not open. Here is what skipping step 2 actually looks like, run in a fresh
-clone:
+**A note is served the moment it is on disk.** The keyword scorer re-reads your files on
+every run, so step 3 finds the new note with or without step 2. What step 2 buys is the
+second scorer: the full text index holds the chunks, and a note written after the last
+`kb index` has none, so `--hybrid` on it drops to one scorer and reports a weak guess with
+no passage attached. Re-run `kb index` and both scorers agree again. That is the only
+silent failure left in this flow, and it is the quiet kind: the answer is not wrong, it is
+thinner than it should be.
 
-```
-$ kb index .
-  yaron      2 reindexed, 0 unchanged, 0 removed, 5 chunks
-  total: 3 files, 5 chunks, 1 indexes
+An earlier version of this page had a fourth step between writing and indexing, `kb commit`,
+and a demonstration of what skipping it looked like: the index reporting success, the miss
+blaming your keywords, and the real cause being that the file was not yet tracked by git,
+because the router asked git what it may serve. That rule is gone
+([ADR-0034](decisions/0034-git-leaves-the-runtime.md)). `kb commit` is still here for
+anyone who versions a fleet, and it is not in the path between a note and an answer.
 
-$ kb route "quanto de creatina por dia" .
-indexed:  1 entries across 1 agents, 0 aliases
-
-  nothing matched. Either the base does not cover it, or the
-  Search for lines do not carry the words a real question uses.
-```
-
-**The index reports success and the miss blames your keywords, and neither is what
-happened.** The file is uncommitted, so it was never eligible. The tell is `1 entries`
-where you expected 2. Commit it and the same question scores 17.97 and lands first.
-
-Step 3 has to come after step 2 for the same reason, and this half is quieter still: the
-keyword scorer re-reads your files on every run, so committing alone brings it back
-immediately. **The full text index does not**, because whether a file was public is
-recorded in it at index time. Commit after indexing and `--hybrid` silently drops to one
-scorer and reports the result as a weak guess with no passage attached. Re-run `kb index`
-and both scorers agree again.
-
-While you are still drafting and nothing is committed yet, `--all` on any command includes
-what git does not track. It is the right tool for a draft and the wrong one for a habit:
-it turns the privacy filter off.
+`--all` on any command includes the private layer, `profile/`, `projects/` and `records/`
+unless the base declares otherwise. It is the right flag for your own agents and the wrong
+one for a consumer that other people talk to: it turns the privacy filter off.
 
 ```
 kb index .                      build one index per agent
@@ -405,32 +389,33 @@ anything.
 
 ## Privacy is a property of the layout, not a promise
 
-Vesta reads git to know what is private. **A file git does not track is a file Vesta will
-not serve** unless you ask for it explicitly, and where git cannot be consulted at all,
-unknown is not public: that base is left out and none of its files are served.
+Each base declares its own private layer, and nothing outside the base is asked. The
+declaration is one line in `agent.txt`:
 
 ```
-$ kb route "how do I roll back" /somewhere/outside/any/repo
-
-kb: left out /somewhere/outside/any/repo/zed: git could not be consulted there, so its
-files could be private and none are being served. A husk left by a rename in progress
-looks exactly like this, and so does a base nobody has committed yet.
+private = profile/, projects/, records/
 ```
 
-**It leaves that base out and keeps the rest of the fleet open**, rather than failing the
-whole open, and that is a deliberate change from an earlier version of this page: one
-directory whose git could not be read used to close every base beside it, which happened
-twice in one day for the ordinary reason that a rename in progress leaves a husk behind
-and a husk looks exactly like a base. The guarantee is per base and skipping keeps it.
+That value is the default, so a base that says nothing behaves exactly as the folder map
+says: those three folders describe a real person and real work, and **they are served only
+with `--all`**. `.` declares the whole base private, and the person's base is whole by
+name. A folder with a note in it is a base. No `git init`, no manifest, no marker.
 
-The cost of that choice is that **the reply is an empty result set and the exit code is
-zero**, which reads exactly like a library that does not cover your question. The notice
-goes to stderr, and `kb route --json` names the left out bases in a `skipped` array for
-callers that only read stdout. If you are automating anything against this, check that
-field before you conclude the base is thin.
+**Git is not consulted, and it used to be.** An earlier version read `git ls-files` to
+decide what it may serve, on the argument that the thing deciding what is served should be
+the thing deciding what is published. The argument was right and the cost was not: a
+folder was refused until somebody ran `git init`, a note was invisible until it was
+tracked, a deployment bundle without `.git` served nothing, a fleet of a hundred agents
+shelled out to git a hundred times per question, and every surface the owner actually
+uses passed `--all` and bypassed the gate anyway. A memory layer is used as a database,
+and nobody asks a database to commit itself before it will answer.
+[ADR-0034](decisions/0034-git-leaves-the-runtime.md).
 
-`fleet/` is a separate repository and is gitignored by this one, so `git add -A` here
-cannot descend into it. Publishing a note is not a mistake you are able to make.
+**What git is still for**: versioning a fleet, if you want that, with `kb commit` to keep
+two sessions from sweeping each other's work into one message. `kb init` writes a
+`.gitignore` that mirrors the declared private layer, so a fleet you choose to version
+starts with the right ignores, and `kb check` warns when the two disagree. This repository
+gitignores `fleet/` entirely, so `git add -A` here cannot descend into it.
 
 ---
 
@@ -537,16 +522,18 @@ The base has to be on the same filesystem as the binary. That works on a server 
 on a laptop, and four things about it surprise people. The full version, with what each one
 is measured on, is in [`tools/kb/README.md`](tools/kb/README.md). The short version:
 
-- **A deployment bundle has no `.git`, so by default nothing is served.** This is the
-  failure above wearing different clothes, and it fails only in production: the same
-  command works on your machine, where git answers. Pass `--all` over a base you built to
-  be entirely publishable, and read `skipped` in the JSON.
+- **A deployment bundle needs no `.git`.** The private layer is read off the base you
+  shipped, so ship the base and the `.kb/` index built beside it, and pass `--all` only if
+  the consumer is meant to see the private layer. It used to serve nothing without git,
+  and the first deployment passed `--all` just to get past that, which is the wrong reason.
 - **A read-only filesystem is survivable.** The index is built before the deploy and only
   read at runtime. The one file a query writes is the miss log, and failing to write it
   prints on stderr without failing the query.
-- **Every process start pays the cold open**: 136 ms to open the fleet and answer the
-  first question, then a warm p50 of 0.68 ms, measured on one laptop. Spawning the binary
-  per request pays it every time; a long lived `kb serve` pays it once.
+- **Every process start pays the cold open, and the operating system decides what that
+  costs.** Spawn, open and answer measured at p50 184.8 ms on a Windows laptop and at
+  p50 9.6 ms on Linux, the second by the first team to deploy this and not reproduced
+  here. On Linux the spawn is not worth engineering around; a long lived `kb serve` pays
+  the open once and is for a loop, not for a request.
 - **The libc has to match, or there has to be none.** Use the musl build above.
 
 `kb route --json` is the surface for all of this. One line on stdout carrying the verdict,

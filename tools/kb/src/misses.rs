@@ -31,6 +31,9 @@ use std::path::{Path, PathBuf};
 /// Lives beside `fleet.txt` rather than in `.kb/`, because `.kb/` is derived and
 /// disposable per ADR-0003 and this is neither. Deleting the index should lose a
 /// rebuild; deleting this loses evidence that cannot be recomputed.
+///
+/// That reasoning holds where the fleet is on a disk somebody owns, and only there.
+/// See [`MISSES_PATH_ENV`] for the machine where it does not.
 pub const MISSES_TXT: &str = "kb-misses.txt";
 
 const HEADER: &str = "\
@@ -55,8 +58,34 @@ pub struct Miss {
     pub looked_like: Vec<String>,
 }
 
+/// The variable that moves the log somewhere writable.
+///
+/// **Named because the default cannot work everywhere.** The log lives beside the
+/// fleet on purpose, and that is right on a machine somebody owns. A hosted consumer
+/// has a read only filesystem and one writable directory that is not beside anything,
+/// so without this the recall loss log on the surface with the most real questions in
+/// it is empty. F-03 in `reports/2026-08-29-first-integration.md`.
+///
+/// It names a file and not a directory, so nothing is guessed. Two fleets pointed at
+/// one path share one log, which is the caller's decision to make and is why the path
+/// is theirs to write rather than ours to derive.
+pub const MISSES_PATH_ENV: &str = "KB_MISSES_PATH";
+
+/// Where the log goes, given the override or the absence of one.
+///
+/// Pure, so the branch can be tested without a process wide variable racing every
+/// other test in the binary. [`path_in`] is the one line that reads the environment.
+pub fn path_for(root: &Path, override_path: Option<&str>) -> PathBuf {
+    match override_path.map(str::trim).filter(|p| !p.is_empty()) {
+        Some(p) => PathBuf::from(p),
+        // An empty variable is a platform that exported the name and chose no value,
+        // which is not the same as choosing a path and is not worth honouring.
+        None => root.join(MISSES_TXT),
+    }
+}
+
 pub fn path_in(root: &Path) -> PathBuf {
-    root.join(MISSES_TXT)
+    path_for(root, std::env::var(MISSES_PATH_ENV).ok().as_deref())
 }
 
 /// Adds one miss, or bumps the one already there, and rewrites the file sorted.
@@ -65,10 +94,15 @@ pub fn path_in(root: &Path) -> PathBuf {
 /// rewrite, which at the size this reaches is microseconds, and it buys a file that
 /// is always sorted, always deduplicated and always readable by a human with `cat`.
 /// **The file is the interface**, so no subcommand exists to render it.
-pub fn record(root: &Path, question: &str, looked_like: &[String], today: &str) {
+pub fn record(
+    root: &Path,
+    question: &str,
+    looked_like: &[String],
+    today: &str,
+) -> Result<(), String> {
     let question = question.trim();
     if question.is_empty() {
-        return;
+        return Ok(());
     }
 
     let path = path_in(root);
@@ -100,8 +134,20 @@ pub fn record(root: &Path, question: &str, looked_like: &[String], today: &str) 
     // A miss log that cannot be written is not worth failing a query over. The
     // question still gets answered; only the evidence is lost, and saying so on
     // stderr is louder than a silent swallow without being fatal.
-    if let Err(e) = std::fs::write(&path, render(&seen)) {
-        eprintln!("kb: could not write {}: {e}", path.display());
+    //
+    // **The reason is returned as well as printed, and that is F-03.** stderr from a
+    // child process inside a serverless function is where information goes to die: the
+    // deployment that found this had a `Permission denied` on every query and a caller
+    // that could not see it, because `route` exits 0 and the caller reads stdout. A
+    // caller handed the reason can put the loss somewhere else, or at least say out
+    // loud that it is not being kept.
+    match std::fs::write(&path, render(&seen)) {
+        Ok(()) => Ok(()),
+        Err(e) => {
+            let reason = format!("could not write {}: {e}", path.display());
+            eprintln!("kb: {reason}");
+            Err(reason)
+        }
     }
 }
 
@@ -237,6 +283,57 @@ fn civil_from_days(z: i64) -> (i64, u32, u32) {
 mod tests {
     use super::*;
 
+    /// The override, tested as a pure function over the value rather than over the
+    /// environment. Setting a process wide variable inside a test that runs in
+    /// parallel with every other test is a race by construction: the surrounding
+    /// tests write miss logs of their own, and one of them reading a variable set for
+    /// a different test would send its log somewhere else and fail intermittently.
+    ///
+    /// So the branch is here, where it is pure, and the one line that reads the
+    /// environment is verified by running the binary with the variable set. That run
+    /// is in `reports/2026-08-29-first-integration.md`; it is not in this file, and
+    /// saying so is the point.
+    #[test]
+    fn an_override_moves_the_log_and_an_empty_one_does_not() {
+        let base = Path::new("/fleet");
+
+        assert_eq!(path_for(base, None), base.join(MISSES_TXT), "beside the base by default");
+        assert_eq!(
+            path_for(base, Some("/tmp/kb-misses.txt")),
+            PathBuf::from("/tmp/kb-misses.txt"),
+            "an ephemeral machine points this at the one writable directory it has"
+        );
+        assert_eq!(
+            path_for(base, Some("   ")),
+            base.join(MISSES_TXT),
+            "a platform that sets the variable to nothing has not chosen a path"
+        );
+        assert_eq!(path_for(base, Some("")), base.join(MISSES_TXT), "nor has an empty one");
+    }
+
+    /// A write that cannot happen is reported rather than swallowed, and the caller
+    /// gets the reason. On a read only deployment this is the difference between a
+    /// caller that knows the evidence was lost and one that finds out months later
+    /// that its recall loss log has two lines in it.
+    #[test]
+    fn a_write_that_fails_comes_back_with_its_reason() {
+        let dir = scratch("unwritable");
+        // A directory where the file has to go. `fs::write` fails on Windows and on
+        // Linux alike, which a permission bit does not: chmod is a no-op for an
+        // administrator on one of them.
+        std::fs::create_dir_all(path_in(&dir)).expect("mkdir");
+
+        let outcome = record(&dir, "uma pergunta perdida", &[], "2026-08-30");
+        let reason = outcome.expect_err("writing into a directory cannot succeed");
+        assert!(!reason.is_empty(), "the caller is handed something it can print");
+    }
+
+    #[test]
+    fn a_write_that_succeeds_says_so() {
+        let dir = scratch("writable");
+        assert!(record(&dir, "uma pergunta perdida", &[], "2026-08-30").is_ok());
+    }
+
     fn scratch(name: &str) -> PathBuf {
         let dir = std::env::temp_dir().join(format!("kb-misses-{name}"));
         let _ = std::fs::remove_dir_all(&dir);
@@ -262,8 +359,8 @@ mod tests {
     #[test]
     fn the_same_question_is_counted_rather_than_repeated() {
         let dir = scratch("counted");
-        record(&dir, "quanto de disco livre", &[], "2026-08-17");
-        record(&dir, "quanto de disco livre", &[], "2026-08-18");
+        record(&dir, "quanto de disco livre", &[], "2026-08-17").expect("write");
+        record(&dir, "quanto de disco livre", &[], "2026-08-18").expect("write");
 
         let text = std::fs::read_to_string(path_in(&dir)).expect("read");
         assert_eq!(text.matches("quanto de disco livre").count(), 1, "{text}");
@@ -274,9 +371,9 @@ mod tests {
     #[test]
     fn the_most_asked_question_is_first() {
         let dir = scratch("order");
-        record(&dir, "asked once", &[], "2026-08-17");
-        record(&dir, "asked twice", &[], "2026-08-17");
-        record(&dir, "asked twice", &[], "2026-08-17");
+        record(&dir, "asked once", &[], "2026-08-17").expect("write");
+        record(&dir, "asked twice", &[], "2026-08-17").expect("write");
+        record(&dir, "asked twice", &[], "2026-08-17").expect("write");
 
         let text = std::fs::read_to_string(path_in(&dir)).expect("read");
         let twice = text.find("asked twice").expect("present");
@@ -287,8 +384,8 @@ mod tests {
     #[test]
     fn what_the_base_offered_back_survives_a_round_trip() {
         let dir = scratch("suggestions");
-        record(&dir, "protocolo de ingestao", &["ingest a source".into()], "2026-08-17");
-        record(&dir, "protocolo de ingestao", &["ingest a source".into()], "2026-08-18");
+        record(&dir, "protocolo de ingestao", &["ingest a source".into()], "2026-08-17").expect("write");
+        record(&dir, "protocolo de ingestao", &["ingest a source".into()], "2026-08-18").expect("write");
 
         let text = std::fs::read_to_string(path_in(&dir)).expect("read");
         assert_eq!(text.matches("ingest a source").count(), 1, "{text}");
@@ -300,8 +397,8 @@ mod tests {
     #[test]
     fn a_question_with_odd_spacing_round_trips() {
         let dir = scratch("odd");
-        record(&dir, "por que  o  cargo test falhou?", &[], "2026-08-17");
-        record(&dir, "por que  o  cargo test falhou?", &[], "2026-08-17");
+        record(&dir, "por que  o  cargo test falhou?", &[], "2026-08-17").expect("write");
+        record(&dir, "por que  o  cargo test falhou?", &[], "2026-08-17").expect("write");
 
         let text = std::fs::read_to_string(path_in(&dir)).expect("read");
         assert!(text.contains("por que  o  cargo test falhou?"), "{text}");
