@@ -1673,12 +1673,6 @@ fn cmd_answer_complete(question: &str, memory: &memory::Memory, root: &Path) -> 
     }
 }
 
-/// `kb promote`: the deposit becomes knowledge, or it does not and says why.
-///
-/// The whole design is in `promote.rs`. What lives here is the reporting, and it reports
-/// refusals as loudly as writes: a promotion run whose output is only what it wrote is a
-/// run that looks successful when it accepted everything.
-
 /// `kb answer`: retrieval's findings, written up by the manifest's answerer.
 ///
 /// The command is three refusals wrapped around one model call, in this order: no
@@ -1771,6 +1765,11 @@ fn cmd_answer(question: &str, paths: &[&str], all: bool, top: usize, mode: answe
     }
 }
 
+/// `kb promote`: the deposit becomes knowledge, or it does not and says why.
+///
+/// The whole design is in `promote.rs`. What lives here is the reporting, and it reports
+/// refusals as loudly as writes: a promotion run whose output is only what it wrote is a
+/// run that looks successful when it accepted everything.
 fn cmd_promote(
     paths: &[&str],
     all: bool,
