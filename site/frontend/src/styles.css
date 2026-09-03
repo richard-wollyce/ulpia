@@ -551,9 +551,21 @@ h1 {
 .cta-row {
   display: flex;
   flex-wrap: wrap;
-  justify-content: center;
+  /* Left, because a call to action belongs on the axis its section already
+   * has. The hero centres its heading and its standfirst, so a centred button
+   * there continues an axis the reader is already following; the doors section
+   * hangs everything on the left margin, and the same rule there invented a
+   * second axis the section does not have, leaving the button with a gap on
+   * its left that no other element shared. That gap is what reads as a spacing
+   * error, and it is a composition error rather than a padding one: the button
+   * itself measures 23.0px of ink to its left border and 22.5px to its right. */
+  justify-content: flex-start;
   gap: 1rem 1.25rem;
   margin-top: 2.25rem;
+}
+
+.hero .cta-row {
+  justify-content: center;
 }
 
 /* The printed-label idiom: a hairline-framed label, not an app button. */
