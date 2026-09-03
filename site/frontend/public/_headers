@@ -11,6 +11,15 @@
 # own /api/subscribe. Without connect-src the fetch would be blocked by our own
 # policy, since it falls back to default-src 'none'.
 #
+# img-src carries data: for one reason, the grain: styles.css tiles an inlined
+# feTurbulence SVG as a background-image, and a data: URI is an image source like any
+# other, so img-src 'self' alone refused it. Found 2026-09-03 in a headless browser,
+# after the grain had already shipped: "Loading the image 'data:image/svg+xml,...'
+# violates the following Content Security Policy directive: img-src 'self'". Nobody saw
+# it in a curl, because a curl does not render. data: cannot execute anything under
+# img-src; the tighter alternative is to serve the SVG as a real file, which is a build
+# change rather than a header change.
+#
 # The two cloudflareinsights.com entries are Web Analytics, which is enabled on the
 # Pages project and injected at the edge, after the build, into every HTML response
 # that looks like it came from a browser. It needs both: static.cloudflareinsights.com
@@ -20,7 +29,7 @@
 # measurement you believe you are taking is worse than not measuring, because the
 # dashboard still shows a number and the number is of nothing.
 /*
-  Content-Security-Policy: default-src 'none'; style-src 'self'; script-src 'self' https://static.cloudflareinsights.com; img-src 'self'; font-src 'self'; connect-src 'self' https://cloudflareinsights.com; base-uri 'none'; form-action 'self'; frame-ancestors 'none'
+  Content-Security-Policy: default-src 'none'; style-src 'self'; script-src 'self' https://static.cloudflareinsights.com; img-src 'self' data:; font-src 'self'; connect-src 'self' https://cloudflareinsights.com; base-uri 'none'; form-action 'self'; frame-ancestors 'none'
   X-Content-Type-Options: nosniff
   Referrer-Policy: no-referrer
   Permissions-Policy: camera=(), microphone=(), geolocation=()

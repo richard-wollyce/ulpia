@@ -78,7 +78,7 @@ async fn main() {
         // deployment target is a policy nobody can test in one place.
         .layer(header_layer(
             header::CONTENT_SECURITY_POLICY,
-            "default-src 'none'; style-src 'self'; script-src 'self' https://static.cloudflareinsights.com; img-src 'self'; font-src 'self'; connect-src 'self' https://cloudflareinsights.com; base-uri 'none'; form-action 'self'; frame-ancestors 'none'",
+            "default-src 'none'; style-src 'self'; script-src 'self' https://static.cloudflareinsights.com; img-src 'self' data:; font-src 'self'; connect-src 'self' https://cloudflareinsights.com; base-uri 'none'; form-action 'self'; frame-ancestors 'none'",
         ))
         .layer(header_layer(header::X_CONTENT_TYPE_OPTIONS, "nosniff"))
         .layer(header_layer(header::REFERRER_POLICY, "no-referrer"))
