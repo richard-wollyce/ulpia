@@ -551,8 +551,9 @@ mod tests {
         assert!(log.contains("qual a taxa de juros do trimestre"), "{log}");
 
         let record = crate::capture::read(&root, "s-loss");
-        assert_eq!(record.refused.len(), 1, "and it is in the session's record: {record:?}");
-        assert_eq!(record.refused[0].0, "qual a taxa de juros do trimestre");
+        let refused = record.refused();
+        assert_eq!(refused.len(), 1, "and it is in the session's record: {record:?}");
+        assert_eq!(refused[0].0, "qual a taxa de juros do trimestre");
     }
 
     /// **The refusal that costs the most and explained the least.**

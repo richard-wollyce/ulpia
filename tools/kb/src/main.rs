@@ -1961,13 +1961,22 @@ fn cmd_capture(root: &str, session: Option<&str>) -> ExitCode {
         }
     };
 
+    // **Every outcome is printed, because one session can leave more than one deposit.**
+    // A conversation that changed subject passed through more than one agent, and each
+    // agent's refusals go to that agent's inbox. Printing only the first would hide the
+    // rest from the log this hook writes to, which is the only place anybody sees it.
     match capture::write_deposit(Path::new(root), &session, &kb::misses::today()) {
-        Ok(capture::Outcome::Written(path)) => {
-            println!("captured session {session} into {}", path.display());
-            ExitCode::SUCCESS
-        }
-        Ok(capture::Outcome::Nothing(why)) => {
-            println!("nothing captured for session {session}: {why}");
+        Ok(outcomes) => {
+            for outcome in &outcomes {
+                match outcome {
+                    capture::Outcome::Written(path) => {
+                        println!("captured session {session} into {}", path.display())
+                    }
+                    capture::Outcome::Nothing(why) => {
+                        println!("nothing captured for session {session}: {why}")
+                    }
+                }
+            }
             ExitCode::SUCCESS
         }
         Err(e) => {
