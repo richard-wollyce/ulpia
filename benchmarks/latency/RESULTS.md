@@ -20,6 +20,48 @@ fusion, the species fold and the confidence gate, in process. No model, no netwo
 no cache warming tricks; the index is the program. The cold number is everything the
 first question ever pays, including opening the fleet.
 
+## Re-run 2026-09-02, both versions side by side
+
+The number above was published on 2026-08-23 and had never been re-measured. It is now
+1.7x off, and this section says how much of that is the code and how much is the room.
+
+**Method, because a single latency run on a laptop is worth nothing.** Nine runs of the
+current binary while a browser and several agent sessions were open gave p50 between
+1.53 ms and 4.17 ms: the same binary, the same corpus, a 2.7x spread from load alone. So
+this comparison was taken with the machine quiet, and the two versions were **alternated
+within one command**, four rounds each, every measured run preceded by an unmeasured one.
+The August side is commit `c0d2662`, the first commit that carries `kb-bench latency`;
+the current side is `a87212c`. Both indexes were read back with sqlite and hold the same
+11 files and 11 chunks, so the corpus is not the variable.
+
+| | cold open | warm p50 | warm p95 |
+|---|---|---|---|
+| `c0d2662`, 2026-08-23 code | 136.8, 182.9, 203.4, 186.2 ms | 0.84, 0.87, 0.84, 0.79 ms | 1.66, 1.68, 1.66, 1.57 ms |
+| `a87212c`, 2026-09-02 code | 14.2, 10.8, 9.5, 12.7 ms | 1.14, 1.03, 1.17, 1.18 ms | 2.17, 2.00, 2.15, 2.38 ms |
+| median, then against then | **184.6 to 11.8 ms, 15.6x faster** | **0.84 to 1.16 ms, 1.38x slower** | **1.66 to 2.16 ms, 1.30x slower** |
+
+**The cold open got 15.6x cheaper, and the cause is named.** Opening a fleet used to shell
+out to `git ls-files` once per base to decide what was private. ADR-0034 took git out of the
+runtime and replaced it with a `private =` line read off disk. That is the whole 173 ms.
+
+**The warm median got 1.38x more expensive, and the cause is not named here.** The candidates
+are the term pruning of ADR-0033, which trades median for tail and whose probes are pure cost
+on a corpus this small, and the corpus-scaled floor of ADR-0036, which computes a logarithm
+per query. Neither was isolated, and this file will not guess at which: what is measured is
+the total.
+
+**How much is the machine.** The August code measures 0.84 ms here today against the 0.68 ms
+it published on 2026-08-23. The same code, the same laptop, nine days apart. So of the 1.7x
+drift a reader sees between the published figure and the current one, roughly 1.24x is the
+room and 1.38x is the code.
+
+**One thing this run found by accident.** The first attempt ran both binaries against a copy
+of `examples/demo` outside any repository, and the August binary reported p50 0.01 ms. That
+was not speed. It was `git ls-files` returning nothing outside a repository, so the base
+indexed zero files and answered instantly with nothing. The measurement is void and the
+observation is kept: before ADR-0034, a base outside a git repository silently held no
+searchable content.
+
 ## What the vendors say about themselves
 
 Their own words, from their own pages, each quote re-fetchable at its URL. None of
@@ -63,10 +105,12 @@ claims sit on top of, never below.
 
 ## The comparison that is fair
 
-Using each vendor's own published number against ours: their fastest self-reported
-retrieval (Zep, 150 ms P95, server-side, before any network) is roughly **130x** our
-measured warm P95 of 1.16 ms end-to-end on this machine. mem0's own paper's search
-p50 of 148 ms is roughly **220x** our p50 of 0.68 ms. The asymmetry is structural,
+Using each vendor's own published number against ours, at the current figures from the
+re-run above: their fastest self-reported retrieval (Zep, 150 ms P95, server-side, before
+any network) is roughly **69x** our measured warm P95 of 2.16 ms end-to-end on this
+machine. mem0's own paper's search p50 of 148 ms is roughly **128x** our p50 of 1.16 ms.
+Against the August figures the same two ratios read 130x and 220x, and the ratios moved
+because our own number moved, not because theirs did. The asymmetry is structural,
 not an optimization: their pipelines embed, traverse and rank on a server across a
 network; this one reads an index that lives beside the files it indexes. What they
 buy for that price is capability this system deliberately does not have: automatic

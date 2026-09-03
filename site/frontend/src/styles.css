@@ -1775,6 +1775,46 @@ input[type="email"]:focus-visible {
   color: var(--ink-2);
   margin-top: 0.75rem;
 }
+/* ---- the result line (Aldus, 2026-09-02). Every section of this page states
+ * a figure, and before this the figure sat mid-sentence in the section's
+ * opening paragraph, where it is found by reading and never by scanning. Two
+ * of the four measured sections happened to carry a <strong> around their
+ * score and read better for it, which is the whole difference a reader feels
+ * between the top of this page and the bottom: hierarchy, not writing. This
+ * gives all four the same landing point.
+ *
+ * The figure sits at --size-subhead, one step above the h2's 1.25rem, which
+ * is deliberate: the heading is a label and the number is the content, so the
+ * number outranks it. It stops below --size-headline so it never competes
+ * with the page's h1. No new colour and no new size enter the sheet, so the
+ * scheme tokens carry dark with nothing written twice. The hairline closes
+ * the block the way .bench closes a row, which is the page's existing device
+ * for "this unit has ended". ---- */
+
+.doc .result {
+  margin-block: 0.75rem 1.5rem;
+  padding-bottom: 0.875rem;
+  border-bottom: 1px solid var(--rule);
+}
+
+.doc .result-figure {
+  font-size: var(--size-subhead);
+  font-weight: 600;
+  line-height: 1.3;
+  color: var(--ink);
+  /* .doc p sets 1rem below every paragraph and outranks a lone class, so both
+   * rules in this block are written under .doc to win it back. The two lines
+   * are one unit and close up against each other instead. */
+  margin-bottom: 0.25rem;
+}
+
+.doc .result-gloss {
+  font-size: var(--size-small);
+  line-height: 1.5;
+  color: var(--ink-2);
+  margin-bottom: 0;
+}
+
 
 /* ---- the document's furniture (Aldus, 2026-09-02): what a long document
  * needs and the front page never did. Every value below is a token the sheet

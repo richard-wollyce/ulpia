@@ -72,22 +72,44 @@
       </p>
 
       <h2 id="latency">Latency</h2>
+      <div class="result">
+        <p class="result-figure">Warm route p50 1.16 ms, p95 2.16 ms. Cold open 11.8 ms.</p>
+        <p class="result-gloss">One laptop, 1000 samples over 50 questions, in process. Re-measured 2 September 2026.</p>
+      </div>
       <p>
-        Warm route, 1000 samples over 50 questions: p50 0.68 ms, p95 1.16 ms,
-        max 1.70 ms. That is the whole deterministic pipeline per question,
-        in process: both scorers, the fusion, the species fold and the
-        confidence gate. No model, no network, no cache warming; the index is
-        the program. Cold open, which is everything the first question ever
-        pays, opening the fleet included: 136.4 ms.
+        The warm figure is the whole deterministic pipeline per question:
+        both scorers, the fusion, the species fold and the confidence gate.
+        No model, no network, no cache warming; the index is the program. The
+        cold figure is everything the first question ever pays, opening the
+        fleet included.
       </p>
       <p>
-        Measured 2026-08-23 at commit 35322d2 on an 11th Gen Intel i5-1135G7,
+        <strong>This page carried p50 0.68 ms and a cold open of 136.4 ms until
+        2026-09-02, when the numbers were re-measured for the first time and
+        both moved.</strong> The re-run built the August code and the current code
+        from the same repository and alternated them on a quiet machine, four
+        rounds each, reading both indexes back with sqlite to confirm the
+        corpus was not the variable. The cold open fell 15.6x, and the cause has
+        a name: opening a fleet no longer runs <code>git ls-files</code> once per
+        base to decide what is private, because
+        <a href="https://github.com/richard-wollyce/ulpia/blob/main/decisions/0034-git-leaves-the-runtime.md">ADR-0034</a>
+        took git out of the runtime. The warm median rose 1.38x, and that one is
+        published without a cause, because none was isolated. Roughly 1.24x of
+        the drift against the old figure is the room rather than the code: the
+        August binary measures 0.84 ms here today against the 0.68 ms it
+        published nine days ago.
+      </p>
+      <p>
+        Measured 2026-09-02 at commit a87212c on an 11th Gen Intel i5-1135G7,
         16 GB, Windows 11, release build, over <a href="https://github.com/richard-wollyce/ulpia/tree/main/examples/demo"><code>examples/demo</code></a>, a
         corpus of 15 files. The command, from the repository root, is
         <code>kb-bench latency examples/demo benchmarks/abstention/questions.tsv --host mem0=api.mem0.ai --host zep=api.getzep.com --host letta=api.letta.com --host supermemory=api.supermemory.ai --host synap=synap-cloud-prod.maximem.ai</code>,
-        and the record is <a href="https://github.com/richard-wollyce/ulpia/blob/main/benchmarks/latency/RESULTS.md"><code>benchmarks/latency/RESULTS.md</code></a>. This is
-        a personal-fleet-scale number; what a 200 MB haystack costs is a
-        different regime and has its own section below.
+        and the record is <a href="https://github.com/richard-wollyce/ulpia/blob/main/benchmarks/latency/RESULTS.md"><code>benchmarks/latency/RESULTS.md</code></a>, which
+        keeps the August run beside the new one. This is a personal-fleet-scale
+        number; what a 200 MB haystack costs is a different regime and has its
+        own section below. A single run of this benchmark on a busy laptop is
+        worth nothing: nine runs of the same binary over the same corpus, with a
+        browser and several agent sessions open, spread from 1.53 ms to 4.17 ms.
       </p>
       <figure class="bench">
         <div class="bench-scroll">
@@ -103,7 +125,7 @@
             <tbody>
               <tr>
                 <th scope="row">Ulpia</th>
-                <td>p50 0.68 ms, p95 1.16 ms</td>
+                <td>p50 1.16 ms, p95 2.16 ms</td>
                 <td>the whole deterministic pipeline, in process, on the machine above</td>
                 <td><a href="https://github.com/richard-wollyce/ulpia/blob/main/benchmarks/latency/RESULTS.md"><code>benchmarks/latency/RESULTS.md</code></a></td>
               </tr>
@@ -145,8 +167,10 @@
         Their figures are server-side under their own harnesses, and a caller
         adds the network; ours is a local process with none to add. The
         comparison is of mechanisms, not machines: Zep's fastest self-reported
-        retrieval is roughly 130 times our warm p95, and mem0's published
-        search p50 is roughly 220 times our p50. What their price buys is
+        retrieval is roughly 69 times our warm p95, and mem0's published
+        search p50 is roughly 128 times our p50. Against the August figures
+        those ratios read 130 and 220 times, and they moved because our own
+        number moved, not because theirs did. What their price buys is
         automatic ingestion at scale, which Ulpia deliberately lacks. The same
         RESULTS file records the TCP connect floor from this machine to each
         vendor's real API host, 12 samples each with no request sent. It stays
@@ -195,6 +219,10 @@
       </figure>
 
       <h2 id="abstention">Abstention</h2>
+      <div class="result">
+        <p class="result-figure">28 of 30 out-of-scope questions went unanswered.</p>
+        <p class="result-gloss">Silence, not a least-wrong document. The deterministic layer alone, no model and no network.</p>
+      </div>
       <p>
         Every retrieval system returns a rank one, because ranking cannot
         express absence. A librarian who can say she does not have that book
@@ -205,7 +233,7 @@
         adversarial pass then read the corpus, reworded three in-scope
         questions that had drifted onto its key strings, and confirmed every
         label. The deterministic layer alone, no model, no network, left
-        <strong>28 of the 30 unanswered</strong>: silence, not a least-wrong
+        28 of the 30 unanswered: silence, not a least-wrong
         document. Every far-domain question and every noise fragment, 10 of
         10 each, produced nothing.
       </p>
@@ -278,13 +306,17 @@
       </p>
 
       <h2 id="longmemeval-s">LongMemEval-S</h2>
+      <div class="result">
+        <p class="result-figure">305 of 500, 61 percent.</p>
+        <p class="result-gloss">A floor and labelled one: the weakest honest ingestion, and a local judge that is not the official protocol.</p>
+      </div>
       <p>
         500 questions against long chat histories, the
         <code>longmemeval_s_cleaned.json</code> dataset, each instance's
         sessions becoming a one-agent fleet that the shipped pipeline
         answers. With the reading mode declared per question nature,
         multi-session in complete mode and everything else at the
-        default, Ulpia scores <strong>305 of 500, 61 percent</strong>, on
+        default, Ulpia scores 305 of 500, 61 percent, on
         2026-08-25. The all-default first run, 2026-08-24, scored 246 of 500,
         49 percent, and stays published, because a floor that was published
         stays published.
@@ -399,6 +431,10 @@
       </p>
 
       <h2 id="longmemeval-v2">LongMemEval-V2</h2>
+      <div class="result">
+        <p class="result-figure">Full gold evidence served for 88 percent of enterprise and 81 percent of web questions.</p>
+        <p class="result-gloss">A ceiling, not a score. There is no official Ulpia number here, because the protocol fixes a reader and a judge whose keys are not in the repository.</p>
+      </div>
       <p>
         The successor benchmark scores an accuracy-times-latency frontier
         over haystacks of web-agent trajectories, and 128 of its
@@ -461,7 +497,7 @@
         can compose from it, and the gap between the router's top-12 and the
         served context decomposes into slice misses, route misses, and
         questions whose gold appears verbatim nowhere in the corpus. These
-        queries run over a 200 MB haystack; the sub-millisecond figure in the
+        queries run over a 200 MB haystack; the millisecond figure in the
         latency section is a personal-fleet-scale number from a corpus of 15
         files, and the two are different regimes, never one speed. The
         backend does not read question images, a modality stated rather than
