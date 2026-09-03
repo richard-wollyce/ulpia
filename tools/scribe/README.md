@@ -30,11 +30,39 @@ folder with the frontmatter the build requires, commits that one file through
 
 ```bash
 python tools/scribe/publish.py piece.md --title "..." --description "..." --source "https://youtu.be/..."
-python tools/scribe/publish.py piece.md --title "..." --dry-run
+python tools/scribe/publish.py piece.md --title "..." --transcript tools/scribe/transcripts/piece.json
+python tools/scribe/publish.py piece.md --title "..." --lang pt-BR --dry-run
 ```
 
 The date is written once and used twice, in the filename and in the frontmatter,
 so the two cannot drift.
+
+## The language, which is detected once and then carried
+
+`transcribe.py` already knows the language: it is in the `.json` sidecar as
+`language`, on both the caption path and the whisper path. The site reads `lang`
+out of the frontmatter, and a Portuguese post served under `lang="en"`
+mishyphenates and is read aloud wrong. So the sidecar is where the value comes
+from, rather than somebody's memory at publish time.
+
+- **`--transcript <the .json>`** reads that field and writes it as `lang`. The
+  path is named by the caller and nothing searches for it, because there is no
+  convention tying an adapted piece back to its transcript: `transcribe.py --out`
+  drops transcripts into other bases, and a folder search picks the wrong file in
+  silence exactly when two recordings are in flight at once. A `.txt` or a bare
+  stem is accepted and the sidecar beside it is read.
+- **`--lang <tag>`** sets it directly and wins over the sidecar. A tag that
+  cannot be parsed stops the run, because it was typed by a person.
+- **Neither, or a sidecar with no language:** the field is left out entirely and
+  the build keeps its `en` default. Nothing here guesses a language.
+
+**`pt` and not `pt-BR`, unless you ask.** Whisper reports two letter codes; both
+tags are valid BCP 47 and both hyphenate. What was detected is what gets written,
+and there is deliberately no table mapping detected codes to preferred ones,
+because such a table needs editing for every new language and is wrong for the
+one post that wanted the other tag. Want the region? Pass `--lang pt-BR`. The
+only rewriting done is stripping yt-dlp's `-orig` marker, which marks the track
+in the language actually spoken and is not a BCP 47 subtag.
 
 ## What is not automated, and why
 
