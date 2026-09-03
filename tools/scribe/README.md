@@ -24,45 +24,71 @@ a long video into an afternoon. `large-v3` is noticeably better on Portuguese an
 is worth the wait when the recording matters. The first run of any model
 downloads it.
 
+**The decoder is handed the project's own vocabulary.** A model that has never
+seen the word Ulpia writes Upia, and on the launch video it wrote Upia in all five
+places the name was spoken, plus `Memo`, `Zap` and `Letra` for Mem0, Zep and Letta.
+Those were corrected by hand afterwards, on a video that will have a successor next
+week. The list is `TERMS` in `transcribe.py`, and adding to it is part of
+correcting a mishearing rather than a separate chore.
+
+Two mechanics of it are worth knowing before editing it, because both were
+measured rather than assumed:
+
+- **It goes in as `hotwords`, not `initial_prompt`.** `initial_prompt` is pushed
+  once onto the front of a running token list, and each 30 second window sees only
+  the last 223 tokens of that list, so the vocabulary falls off the end after
+  roughly a minute of speech and is dropped outright on a temperature fallback.
+  `hotwords` is re-encoded into every window. On a 44 second clip the two are
+  identical; on an 8.7 minute video only one of them is still working at the end,
+  and a hint that fixes the opening and quietly stops is worse than none, because
+  it looks fixed.
+- **It is a sentence, not a list.** Whisper reads the hint as speech that came just
+  before the audio. A bare comma list of the same terms recovered Zep and Letta and
+  still wrote `Upia` and `Memo`; the terms wrapped in a sentence that puts the name
+  in the grammatical frame the audio uses recovered all four. A sentence has a
+  language, which is why there is one per language and why `--language` is worth
+  passing. Without it the hint falls back to the bare list.
+
 **`publish.py`** takes the adapted markdown, writes it into the site's content
 folder with the frontmatter the build requires, commits that one file through
 `kb commit`, and pushes, which is what triggers the deploy.
 
 ```bash
 python tools/scribe/publish.py piece.md --title "..." --description "..." --source "https://youtu.be/..."
-python tools/scribe/publish.py piece.md --title "..." --transcript tools/scribe/transcripts/piece.json
 python tools/scribe/publish.py piece.md --title "..." --lang pt-BR --dry-run
 ```
 
 The date is written once and used twice, in the filename and in the frontmatter,
 so the two cannot drift.
 
-## The language, which is detected once and then carried
+## The language, which is typed once by the caller
 
-`transcribe.py` already knows the language: it is in the `.json` sidecar as
-`language`, on both the caption path and the whisper path. The site reads `lang`
-out of the frontmatter, and a Portuguese post served under `lang="en"`
-mishyphenates and is read aloud wrong. So the sidecar is where the value comes
-from, rather than somebody's memory at publish time.
+The site reads `lang` out of the frontmatter, and a Portuguese post served under
+`lang="en"` mishyphenates and is read aloud wrong. So the field matters, and there
+is exactly one way to set it.
 
-- **`--transcript <the .json>`** reads that field and writes it as `lang`. The
-  path is named by the caller and nothing searches for it, because there is no
-  convention tying an adapted piece back to its transcript: `transcribe.py --out`
-  drops transcripts into other bases, and a folder search picks the wrong file in
-  silence exactly when two recordings are in flight at once. A `.txt` or a bare
-  stem is accepted and the sidecar beside it is read.
-- **`--lang <tag>`** sets it directly and wins over the sidecar. A tag that
-  cannot be parsed stops the run, because it was typed by a person.
-- **Neither, or a sidecar with no language:** the field is left out entirely and
-  the build keeps its `en` default. Nothing here guesses a language.
+- **`--lang <tag>`** writes it. A tag that cannot be parsed stops the run, because
+  it was typed by a person and a typo should not become a silent default.
+- **Omitted:** the field is left out entirely and `build-posts.mjs` applies its own
+  default, which is the single place that default is written down. Nothing here
+  guesses a language.
 
-**`pt` and not `pt-BR`, unless you ask.** Whisper reports two letter codes; both
-tags are valid BCP 47 and both hyphenate. What was detected is what gets written,
-and there is deliberately no table mapping detected codes to preferred ones,
-because such a table needs editing for every new language and is wrong for the
-one post that wanted the other tag. Want the region? Pass `--lang pt-BR`. The
-only rewriting done is stripping yt-dlp's `-orig` marker, which marks the track
-in the language actually spoken and is not a BCP 47 subtag.
+**`--transcript` used to exist and was removed, which is worth writing down so it
+does not get reinvented.** It read the `language` the transcript's `.json` sidecar
+carried and wrote that as `lang`. The mechanism worked; the premise did not. The
+sidecar records the language of the **recording**, and this field is the language
+of the **post**. Those two agreed only for as long as a Portuguese recording became
+a Portuguese post, and a post is now written in one fixed language whatever was
+spoken. So the recording's language is never the answer to the frontmatter's
+question, and a flag that supplies the wrong answer is a trap rather than a
+convenience. It was deleted rather than documented as deprecated for that reason.
+
+**Casing and `-orig`.** `normalise_lang` lowercases the language subtag, uppercases
+a two letter region so `pt-br` is written `pt-BR`, and strips yt-dlp's `-orig`
+marker, which marks the track in the language actually spoken and is not a BCP 47
+subtag. There is deliberately no table mapping `pt` to `pt-BR`: such a table needs
+editing for every new language and is wrong for the one post that wanted the other
+tag. Want the region? Pass it.
 
 ## What is not automated, and why
 

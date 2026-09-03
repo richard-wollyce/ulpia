@@ -49,50 +49,68 @@ from pathlib import Path
 HERE = Path(__file__).resolve().parent
 OUT_DIR = HERE / "transcripts"
 
-# The decoder's vocabulary, and it is a measurement rather than a guess. On the
-# launch video, 8.7 minutes through large-v3, whisper produced "Upia" in all five
-# places Ulpia was spoken, "Memo", "Zap" and "Letra" for Mem0, Zep and Letta,
-# "DeepSea" for DeepSeek, "OpenStack Tem Source" for open source, and "chipar" for
-# shipar. Every one was then corrected by hand, and would be corrected by hand
-# again on the next recording, which is the work this removes.
+# The decoder's vocabulary, and every line of it is a measurement rather than a
+# guess. On the launch video, 8.7 minutes through large-v3, whisper produced
+# "Upia" in all five places Ulpia was spoken, "Memo", "Zap" and "Letra" for Mem0,
+# Zep and Letta, "DeepSea" for DeepSeek, "OpenStack Tem Source" for open source,
+# and "chipar" for shipar. Every one was corrected by hand afterwards, and would
+# be corrected by hand again on the next recording. That is the work this removes.
 #
 # It is hardcoded here rather than kept in a file beside the script or passed on a
 # flag. A flag is the worst of the three: it has to be remembered on every run, and
 # a vocabulary nobody remembers to pass is a vocabulary that does not exist. A
 # separate file rots exactly as fast as this list does and adds a second place to
-# look, since the only people who edit it are the people already editing this file.
+# look, since the only people who edit it are already editing this file.
 #
 # The rule that keeps it current: when you correct a misheard technical term by
 # hand, add it here in the same move. A term corrected twice is a term that should
 # have been added the first time.
-VOCABULARY = [
+TERMS = [
     "Ulpia", "Vesta",
     "Mem0", "Zep", "Letta", "Cognee",
     "DeepSeek", "Anthropic", "OpenAI",
     "MCP", "SQLite", "BM25", "embedding",
 ]
 
-# Terms whose spelling belongs to one language, kept apart from the names above
-# because the names are the same in every language and these are not. "open source"
+# Terms whose spelling belongs to one language. They are kept apart from the names
+# above because a name is the same word everywhere and these are not: "open source"
 # only needs help when it is spoken inside Portuguese, and "shipar" is Brazilian
-# developer slang that would be noise pushed at an English recording. With
-# --language omitted, only the neutral list is used: the hint has to be built before
-# transcribe() runs, and that is the same call that detects the language.
-VOCABULARY_BY_LANGUAGE = {
+# developer slang that would be noise pushed at an English recording.
+TERMS_BY_LANGUAGE = {
     "pt": ["open source", "shipar"],
 }
 
+# The shape of the hint is not cosmetic, and this is the part that was measured
+# rather than assumed. Whisper reads this block as if it were speech that came just
+# before the audio, so a bare comma list conditions weakly: on a 44 second clip of
+# the launch video it recovered Zep and Letta and still wrote "Upia" and "Memo".
+# The same terms wrapped in a sentence that puts the name in the grammatical frame
+# the audio uses recovered all four. So the hint is a carrier sentence, and a
+# carrier sentence has a language, which is why there is one per language rather
+# than one for both.
+#
+# With --language omitted there is no language to write a sentence in, because the
+# hint has to be built before the call that detects it. That case falls back to the
+# bare list, which is weaker, and passing --language is worth it for more than this.
+CARRIER = {
+    "pt": ("Neste vídeo eu falo sobre o projeto Ulpia. O Ulpia é uma memória local "
+           "para agentes de IA. Também aparecem: {terms}."),
+    "en": ("In this video I talk about the Ulpia project. Ulpia is a local memory "
+           "for AI agents. Also mentioned: {terms}."),
+}
+
 # faster-whisper truncates the hint at max_length // 2 - 1, which is 223 tokens
-# (transcribe.py, get_prompt), and it truncates from the end, silently, so growth
-# costs you the newest entries first. Latin script runs roughly four characters to
-# the token, so this is a conservative line at which to say something out loud.
+# (faster_whisper/transcribe.py, get_prompt), and it truncates from the end,
+# silently, so growth costs you the newest entries first. Latin script runs roughly
+# four characters to the token, so this is a conservative line at which to say
+# something out loud rather than let the tail disappear.
 VOCABULARY_CHAR_BUDGET = 600
 
 
 def vocabulary_for(language: str | None) -> str:
-    """The comma separated hint handed to the decoder, for a language or for none."""
-    terms = VOCABULARY + VOCABULARY_BY_LANGUAGE.get(language or "", [])
-    hint = ", ".join(terms)
+    """The hint handed to the decoder: a carrier sentence, or a bare list."""
+    terms = ", ".join(TERMS + TERMS_BY_LANGUAGE.get(language or "", []))
+    hint = CARRIER[language].format(terms=terms) if language in CARRIER else terms
     if len(hint) > VOCABULARY_CHAR_BUDGET:
         print(f"scribe: the vocabulary is {len(hint)} characters and the model keeps "
               f"about {VOCABULARY_CHAR_BUDGET}. It drops the end of the list without "
