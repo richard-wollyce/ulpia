@@ -2567,3 +2567,247 @@ body::after {
     grid-column: 1;
   }
 }
+
+/* ---- the Documentation door (Aldus, 2026-09-03) -----------------------
+ *
+ * Why a door and not a row. This system already measured the band's budget:
+ * two items fit beside the wordmark and the lamp at 320, 360 and 390px; three
+ * overflow at 320 and 360 and clear 390 by four pixels, which is not a margin.
+ * The row now has to carry the docs, the benchmarks and the writing, so it was
+ * never going to be a row. Richard's call, and the measurement agrees with it.
+ *
+ * CLICK OPENS IT, EVERYWHERE, and that is `<details>` doing the work rather
+ * than a script. Hover-to-open was the one thing rejected: touch has no hover,
+ * so on a phone the pattern fails hardest exactly where the space is scarcest,
+ * and on iOS the first tap becomes the hover while the second navigates. The
+ * menu rule in this system reads "click is the source of truth" for that
+ * reason, and a native disclosure is click, keyboard, and touch for free.
+ *
+ * `<details>` also means the menu works with the stylesheet loaded and no
+ * JavaScript at all, which is the floor this page is built to honour. The
+ * script adds only what the element lacks, Escape and outside-click.
+ *
+ * NO OPEN ANIMATION. Navigation is furniture and must perform less than the
+ * lamp, which is the band's one performer at 360ms. A panel that eases open
+ * would be the second, and the band would have two performers and no focus.
+ */
+/* Four bare-element rules from the footer's disclosure boxes reach in here,
+ * because this is the second <details> on the page and they were written when
+ * it was the only one. Each is undone deliberately rather than by accident:
+ *
+ *   details { border: 1px solid var(--rule) }  drew a card around the door
+ *   details p { padding: 0 1rem 1rem }         indented the group labels and
+ *                                              opened a rem under each
+ *   summary { font-weight: 600 }               made the door permanently bold,
+ *                                              which erased the current-page
+ *                                              mark below, since that mark IS
+ *                                              the weight
+ *   summary::after { font-size: 1rem }         sized the caret's em against the
+ *                                              root instead of the door's type
+ *
+ * The third is the one worth naming: it did not look broken, it looked fine and
+ * silently cancelled a signal. Seen by rendering the open panel, not by reading. */
+.nav-menu {
+  position: relative;
+  border: 0;
+}
+
+.nav-door {
+  /* inline-flex rather than fighting `summary`'s flex: the caret becomes a flex
+   * item and is centred by the box instead of by a translate guessed against
+   * the cap height. */
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45em;
+  padding: 0.5rem 0;
+  font-size: var(--size-small);
+  font-weight: 400;
+  color: var(--chrome-ink);
+  white-space: nowrap;
+  cursor: pointer;
+  list-style: none;
+  position: relative;
+  transition: color 120ms ease-out, transform 90ms ease-out;
+}
+
+/* Safari still paints the disclosure triangle through the shadow DOM, and it
+ * is a different glyph from the one drawn below, so both would show. */
+.nav-door::-webkit-details-marker {
+  display: none;
+}
+
+.nav-door:hover {
+  color: var(--accent);
+}
+
+.nav-door:active {
+  transform: translateY(1px);
+}
+
+.nav-door:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 3px;
+}
+
+/* The caret is drawn rather than typed: a text glyph would inherit the type's
+ * own metrics and sit differently in every weight the door can take. Two 1px
+ * edges rotated 45 degrees, so it is the same hairline the rest of the chrome
+ * uses, and it turns to point at the panel it opened. */
+.nav-door::after {
+  content: "";
+  /* Sized against the door's own type, because `summary::after` sets 1rem and
+   * an em here would otherwise measure the root instead of the label. */
+  font-size: var(--size-small);
+  width: 0.4em;
+  height: 0.4em;
+  border-right: 1px solid currentColor;
+  border-bottom: 1px solid currentColor;
+  /* The glyph's mass sits below its box once rotated, so it is nudged up by a
+   * quarter of its own height rather than centred as a square. */
+  transform: translateY(-0.12em) rotate(45deg);
+  transition: transform 160ms cubic-bezier(0.33, 1, 0.68, 1);
+}
+
+.nav-menu[open] > .nav-door::after {
+  transform: translateY(0.1em) rotate(-135deg);
+}
+
+/* The door wears the mark while you are in any room behind it, so the band
+ * still answers "where am I" once the panel has closed. Read off the panel's
+ * own contents with :has(), so there is no second place to keep in sync and no
+ * per-page class to forget. Where :has() is missing the door simply carries no
+ * mark, which is the old behaviour rather than a broken one.
+ *
+ * Matched on the bare attribute, not on [aria-current="page"]. The generated
+ * post pages carry aria-current="true" on Writing, because a reader inside an
+ * article is not on the Writing page but is in a room behind that door, and
+ * that distinction is correct ARIA worth keeping. Selecting only "page" left
+ * the door unmarked on every article, which is the exact case the rule exists
+ * for. */
+.nav-menu:has([aria-current]) > .nav-door {
+  font-weight: 600;
+}
+
+.nav-menu:has([aria-current]) > .nav-door::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0.9em;
+  bottom: 0.25rem;
+  height: 2px;
+  background: var(--accent);
+}
+
+.nav-panel {
+  position: absolute;
+  top: calc(100% + 0.35rem);
+  left: -0.9rem;
+  z-index: 20;
+  min-width: 15rem;
+  /* Stays inside both edges on a phone, which the menu rules say is never
+   * automatic. The door sits near the left gutter, so capping the width
+   * against the viewport is enough; a right-anchored panel would be the fix
+   * if it ever moves right. */
+  max-width: calc(100vw - 2 * var(--pad-page));
+  padding: 0.75rem 0.9rem;
+  background: var(--ground);
+  border: 1px solid var(--rule);
+}
+
+.nav-group {
+  margin: 0.5rem 0 0.25rem;
+  padding: 0;
+  font-size: var(--size-mono);
+  font-style: italic;
+  color: var(--ink-2);
+  line-height: 1.4;
+}
+
+.nav-group:first-child {
+  margin-top: 0;
+}
+
+.nav-panel ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  /* The panel is a column, not the band's row. The nav's own `ul` is flex and
+   * would lay these side by side and run straight out of the viewport. */
+  display: block;
+}
+
+.nav-panel li {
+  margin: 0;
+}
+
+.nav-panel a,
+.nav-panel a:visited {
+  display: block;
+  padding: 0.3rem 0;
+  font-size: var(--size-small);
+  color: var(--chrome-ink);
+  text-decoration: none;
+  /* Long room names wrap rather than widening the panel past the viewport:
+   * "Somewhere That Is Not Your Machine" is 34 characters and would set the
+   * panel's width on its own. */
+  white-space: normal;
+  transition: color 120ms ease-out;
+}
+
+/* The flat row's marker does not survive the turn into a column. `.nav a::after`
+ * is absolutely positioned with left:0 and right:0, which on a row hugs a short
+ * inline-block label and on a block-level list item spans the whole panel: the
+ * current page came out wearing a rule the full width of the menu, reading as a
+ * divider between two groups that are not divided there. Cancelled inside the
+ * panel, where the marker is the dash and the weight instead. Two signals still,
+ * per "never colour alone", and both of them sit beside the word rather than
+ * under the furniture. */
+.nav-panel a::after {
+  content: none;
+}
+
+.nav-panel a:hover {
+  color: var(--accent);
+}
+
+.nav-panel a:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.nav-panel a[aria-current] {
+  font-weight: 600;
+  color: var(--chrome-ink);
+}
+
+.nav-panel a[aria-current]::before {
+  content: "";
+  display: inline-block;
+  width: 0.5rem;
+  border-top: 2px solid var(--accent);
+  vertical-align: 0.2em;
+  margin-right: 0.4rem;
+}
+
+/* In dark the band is cover material, so hover moves along the gold rather
+ * than to a red that law 2 does not allow there. Written twice, like every
+ * dark value: once for the system preference, once for the switch. */
+:root[data-theme="dark"] .nav-door:hover,
+:root[data-theme="dark"] .nav-panel a:hover {
+  color: var(--gold-sheen);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) .nav-door:hover,
+  :root:not([data-theme="light"]) .nav-panel a:hover {
+    color: var(--gold-sheen);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .nav-door,
+  .nav-door::after,
+  .nav-panel a {
+    transition: none;
+  }
+}

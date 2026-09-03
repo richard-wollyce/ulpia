@@ -28,11 +28,27 @@ const band = (current) => `    <header class="band">
       <div class="band-inner">
         <p class="wordmark"><a href="/">Ulpia</a></p>
         <nav class="nav" aria-label="Sections">
-          <ul>
-            <li><a href="/docs/">Docs</a></li>
-            <li><a href="/benchmarks/">Benchmarks</a></li>
-            <li><a href="/blog/" aria-current="CURRENT">Writing</a></li>
-          </ul>
+          <details class="nav-menu">
+            <summary class="nav-door">Documentation</summary>
+            <div class="nav-panel">
+              <p class="nav-group" id="nav-g1">Docs</p>
+              <ul aria-labelledby="nav-g1">
+              <li><a href="/docs/">All docs</a></li>
+              <li><a href="/docs/concepts/">Concepts</a></li>
+              <li><a href="/docs/how-it-works/">How the Catalogue Ranks</a></li>
+              <li><a href="/docs/local/">On Your Machine</a></li>
+              <li><a href="/docs/cloud/">Somewhere That Is Not Your Machine</a></li>
+              <li><a href="/docs/reference/">Reference</a></li>
+              <li><a href="/docs/decisions/">What Was Done</a></li>
+              <li><a href="/docs/roadmap/">What Is Next</a></li>
+              </ul>
+              <p class="nav-group" id="nav-g2">Results and writing</p>
+              <ul aria-labelledby="nav-g2">
+              <li><a href="/benchmarks/">Benchmarks</a></li>
+              <li><a href="/blog/" aria-current="CURRENT">Writing</a></li>
+              </ul>
+            </div>
+          </details>
         </nav>
         <button type="button" class="lamp-toggle" aria-label="Color scheme: light, press to change">
           <svg viewBox="0 0 28 28" width="28" height="28" aria-hidden="true" focusable="false">
@@ -84,6 +100,7 @@ const page = ({ title, description, canonical, body, ogType = "article", current
     <meta property="og:url" content="${esc(canonical)}" />
     <meta property="og:type" content="${esc(ogType)}" />
     <script src="/theme.js"></script>
+    <script src="/nav.js" defer></script>
     <link rel="stylesheet" href="/src/styles.css" />
   </head>
   <body>
