@@ -332,7 +332,8 @@ impl Server {
         // over the corpus and is taken anyway: this tool is called once per question by
         // a person or a model, never in a loop, and a ranked list with no evidence
         // beside it is the whole defect being fixed here.
-        let confidence = self.memory.ask(question, top).confidence;
+        let answer = self.memory.ask(question, top);
+        let confidence = answer.confidence;
 
         // The recall loss is decided on the contract, from the verdict, and asked
         // unconditionally: this surface used to decide it here, from the length of the
@@ -348,6 +349,36 @@ impl Server {
         }
 
         let mut out = format!("Files to open for: {question}\n\n");
+        // **The fold already ran, and its answer used to be discarded here.** `ask`
+        // computes which agent owns the question, with the score, the breadth of the
+        // evidence and the margin over the runner up, and this tool read only the
+        // confidence off it. So the one question a fleet exists to answer reached no
+        // client, on the surface a model actually calls.
+        //
+        // Deliberately the deterministic fold and not `classify::run`. ADR-0027 measures
+        // the classifier at 9 to 15 seconds per call and pays that once per message on
+        // the boot hook. This tool is called mid conversation, and a nine second pause
+        // for a better owner is a worse tool.
+        if let Some(choice) = &answer.agent {
+            // **An absent runner up is not an infinite margin, it is no margin**, and
+            // `AgentChoice::margin` really is infinity there, which printed as `infx`.
+            // The JSON surface encodes that case as null for the same reason. Unlike at
+            // file level this one is genuinely maximum confidence: no other base in the
+            // fleet had anything to say, which is worth a sentence rather than a number.
+            let separation = if choice.contenders > 1 {
+                format!("{:.2}x the runner up of {}", choice.margin, choice.contenders)
+            } else {
+                "the only base with anything to say".to_string()
+            };
+            out.push_str(&format!(
+                "OWNER: {} carries the weight here ({:.1} across {} of its files, \
+                 {separation}). The deterministic fold, not the classifier: `kb boot` \
+                 pays for the model once per message and this does not.\n\n",
+                choice.agent,
+                choice.score,
+                choice.files,
+            ));
+        }
         out.push_str(&evidence(&confidence));
         for (i, hit) in hits.iter().enumerate() {
             out.push_str(&format!(
@@ -867,6 +898,10 @@ mod tests {
         let agent = root.join("probe");
         std::fs::create_dir_all(agent.join("knowledge")).expect("mkdir");
         std::fs::write(agent.join("MAP.md"), "# MAP\n").expect("map");
+        // Routable, which is what an `agent.txt` means. Without one `choose_agent`
+        // filters this base out of the fold and the reply names nobody, which is correct
+        // behaviour and is what made the owner line untestable on this fixture.
+        std::fs::write(agent.join("agent.txt"), "name = Probe\nrole = testing\n").expect("agent");
         std::fs::write(
             agent.join("knowledge").join("striped.md"),
             "# Zebra\n\n**Search for:** `zebra`, `quagga`\n\n\
@@ -1005,6 +1040,27 @@ mod tests {
         let all = Server { memory: Memory::open(&[root.as_path()], true).expect("opens"), top: 4 };
         let out = all.list(&Value::obj()).expect("lists");
         assert!(out.contains("profile/me.md"), "--all is the deliberate act: {out}");
+    }
+
+    /// **The fold already ran and the answer was thrown away.** `Server::route` calls
+    /// `Memory::ask`, which computes the agent choice with its score, its breadth and
+    /// its margin over the runner up, and then used only `.confidence`. So the one
+    /// question this fleet exists to answer, which agent owns this, was computed on
+    /// every call and reached no client.
+    ///
+    /// Deliberately the DETERMINISTIC fold and not `classify::run`: ADR-0027 measures
+    /// the classifier at 9 to 15 seconds per call, and this is a tool a model calls in
+    /// the middle of a conversation. The expensive answer belongs on the hook that pays
+    /// for it once per message, which is where it already is.
+    #[test]
+    fn the_route_reply_names_the_agent_the_fold_chose() {
+        let (_, server) = served_fleet("owner");
+        let out = server.route("zebra", 4);
+        assert!(out.contains("probe"), "the agent the fold chose is named: {out}");
+        assert!(
+            out.to_lowercase().contains("owner") || out.to_lowercase().contains("agent"),
+            "and it is labelled, not just mentioned: {out}"
+        );
     }
 
     /// A served answer is not a loss, on this surface as on every other.

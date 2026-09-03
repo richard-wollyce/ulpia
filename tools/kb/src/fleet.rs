@@ -105,10 +105,16 @@ impl Description {
 
         for m in &self.members {
             out.push_str(&format!(
-                "\n- {}\n  root: {}\n  role: {}\n",
+                "\n- {}\n  root: {}\n  role: {}\n  ends: {}\n",
                 m.card.name,
                 m.root.display(),
-                m.card.role.as_deref().unwrap_or("not set in agent.txt")
+                m.card.role.as_deref().unwrap_or("not set in agent.txt"),
+                // **Where an agent stops, on the one surface that could say it.** The
+                // field's own doc comment gives the reason: a roster of roles tells a
+                // reader what each agent does and never what none of them does. The
+                // classifier and the promoter were both handed `ends`; this, the roster a
+                // person and a model actually read, dropped it.
+                m.card.ends.as_deref().unwrap_or("not set in agent.txt")
             ));
         }
 
@@ -128,6 +134,48 @@ impl Description {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// **The field exists, three readers get it, and the one surface a person or a model
+    /// reads dropped it.** `ends` is parsed here, the classifier is handed it and the
+    /// promoter is handed it, and `to_text` printed name, root and role and stopped. Its
+    /// own doc comment says why the field exists: a roster of roles alone tells a reader
+    /// what each agent does and never what none of them does. The roster was the one
+    /// place that could not say it.
+    #[test]
+    fn the_roster_prints_where_each_agent_stops() {
+        let described = Description {
+            fleet: Card { name: "Fleet".into(), role: Some("a library".into()), ends: None },
+            members: vec![Member {
+                card: Card {
+                    name: "Zed".into(),
+                    role: Some("software architecture".into()),
+                    ends: Some("nutrition, marketing and anything a person's body does".into()),
+                },
+                root: std::path::PathBuf::from("fleet/zed"),
+            }],
+        };
+        let text = described.to_text();
+        assert!(text.contains("software architecture"), "{text}");
+        assert!(
+            text.contains("nutrition, marketing and anything a person's body does"),
+            "the roster has to carry where an agent stops: {text}"
+        );
+    }
+
+    /// An agent that never declared its edge says so, rather than the line vanishing and
+    /// leaving a reader to assume the agent covers everything.
+    #[test]
+    fn an_agent_with_no_declared_edge_says_that_rather_than_nothing() {
+        let described = Description {
+            fleet: Card { name: "Fleet".into(), role: None, ends: None },
+            members: vec![Member {
+                card: Card { name: "Newton".into(), role: None, ends: None },
+                root: std::path::PathBuf::from("fleet/newton"),
+            }],
+        };
+        let text = described.to_text();
+        assert!(text.to_lowercase().contains("not set"), "{text}");
+    }
 
     #[test]
     fn a_card_is_read_when_it_is_there() {

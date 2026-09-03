@@ -2181,3 +2181,55 @@ body::after {
     display: none;
   }
 }
+
+
+/* The WebGL field, spec 24. field.js adds .has-field to <html> only once it has
+ * a live context and a linked program, so the CSS field above is not a fallback
+ * bolted on afterwards: it is what every visitor gets, and it steps aside only
+ * where the shader actually runs. The vignette and the grain stay in both
+ * cases, because the grain is the texture the field is named for. */
+:root {
+  --shader-1: #f6f1e7;
+  --shader-2: #f2ebdd;
+  --shader-3: #f3ecde;
+  --shader-brightness: 1.25;
+  --shader-alpha: 0.9;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --shader-1: #12100d;
+    --shader-2: #191509;
+    --shader-3: #201b13;
+    --shader-brightness: 1;
+    --shader-alpha: 0.9;
+  }
+}
+
+:root[data-theme="dark"] {
+  --shader-1: #12100d;
+  --shader-2: #191509;
+  --shader-3: #201b13;
+  --shader-brightness: 1;
+  --shader-alpha: 0.9;
+}
+
+.field-canvas {
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  width: 100%;
+  height: 100%;
+  display: block;
+  pointer-events: none;
+}
+
+/* Where the shader runs, the CSS blobs would double the light. */
+:root.has-field::before,
+:root.has-field::after {
+  display: none;
+}
+
+@media print {
+  .field-canvas { display: none; }
+}

@@ -30,3 +30,16 @@
     paint();
   });
 })();
+
+// The ambient field loads from here rather than from a tag in every page.
+// theme.js is the one script all sixteen pages already carry, and it is
+// deliberately synchronous in <head> so the stored scheme applies before first
+// paint. So this appends a deferred tag instead of doing the work inline: the
+// field never blocks the paint that theme.js exists to protect, and adding a
+// page does not mean remembering a second script tag.
+(function () {
+  var s = document.createElement("script");
+  s.src = "/field.js";
+  s.defer = true;
+  (document.head || document.documentElement).appendChild(s);
+})();
