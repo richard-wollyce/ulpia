@@ -18,7 +18,15 @@
     "something to say before then, we are at " + ADDRESS;
 
   document.addEventListener("DOMContentLoaded", function () {
-    var cta = document.querySelector(".cta-primary");
+    // Bound by the attribute that states the contract, not by document order.
+    // This used to read `.cta-primary`, which takes the first one on the page,
+    // so the dialog belonged to whichever primary button happened to sit
+    // highest. The moment the hero's button became "See the benchmarks" that
+    // selector would have swallowed a plain navigation click and opened a
+    // subscribe modal instead. `aria-haspopup="dialog"` is already the promise
+    // the markup makes to assistive technology; binding to it means the promise
+    // and the behaviour cannot drift apart.
+    var cta = document.querySelector('.cta-primary[aria-haspopup="dialog"]');
     var dialog = document.getElementById("write-dialog");
     if (!cta || !dialog || typeof dialog.showModal !== "function") return;
 

@@ -33,6 +33,7 @@
         <nav class="nav" aria-label="Sections">
           <ul>
             <li><a href="/docs/">Docs</a></li>
+            <li><a href="/benchmarks/">Benchmarks</a></li>
             <li><a href="/blog/">Writing</a></li>
           </ul>
         </nav>
@@ -63,7 +64,7 @@
         <h1>The memory is yours. The&nbsp;model is a guest.</h1>
         <p class="subhead" data-anim="type"><span class="type-real">A fleet of AI agents, each with its own knowledge base, and one memory layer under all of them. On your machine, in plain files, with no model in the retrieval&nbsp;path.</span></p>
         <p class="cta-row" data-anim="hero">
-          <a class="cta-primary" href="mailto:hello@ulpia.io" aria-haspopup="dialog">Write to hello@ulpia.io</a>
+          <a class="cta-primary" href="/benchmarks/">See the benchmarks</a>
           <a class="back" href="https://github.com/richard-wollyce/ulpia">Read the source</a>
         </p>
         <p class="status-line" data-anim="hero">Pre-launch. Used daily.</p>
@@ -181,11 +182,23 @@
             <span class="cmp-key cmp-key-ours"></span> measured in this
             repository, in process, on one laptop.
             <span class="cmp-key cmp-key-claim"></span> the vendor's own
-            published claim about itself, server-side and before any network,
-            linked at its source on the
+            published claim about itself, linked at its source on the
             <a href="/benchmarks/#latency">benchmarks page</a>. No vendor bar
             is our measurement, and none of them was run here. Linear scale,
             so our bar is drawn at the width the ratio actually gives it.
+          </figcaption>
+          <figcaption class="cmp-legend">
+            <strong>No bar here includes the network.</strong> Every vendor
+            figure is server-side or harness-side and stops before the caller's
+            round trip; ours is a local process with no round trip to add. We
+            measured that floor too, the TCP connect from this machine to each
+            vendor's real API host before a single request is sent, and it ran
+            from 5 ms to 213 ms depending on the host. It is deliberately not
+            drawn, and not in our favour: four of the five resolve to CDN
+            edges, so the floor understates the distance to the application
+            behind them rather than overstating it. Whichever number it is, it
+            is a cost added to their bars and not to ours. The figures are in
+            <a href="https://github.com/richard-wollyce/ulpia/blob/main/benchmarks/latency/RESULTS.md"><code>benchmarks/latency/RESULTS.md</code></a>.
           </figcaption>
         </figure>
       </section>
@@ -281,13 +294,12 @@
           this same folder, run for you; you leave by copying it out. Our
           address is hello@ulpia.io, and it sits under this button as a plain
           mailto, so with JavaScript off, or with a modified click, your mail
-          client opens. With it on, the button at the top of the page also puts
-          the address on your clipboard and offers the other direction: leave
-          yours, and we write when there is something you can install, rarely
-          otherwise.
+          client opens. With it on, the button also puts the address on your
+          clipboard and offers the other direction: leave yours, and we write
+          when there is something you can install, rarely otherwise.
         </p>
         <p class="cta-row" data-anim="rise">
-          <a class="cta-primary" href="mailto:hello@ulpia.io">Write to hello@ulpia.io</a>
+          <a class="cta-primary" href="mailto:hello@ulpia.io" aria-haspopup="dialog">Write to hello@ulpia.io</a>
         </p>
       </section>
     </main>
@@ -313,8 +325,8 @@
           nothing goes at all until you submit.
         </p>
         <p>
-          The button at the top of the page copies our address to your clipboard
-          when you press it. It writes; it never reads.
+          The button beside our address copies it to your clipboard when you
+          press it. It writes; it never reads.
         </p>
         <p>
           If you choose a light or dark scheme, that choice is kept in your

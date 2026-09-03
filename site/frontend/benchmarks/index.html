@@ -31,6 +31,7 @@
         <nav class="nav" aria-label="Sections">
           <ul>
             <li><a href="/docs/">Docs</a></li>
+            <li><a href="/benchmarks/" aria-current="page">Benchmarks</a></li>
             <li><a href="/blog/">Writing</a></li>
           </ul>
         </nav>
@@ -159,6 +160,22 @@
           stays because dropping it would quietly improve the field. The scale
           is linear: on a logarithmic axis every bar would be comfortable to
           read and 128x would look like two steps.
+        </figcaption>
+        <figcaption class="cmp-legend">
+          <strong>No bar here includes the network.</strong> Every vendor figure
+          is server-side or harness-side and stops before the caller's round
+          trip; ours is a local process with no round trip to add. The floor was
+          measured too, the TCP connect from this machine to each vendor's real
+          API host with no request sent, 12 samples each: mem0 213.5 ms, letta
+          30.0 ms, supermemory 29.7 ms, synap 24.2 ms, zep 5.3 ms. It is not
+          drawn on the chart, and leaving it out is not the flattering choice:
+          four of the five hostnames resolve to CDN edges, so the connect lands
+          near this machine and understates the real round trip to the
+          application behind it. mem0's resolves to origin infrastructure, which
+          is why its floor shows the actual distance. In every case it is a
+          lower bound on what a caller pays before authentication, TLS, the
+          request, the embedding and the inference, and it sits on top of their
+          server-side claims rather than inside them.
         </figcaption>
       </figure>
       <figure class="bench">

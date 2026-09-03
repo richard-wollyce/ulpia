@@ -30,6 +30,7 @@ const band = (current) => `    <header class="band">
         <nav class="nav" aria-label="Sections">
           <ul>
             <li><a href="/docs/">Docs</a></li>
+            <li><a href="/benchmarks/">Benchmarks</a></li>
             <li><a href="/blog/" aria-current="CURRENT">Writing</a></li>
           </ul>
         </nav>
