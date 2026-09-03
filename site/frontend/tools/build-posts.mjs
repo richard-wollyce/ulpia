@@ -196,9 +196,90 @@ writeFileSync(
       <h1>Writing</h1>
       <p class="doc-date">Richard Wollyce, on building Ulpia: what was decided, what it cost, and what is still wrong.</p>
 ${list}
-      <p class="doc-back"><a href="/blog/feed.xml">Feed</a> · <a href="/">Back to the library</a></p>
+      <p class="doc-back"><a href="/blog/feed.xml">Atom feed</a> · <a href="/">Back to the library</a></p>
     </main>`,
   }),
+);
+
+// A stylesheet for the feed, so the same URL answers a person and a reader.
+//
+// The problem it solves: /blog/feed.xml was offered to a human as a link
+// labelled "Feed", and a browser handed back raw Atom under Firefox's "This XML
+// file does not appear to have any style information". The feed was correct;
+// what was wrong was giving a person a machine's URL with no warning.
+//
+// A browser applies this before rendering; every feed reader ignores it,
+// because a processing instruction is not part of the Atom document. So the
+// bytes a reader parses do not change at all.
+//
+// Self-contained on purpose, with its own colours rather than the site's
+// stylesheet: this file is written before vite hashes /assets/styles-*.css, so
+// referencing that sheet would mean either a name that changes every build or a
+// second copy of the token block to keep in sync. Both schemes are handled with
+// prefers-color-scheme, which is what a page without the lamp can honour.
+//
+// Chrome has announced an intent to remove XSLT. If it does, this degrades to
+// exactly the raw XML above, which is where it started, so the failure mode is
+// the old behaviour rather than a new one. The visible link says "Atom feed"
+// for that day: it names the destination even when the destination is bare.
+writeFileSync(
+  join(FEED_DIR, "feed.xsl"),
+  `<?xml version="1.0" encoding="utf-8"?>
+<xsl:stylesheet version="1.0"
+  xmlns:xsl="http://www.w3.org/1999/XSL/Transform"
+  xmlns:atom="http://www.w3.org/2005/Atom">
+  <xsl:output method="html" encoding="utf-8" indent="yes" />
+  <xsl:template match="/">
+    <html lang="en">
+      <head>
+        <meta charset="utf-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1" />
+        <title>Atom feed &#183; Ulpia</title>
+        <style>
+          :root { color-scheme: light dark;
+            --ground:#f6f1e7; --ink:#241d16; --ink-2:#5a5044; --accent:#a63325; --rule:#dacfc0; }
+          @media (prefers-color-scheme: dark) { :root {
+            --ground:#12100d; --ink:#e7ddcc; --ink-2:#ab9e89; --accent:#c9a860; --rule:#3d3320; } }
+          body { margin:0; background:var(--ground); color:var(--ink);
+            font-family:"EB Garamond",Georgia,"Times New Roman",serif; line-height:1.6; }
+          main { max-width:32rem; margin-inline:auto; padding:3rem 1.5rem; }
+          h1 { font-weight:400; font-size:1.75rem; margin:0 0 .25rem; }
+          .lede { color:var(--ink-2); margin:0 0 2rem; }
+          .url { display:block; margin:0 0 2rem; padding:.75rem 1rem;
+            border:1px solid var(--rule); font-family:ui-monospace,Menlo,Consolas,monospace;
+            font-size:.9rem; word-break:break-all; }
+          h2 { font-weight:400; font-size:1.15rem; margin:1.75rem 0 .1rem; }
+          h2 a { color:var(--ink); text-decoration:none; }
+          h2 a:hover { color:var(--accent); }
+          time { color:var(--ink-2); font-size:.85rem; }
+          p.sum { margin:.35rem 0 0; color:var(--ink-2); }
+          footer { margin-top:2.5rem; border-top:1px solid var(--rule); padding-top:1rem; }
+          a { color:var(--accent); }
+        </style>
+      </head>
+      <body>
+        <main>
+          <h1><xsl:value-of select="atom:feed/atom:title" /></h1>
+          <p class="lede">This is a feed, meant for a reader rather than for reading here.
+            Paste the address below into whatever you subscribe with.</p>
+          <code class="url"><xsl:value-of select="atom:feed/atom:link[@rel='self']/@href" /></code>
+          <xsl:for-each select="atom:feed/atom:entry">
+            <h2>
+              <a><xsl:attribute name="href"><xsl:value-of select="atom:link/@href" /></xsl:attribute>
+                <xsl:value-of select="atom:title" /></a>
+            </h2>
+            <time><xsl:value-of select="substring(atom:updated, 1, 10)" /></time>
+            <p class="sum"><xsl:value-of select="atom:summary" /></p>
+          </xsl:for-each>
+          <footer>
+            <a href="/blog/">All writing</a> &#183; <a href="/">Back to the library</a>
+          </footer>
+        </main>
+      </body>
+    </html>
+  </xsl:template>
+</xsl:stylesheet>
+`,
 );
 
 // Atom rather than RSS: dates are unambiguous and the spec is one document.
@@ -206,6 +287,7 @@ const updated = posts[0] ? `${posts[0].date}T00:00:00Z` : "1970-01-01T00:00:00Z"
 writeFileSync(
   join(FEED_DIR, "feed.xml"),
   `<?xml version="1.0" encoding="utf-8"?>
+<?xml-stylesheet type="text/xsl" href="/blog/feed.xsl"?>
 <feed xmlns="http://www.w3.org/2005/Atom">
   <title>Ulpia</title>
   <link href="${SITE}/blog/feed.xml" rel="self" />
