@@ -177,7 +177,8 @@ is a junk rate counted from what promotion actually wrote, and it cannot be chos
 promotion has written nothing.
 
 **What the trigger does not do is write into the deposit.** That is still the second unbuilt
-item and it belongs to the transcription work: `tools/scribe` writes `.txt` and `.json` plus a
+item and it belongs to the transcription work: the maintainer's transcription tool, which is
+not in this repository, writes `.txt` and `.json` plus a
 `SOURCES.md` ledger into `<agent>/inbox/transcripts/`, while `promote::deposit_files` is a non
 recursive read of `<agent>/inbox` filtered to `.md`. The two do not collide, and they do not
 yet meet. Promotion becomes reachable for a transcript when something writes an adapted `.md`

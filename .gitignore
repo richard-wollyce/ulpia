@@ -73,3 +73,18 @@ shots/
 # LongMemEval datasets: 280MB of third-party benchmark data, fetched by URL in
 # benchmarks/longmemeval/README.md, never vendored.
 benchmarks/longmemeval/data/
+
+# Maintainer tooling: on the machine, not in the product.
+#
+# scribe carries a recording of Richard's voice to the blog. It writes into
+# site/frontend/content/posts, runs `kb commit` and pushes, which is an act only
+# somebody with write access to this repository can perform, so a stranger who
+# clones Ulpia has neither a use for it nor a way to run it. The rule that put it
+# here is not "is this useful" but "does a stranger who wants to use, verify or
+# contribute to Ulpia need it". Same arrangement as fleet/, same reason.
+#
+# Untracked with `git rm --cached` rather than deleted, so the files survive on
+# the machine that needs them. And the part that matters more than the rule: this
+# takes it out of the tree, NOT out of the published history. Anyone who clones
+# can still read it at an older commit. This is tidiness, not erasure.
+/tools/scribe/
