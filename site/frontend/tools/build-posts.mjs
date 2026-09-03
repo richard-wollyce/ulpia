@@ -59,6 +59,7 @@ const FOOTER = `    <footer>
       <p class="address-line">
         <a href="mailto:hello@ulpia.io">hello@ulpia.io</a>
       </p>
+      <p class="copyright">&copy; 2026 Richard Wollyce</p>
     </footer>`;
 
 // `lang` comes from the post's front matter, because a Portuguese post served

@@ -53,7 +53,7 @@
   --field-alpha: 0.42;
   --field-accent-alpha: 0.14;
   --field-vignette: rgba(36, 29, 22, 0.055);
-  --grain-opacity: 0.10;
+  --grain-opacity: 0.34;
   --grain-blend: normal;
 
   --plate: #ede5d5;
@@ -112,7 +112,7 @@
     --field-alpha: 0.30;
     --field-accent-alpha: 0.30;
     --field-vignette: rgba(0, 0, 0, 0.38);
-    --grain-opacity: 0.11;
+    --grain-opacity: 0.40;
     --grain-blend: normal;
 
     --plate: #211b16;
@@ -144,7 +144,7 @@
   --field-alpha: 0.30;
   --field-accent-alpha: 0.30;
   --field-vignette: rgba(0, 0, 0, 0.38);
-  --grain-opacity: 0.11;
+  --grain-opacity: 0.40;
   --grain-blend: normal;
 
   --plate: #211b16;
@@ -2156,7 +2156,7 @@ body::before {
 body::after {
   opacity: var(--grain-opacity);
   mix-blend-mode: var(--grain-blend);
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='220' height='220'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='220' height='220' filter='url(%23n)'/%3E%3C/svg%3E");
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='220' height='220'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='1' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='220' height='220' filter='url(%23n)'/%3E%3C/svg%3E");
   background-size: 220px 220px;
 }
 
@@ -2239,4 +2239,28 @@ body::after {
 
 @media print {
   .field-canvas { display: none; }
+}
+
+
+/* A <code> that is the whole term of a <dt> is not inline code, it is the term.
+ * The chip exists to separate code from the prose flowing around it; inside a
+ * dt there is no prose around it, so the chip separates nothing and its cost is
+ * a filled rectangle and a second typeface in the page's most structural
+ * position. The monospace stays, because a path is a literal thing to type, but
+ * it stops wearing the inline costume: term size, term weight, term colour, and
+ * flush with the left margin like every other heading on the page. */
+.doc dt > code:only-child {
+  background: none;
+  padding: 0;
+  font-size: 1em;
+  font-weight: 600;
+  color: var(--accent);
+  letter-spacing: 0.01em;
+}
+
+.copyright {
+  margin-top: 0.75rem;
+  font-size: var(--size-small);
+  color: var(--ink);
+  opacity: 0.62;
 }
