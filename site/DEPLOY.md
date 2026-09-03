@@ -242,6 +242,140 @@ enumeration oracle. The count is the proof:
 npx wrangler d1 execute ulpia-subscribers --remote --command "SELECT COUNT(*) FROM subscribers;"
 ```
 
+## 5b. Cache, and what happens when a URL is withdrawn
+
+Everything in this section was measured against this account on 2026-09-03, and the
+figures are the reason it exists: the runbook had no cache section until a withdrawn URL
+kept answering 200 for hours and nobody could say which layer was holding it.
+
+### Three classes, and only one of them can go stale
+
+| What | What the visitor is told | Where it can go stale |
+|---|---|---|
+| HTML | `max-age=0, must-revalidate`, `cf-cache-status: DYNAMIC` | Nowhere. It is never edge cached here and it revalidates every load |
+| `/assets/*` | `max-age=31536000, immutable` | Nowhere, and the filename is why: the hash changes with the bytes, so the old name is simply never requested again |
+| The unhashed root files | **`max-age=14400` on the apex** | **In the browser, for four hours, and nothing can reach it** |
+
+**The third row is the one to know, and `public/_headers` says the opposite.** Its comment
+claims that everything but `/assets/` keeps the Pages default of `max-age=0,
+must-revalidate`. That is true of the HTML and false of the rest: measured on the apex,
+`theme.js`, `anim.js`, `nav.js`, `field.js`, `subscribe.js`, `favicon.svg` and
+`blog/feed.css` all come back `public, max-age=14400, must-revalidate`, while the same
+files on a `*.pages.dev` URL come back `max-age=0`. The zone rewrites them on the way out.
+Four hours is Cloudflare's default Browser Cache TTL; that it is the default rather than
+something set deliberately is **inferred from the round number, not read from the
+dashboard.**
+
+**Why it matters and why no tool fixes it.** A returning visitor holds those seven files
+for four hours without asking again, so a deploy cannot evict them and neither can a
+purge: the browser makes no request to be answered. If a change to `theme.js` has to reach
+existing visitors immediately, the file has to change name, which is what `/assets/` does
+by design and what the root files do not do at all.
+
+```bash
+# What the visitor is actually told. Read it from the apex, never from the build output.
+UA="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36"
+curl -sI -H "User-Agent: $UA" https://ulpia.io/theme.js | grep -i cache-control
+# expect: public, max-age=14400, must-revalidate
+```
+
+### Withdrawing a URL is two steps, and the second is not optional
+
+A slug change withdraws a URL. `tools/build-posts.mjs` wipes `blog/` on every run, so the
+old page leaves the build the moment the file is renamed, and the origin starts answering
+404 there immediately. That is not the end of it.
+
+**Add the redirect in the same commit that renames the file, and write two lines, not
+one.** Pages matches a `_redirects` source literally, so a rule ending in a slash does not
+cover the same URL without one. That gap shipped once and left the slash-less form
+answering 404 for half a day after the fix was called done.
+
+```
+/blog/<old-slug>/  /blog/<new-slug>/  301
+/blog/<old-slug>   /blog/<new-slug>/  301
+```
+
+`_redirects` comes out of `public/` untouched, like `_headers`, so confirm it survived the
+build in the same shell as section 2:
+
+```bash
+test -f dist/_redirects && echo "redirects present"
+```
+
+**Do not reach for a purge.** Three reasons, in the order they matter. A purge turns the
+URL into a 404, which breaks every link already in a chat, a feed reader or a history,
+while the actual worry, two URLs serving one article, is what 301 exists to consolidate
+and deletion does not. A purge cannot be run from a developer machine here anyway:
+`npx wrangler purge --help` exits 1, wrangler has no cache purge command, and the stored
+OAuth credential carries no purge scope, so it is a dashboard action or nothing. And on
+the one occasion it would have been reached for, measurement said the tier a purge
+addresses was not holding the object.
+
+### Diagnosing a URL that answers when it should not
+
+Point these at an HTML URL. `/assets/*` and the root `.js` and `.svg` files are cached on
+purpose and look nothing like the shapes below.
+
+```bash
+UA="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36"
+SUS=https://ulpia.io/blog/<the-withdrawn-slug>/
+
+curl -sI -H "User-Agent: $UA" "$SUS" | grep -iE '^(HTTP|cache-control|age|x-robots-tag|cf-cache-status|cf-ray)'
+curl -sI -H "User-Agent: $UA" https://ulpia.io/ | grep -iE '^(cache-control|age|cf-cache-status)'   # the control
+```
+
+Read them together, because no single header decides it:
+
+- **A live page here** is `200`, `max-age=0, must-revalidate`, `DYNAMIC`, **no `Age`**.
+- **An honest 404** is `404`, `no-store`, `DYNAMIC`, **no `Age`**.
+- **An `Age` that climbs across polls** means a stored copy answered you, and on this
+  account no HTML URL carries one at all. That header appearing on HTML is the anomaly.
+
+**Do not confirm a fix by the absence of `Age`.** A 404 has no `Age` either, so an empty
+grep proves nothing on its own. Assert on the status line and the `Location`, and poll six
+times, because one poll is one Cloudflare location: read the colo off `CF-RAY` and say
+which one you measured when you report a URL fixed.
+
+**Rule out propagation before anything cache shaped.** They look alike from the apex and
+they are not alike. Propagation is the apex still serving the previous build while the new
+deployment already serves the new one at its own URL; it clears itself in minutes. Ask the
+build directly, where there is no zone and no custom domain in the way:
+
+```bash
+DEP=$(npx wrangler pages deployment list --project-name ulpia | grep -o 'https://[0-9a-f]*\.ulpia\.pages\.dev' | head -1)
+curl -sI -H "User-Agent: $UA" "$DEP/blog/<the-withdrawn-slug>/" | head -1
+```
+
+If that is a 404 and the apex is a 200, the origin has nothing there and something in
+front of it is answering. If it is a 301, the redirect shipped and the apex will follow.
+
+### What the incident recorded, and what it did not establish
+
+The withdrawn URL carried `Cache-Control: public, s-maxage=604800`, an `Age` past 2400 and
+climbing, and `x-robots-tag: noindex`, none of which this repository emits and none of
+which any live page carries. Three consecutive production builds answered a hard 404 at
+that path on their own URLs throughout. Six deploys did not evict it. A 301 ended it in
+one deploy, with no purge.
+
+**The cause was never established, and the first answer written down was wrong.** It was
+read as Cloudflare Always Online, and Cloudflare documents Always Online as serving an
+archive when it cannot reach the origin at all, a 520 to 527. A 404 is a successful
+connection. So that reading is contradicted by the vendor's own documentation and is not
+recorded here as fact. Settling it needs a dashboard read of Caching, Configuration, which
+is a login and therefore Richard's hands. **The redirect works without a theory of the
+cause, which is the reason to prefer it.**
+
+### Two things this section does not cover
+
+**A rollback deletes redirects.** `_redirects` ships inside the build artifact, so
+promoting a deployment older than the commit that added a rule removes that rule, and the
+withdrawn URL becomes an origin 404 again. Check for it before promoting.
+
+**Section 6's VPS path has no redirects at all.** `site/server/src/main.rs` is a `/health`
+route, a static service with a 404 fallback, a cache middleware and four header layers, and
+that is the whole router. `_redirects` is read by Cloudflare Pages and by nothing else, so
+every line of it has to be reimplemented the day the site moves.
+
 ## 6. When the server earns its place
 
 **That moment already came once and this section did not get it**: `/api/subscribe` has

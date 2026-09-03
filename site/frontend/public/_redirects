@@ -2,36 +2,43 @@
 #
 # WHY IT EXISTS. A post was published in Portuguese on 2026-09-03 and republished
 # in English the same day, which changed its slug. The generator wipes blog/ on
-# every run, so the old page left every build immediately, and the old URL kept
-# answering 200 with the full article for hours afterwards.
+# every run, so the old page left every build at once. The old URL then answered
+# 200 with the complete styled article for hours, across six production builds.
 #
-# It was not the zone cache. Measured on the apex, the orphan carried
-# "Cache-Control: public, s-maxage=604800", an "Age" climbing past 2400 seconds,
-# and "x-robots-tag: noindex". Nothing in this repository emits any of those, and
-# the same apex serves every live page with "max-age=0, must-revalidate", no Age
-# and no robots header. That signature is Cloudflare Always Online replaying an
-# archived copy because the origin now 404s there, and it stamps noindex so
-# search engines leave the archive alone. Six production deployments did not
-# evict it, and s-maxage of 604800 is seven days.
+# WHAT WAS MEASURED, and it is worth keeping because the mechanism is not settled.
+# On the apex the orphan carried:
 #
-# WHY A REDIRECT RATHER THAN A PURGE, which was the first instinct and the wrong
-# one. A purge turns the URL into a 404, which breaks every link to the article
-# that is already in a chat, a feed reader or somebody's history, and it only
-# addresses the tier that stamps cf-cache-status, which measurement says is not
-# the tier serving this. A 301 wins under both readings of the mechanism:
+#   Cache-Control: public, s-maxage=604800
+#   Age: 2402, climbing one second per second across polls
+#   x-robots-tag: noindex
 #
-#   If it is Always Online, that path fires only while the origin errors, and a
-#   301 is not an error, so the archived copy stops being reachable with no purge
-#   and no provider default touched.
+# Every live HTML page on the same apex carries max-age=0, must-revalidate, and no
+# Age and no robots header at all. Nothing in this repository emits s-maxage or
+# noindex; public/_headers sets Cache-Control for /assets/* alone. Meanwhile the
+# three production builds either side of the incident all answer a hard 404 at that
+# path on their own *.pages.dev URLs, so the origin genuinely had nothing there
+# while the apex served a styled 200.
 #
-#   If it is some cache tier after all, the redirect means that whenever the
-#   entry does expire, the shared link lands on the article rather than on a 404.
+# THE MECHANISM IS NOT NAMED HERE, ON PURPOSE. The first reading was Cloudflare
+# Always Online, and Cloudflare's own documentation contradicts it: Always Online
+# serves an archive when Cloudflare cannot reach the origin at all, which is a 520
+# to 527, and a 404 is a perfectly successful connection. A guess written into a
+# runbook is worse than a gap in one, because the next person acts on it. What is
+# recorded is the header signature, which is reproducible; what is missing is the
+# cause, which needs a dashboard read nobody has done.
 #
-# It also fixes the half a purge cannot: two URLs serving one article is a
-# duplicate for a search engine, and 301 is the instruction that consolidates
-# them. Deletion is not.
+# WHY A REDIRECT RATHER THAN A PURGE. A purge turns the URL into a 404, which
+# breaks every link already sitting in a chat, a reader or a history, and it only
+# addresses the tier that stamps cf-cache-status, which measurement says is not the
+# tier holding this: the orphan stamped DYNAMIC while an /assets/ file on the same
+# zone went MISS then HIT. A 301 needs no theory of the cause to work, and it fixes
+# the half a purge cannot, since two URLs serving one article is a duplicate and
+# 301 is the instruction that consolidates them.
 #
-# Slug changes are cheap to make and expensive to leave, so a line goes here
-# every time one changes.
+# BOTH PATH FORMS, and this is the part the first version of this file got wrong.
+# Pages matches a _redirects source literally. The rule ending in a slash did not
+# cover the same URL without one, which kept answering 404 for half a day after the
+# fix was called done. Measured, not assumed. Every future entry gets both lines.
 
 /blog/o-nosso-sistema-nao-precisa-de-um-modelo-para-fazer-o-retrieval/  /blog/our-system-doesnt-need-a-model-to-do-the-retrieval/  301
+/blog/o-nosso-sistema-nao-precisa-de-um-modelo-para-fazer-o-retrieval   /blog/our-system-doesnt-need-a-model-to-do-the-retrieval/  301
