@@ -600,6 +600,20 @@ h1 {
    * error, and it is a composition error rather than a padding one: the button
    * itself measures 23.0px of ink to its left border and 22.5px to its right. */
   justify-content: flex-start;
+  /* Baseline, and it has to be said out loud, because the default is stretch
+   * and stretch is what put the two labels on different lines. The framed
+   * label carries min-height 2.75rem and centres its own text inside it; the
+   * plain link beside it is a bare anchor, so as a flex item it stretched to
+   * the same 44px and left its text at the TOP of that box. Two boxes of equal
+   * height, two labels at different heights: measured at 6px apart on the
+   * baseline and 9px at the cap.
+   *
+   * baseline rather than center, because these are two labels and not two
+   * boxes. Centring would align the boxes and leave the type slightly off
+   * whenever the framed label's padding is not symmetric about its text;
+   * baseline aligns the thing a reader actually sees, and lets the frame sit
+   * around its label rather than dictating where the label sits. */
+  align-items: baseline;
   gap: 1rem 1.25rem;
   margin-top: 2.25rem;
 }
