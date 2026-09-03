@@ -99,6 +99,7 @@
       c2: hexToRgb(v("--shader-2", "#241d12")),
       c3: hexToRgb(v("--shader-3", "#c9a860")),
       brightness: parseFloat(v("--shader-brightness", "1")),
+      speed: parseFloat(v("--shader-speed", "0.15")),
       alpha: parseFloat(v("--shader-alpha", "0.55"))
     };
   }
@@ -146,8 +147,9 @@
       U[n] = gl.getUniformLocation(prog, n);
     });
 
-    // The reference's numbers, unchanged. Only the colours and the alpha are ours.
-    gl.uniform1f(U.uSpeed, 0.3);
+    // The reference's density and strength, unchanged. Speed is a token because
+    // it is taste rather than mechanism: half the reference's 0.3, because this
+    // field sits under pages people read rather than under an event poster.
     gl.uniform1f(U.uNoiseDensity, 1.0);
     gl.uniform1f(U.uNoiseStrength, 7.0);
     gl.uniform2f(U.uOffset, 0.0, 0.0);
@@ -160,6 +162,7 @@
       gl.uniform3fv(U.uColor3, vars.c3);
       gl.uniform1f(U.uBrightness, vars.brightness);
       gl.uniform1f(U.uAlpha, vars.alpha);
+      gl.uniform1f(U.uSpeed, vars.speed);
     }
 
     // Half resolution, capped at 1 device pixel per CSS pixel. The field is all
