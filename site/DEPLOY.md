@@ -32,7 +32,7 @@ section 6.
 
 ## 1. Settings to change before the domain goes live
 
-Three Cloudflare settings decide what a visitor actually receives. Each is one toggle,
+Four Cloudflare settings decide what a visitor actually receives. Each is one toggle,
 and **each is invisible to a byte comparison against a local build**, because Cloudflare
 applies them at the edge after the build. Check them the way section 5 checks them, with
 a browser's `User-Agent`, or you will confirm a page that nobody is served.
@@ -61,9 +61,18 @@ failure mode worth remembering here: a policy silently blocking a measurement yo
 you are taking is worse than not measuring, because the dashboard still shows a number
 and the number is of nothing.
 
-Re-check all three after launch. A default that flips silently would falsify a claim we
-made in writing, which is worse than never having made it, and one of them already did:
-Web Analytics was on while the footer said "no analytics", found on 2026-09-03.
+**Browser Cache TTL: Respect Existing Headers.** Caching, then Configuration. Any other
+value makes Cloudflare rewrite the `Cache-Control` this repository sets, on the way out,
+where no build can see it. It was four hours until 2026-09-03, which meant a returning
+visitor held `theme.js` and six other unhashed files for four hours after every deploy,
+reachable by nothing: not a deploy, not a purge. Section 5b has the measurement and the
+check.
+
+Re-check all four after launch. A default that flips silently would falsify a claim we
+made in writing, which is worse than never having made it, and two of them already did:
+Web Analytics was on while the footer said "no analytics", and Browser Cache TTL was
+overriding the repository's own caching policy. Both found on 2026-09-03, both by
+measuring the apex rather than the build.
 
 ## 2. Build
 
@@ -254,29 +263,40 @@ kept answering 200 for hours and nobody could say which layer was holding it.
 |---|---|---|
 | HTML | `max-age=0, must-revalidate`, `cf-cache-status: DYNAMIC` | Nowhere. It is never edge cached here and it revalidates every load |
 | `/assets/*` | `max-age=31536000, immutable` | Nowhere, and the filename is why: the hash changes with the bytes, so the old name is simply never requested again |
-| The unhashed root files | **`max-age=14400` on the apex** | **In the browser, for four hours, and nothing can reach it** |
+| The unhashed root files | `max-age=0, must-revalidate` | Nowhere, since 2026-09-03. It used to be four hours, and that is worth reading |
 
-**The third row is the one to know, and `public/_headers` says the opposite.** Its comment
-claims that everything but `/assets/` keeps the Pages default of `max-age=0,
-must-revalidate`. That is true of the HTML and false of the rest: measured on the apex,
-`theme.js`, `anim.js`, `nav.js`, `field.js`, `subscribe.js`, `favicon.svg` and
-`blog/feed.css` all come back `public, max-age=14400, must-revalidate`, while the same
-files on a `*.pages.dev` URL come back `max-age=0`. The zone rewrites them on the way out.
-Four hours is Cloudflare's default Browser Cache TTL; that it is the default rather than
-something set deliberately is **inferred from the round number, not read from the
-dashboard.**
+**The setting that decides the third row is Browser Cache TTL, and it is the one dial here
+that can silently override this repository.** Until 2026-09-03 it was set to four hours, and
+the effect was invisible from the build: `theme.js`, `anim.js`, `nav.js`, `field.js`,
+`subscribe.js`, `favicon.svg` and `blog/feed.css` came back from the apex as
+`public, max-age=14400, must-revalidate` while the same files on a `*.pages.dev` URL came
+back `max-age=0`. The zone was rewriting them on the way out, so only the apex figure ever
+reached a browser and only the apex could reveal it.
 
-**Why it matters and why no tool fixes it.** A returning visitor holds those seven files
-for four hours without asking again, so a deploy cannot evict them and neither can a
-purge: the browser makes no request to be answered. If a change to `theme.js` has to reach
-existing visitors immediately, the file has to change name, which is what `/assets/` does
-by design and what the root files do not do at all.
+**Why that mattered more than it looks.** A returning visitor held those seven files for
+four hours without asking again. No deploy evicted them and no purge could have, because the
+browser makes no request to be answered. It is the only layer on this site that neither a
+deploy nor a purge reaches.
+
+It is now **Respect Existing Headers**, so Cloudflare stops overriding and the file that
+already states the intent, `public/_headers`, is what reaches the visitor. That is safe here
+for a measured reason rather than a hopeful one: every response this origin serves already
+carries an explicit `Cache-Control`, nine of nine checked, so nothing falls back to a
+browser's own heuristics. `/assets/*` keeps its year because we set that ourselves, and a
+year is safe there and only there, since the filename carries a content hash.
+
+The cost, named: a returning visitor now makes one conditional request per unhashed file per
+page load. Seven small files, answered `304` with no body. That is the price of a deploy
+actually reaching people who have already visited.
+
+**Check it after any change to caching in the dashboard**, because this is exactly the kind
+of setting that gets flipped and forgotten:
 
 ```bash
-# What the visitor is actually told. Read it from the apex, never from the build output.
 UA="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36"
 curl -sI -H "User-Agent: $UA" https://ulpia.io/theme.js | grep -i cache-control
-# expect: public, max-age=14400, must-revalidate
+# expect: public, max-age=0, must-revalidate
+# a max-age of 14400 means Browser Cache TTL is overriding us again
 ```
 
 ### Withdrawing a URL is two steps, and the second is not optional
