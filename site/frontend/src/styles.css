@@ -253,7 +253,17 @@ h2 {
  * the hero is a title page, and its centered rows are layout, not paragraphs.
  * Without the exclusion this indent inherits into the CTA row and pushes the
  * button's text 30px off its own center (seen in the review screenshots). */
-section:not(.hero) p + p {
+/* `.cta-row` is excluded by name, not just `.hero`. The note above already knew
+ * this indent reaches a button's label and named the number, 30px, but the
+ * exclusion written for it covered the hero alone. The doors section's row is
+ * also a `p` after a `p`, so it inherited the indent all along, and text-indent
+ * is an inherited property, so it landed inside the framed label rather than
+ * beside it. Measured on the live page: 57px from the frame to the label on the
+ * left and 24px on the right, out of a rule that sets 22px on both.
+ *
+ * A row of buttons is layout, wherever it sits. The hero's exclusion was the
+ * right instinct scoped to one instance of the thing. */
+section:not(.hero) p + p:not(.cta-row) {
   text-indent: 1.5em;
 }
 
@@ -591,15 +601,22 @@ h1 {
 .cta-row {
   display: flex;
   flex-wrap: wrap;
-  /* Left, because a call to action belongs on the axis its section already
-   * has. The hero centres its heading and its standfirst, so a centred button
-   * there continues an axis the reader is already following; the doors section
-   * hangs everything on the left margin, and the same rule there invented a
-   * second axis the section does not have, leaving the button with a gap on
-   * its left that no other element shared. That gap is what reads as a spacing
-   * error, and it is a composition error rather than a padding one: the button
-   * itself measures 23.0px of ink to its left border and 22.5px to its right. */
-  justify-content: flex-start;
+  /* Centred, on Richard's call, 2026-09-03.
+   *
+   * This was flex-start, and the note that set it argued that the doors section
+   * hangs everything on the left margin, so a centred button would invent a
+   * second axis. That reasoning stands on its own and the reader disagreed with
+   * the result: the button read as adrift rather than as aligned. Worth keeping
+   * both halves of the history, because reverting is this one line.
+   *
+   * What that note got wrong is separable and is fixed above: it concluded the
+   * gap was composition rather than padding, and measured the button at 23.0px
+   * of ink to its left border against 22.5px to its right. On the live page the
+   * same measurement reads 57px and 24px, because the row was inheriting
+   * text-indent from `p + p` and the indent landed inside the frame. So there
+   * was a padding error after all, sitting underneath the composition question,
+   * and it is what made the left gap look like the button's own doing. */
+  justify-content: center;
   /* Baseline, and it has to be said out loud, because the default is stretch
    * and stretch is what put the two labels on different lines. The framed
    * label carries min-height 2.75rem and centres its own text inside it; the
