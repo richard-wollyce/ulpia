@@ -201,6 +201,39 @@ ${list}
   }),
 );
 
+// The feed page's styles live in a file, not in a <style> block, and the reason
+// is this site's own policy. `_headers` sets `style-src 'self'`, which forbids
+// inline styles, so the first version of this rendered perfectly against the
+// preview server (which sends no policy) and arrived at ulpia.io as unstyled
+// browser defaults, blue links and all. Same bytes, different verdict, and only
+// the live one counts.
+//
+// A stable filename rather than the site's hashed sheet: this runs before vite
+// hashes /assets/styles-*.css, so the hashed name is not knowable here.
+writeFileSync(
+  join(FEED_DIR, "feed.css"),
+  `:root { color-scheme: light dark;
+  --ground:#f6f1e7; --ink:#241d16; --ink-2:#5a5044; --accent:#a63325; --rule:#dacfc0; }
+@media (prefers-color-scheme: dark) { :root {
+  --ground:#12100d; --ink:#e7ddcc; --ink-2:#ab9e89; --accent:#c9a860; --rule:#3d3320; } }
+body { margin:0; background:var(--ground); color:var(--ink);
+  font-family:"EB Garamond",Georgia,"Times New Roman",serif; line-height:1.6; }
+main { max-width:32rem; margin-inline:auto; padding:3rem 1.5rem; }
+h1 { font-weight:400; font-size:1.75rem; margin:0 0 .25rem; }
+.lede { color:var(--ink-2); margin:0 0 2rem; }
+.url { display:block; margin:0 0 2rem; padding:.75rem 1rem;
+  border:1px solid var(--rule); font-family:ui-monospace,Menlo,Consolas,monospace;
+  font-size:.9rem; word-break:break-all; }
+h2 { font-weight:400; font-size:1.15rem; margin:1.75rem 0 .1rem; }
+h2 a { color:var(--ink); text-decoration:none; }
+h2 a:hover { color:var(--accent); }
+time { color:var(--ink-2); font-size:.85rem; }
+p.sum { margin:.35rem 0 0; color:var(--ink-2); }
+footer { margin-top:2.5rem; border-top:1px solid var(--rule); padding-top:1rem; }
+a { color:var(--accent); }
+`,
+);
+
 // A stylesheet for the feed, so the same URL answers a person and a reader.
 //
 // The problem it solves: /blog/feed.xml was offered to a human as a link
@@ -235,27 +268,7 @@ writeFileSync(
         <meta charset="utf-8" />
         <meta name="viewport" content="width=device-width, initial-scale=1" />
         <title>Atom feed &#183; Ulpia</title>
-        <style>
-          :root { color-scheme: light dark;
-            --ground:#f6f1e7; --ink:#241d16; --ink-2:#5a5044; --accent:#a63325; --rule:#dacfc0; }
-          @media (prefers-color-scheme: dark) { :root {
-            --ground:#12100d; --ink:#e7ddcc; --ink-2:#ab9e89; --accent:#c9a860; --rule:#3d3320; } }
-          body { margin:0; background:var(--ground); color:var(--ink);
-            font-family:"EB Garamond",Georgia,"Times New Roman",serif; line-height:1.6; }
-          main { max-width:32rem; margin-inline:auto; padding:3rem 1.5rem; }
-          h1 { font-weight:400; font-size:1.75rem; margin:0 0 .25rem; }
-          .lede { color:var(--ink-2); margin:0 0 2rem; }
-          .url { display:block; margin:0 0 2rem; padding:.75rem 1rem;
-            border:1px solid var(--rule); font-family:ui-monospace,Menlo,Consolas,monospace;
-            font-size:.9rem; word-break:break-all; }
-          h2 { font-weight:400; font-size:1.15rem; margin:1.75rem 0 .1rem; }
-          h2 a { color:var(--ink); text-decoration:none; }
-          h2 a:hover { color:var(--accent); }
-          time { color:var(--ink-2); font-size:.85rem; }
-          p.sum { margin:.35rem 0 0; color:var(--ink-2); }
-          footer { margin-top:2.5rem; border-top:1px solid var(--rule); padding-top:1rem; }
-          a { color:var(--accent); }
-        </style>
+        <link rel="stylesheet" href="/blog/feed.css" />
       </head>
       <body>
         <main>
