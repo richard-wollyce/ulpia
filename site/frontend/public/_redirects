@@ -1,0 +1,37 @@
+# Cloudflare Pages reads this file and applies it before the static handler.
+#
+# WHY IT EXISTS. A post was published in Portuguese on 2026-09-03 and republished
+# in English the same day, which changed its slug. The generator wipes blog/ on
+# every run, so the old page left every build immediately, and the old URL kept
+# answering 200 with the full article for hours afterwards.
+#
+# It was not the zone cache. Measured on the apex, the orphan carried
+# "Cache-Control: public, s-maxage=604800", an "Age" climbing past 2400 seconds,
+# and "x-robots-tag: noindex". Nothing in this repository emits any of those, and
+# the same apex serves every live page with "max-age=0, must-revalidate", no Age
+# and no robots header. That signature is Cloudflare Always Online replaying an
+# archived copy because the origin now 404s there, and it stamps noindex so
+# search engines leave the archive alone. Six production deployments did not
+# evict it, and s-maxage of 604800 is seven days.
+#
+# WHY A REDIRECT RATHER THAN A PURGE, which was the first instinct and the wrong
+# one. A purge turns the URL into a 404, which breaks every link to the article
+# that is already in a chat, a feed reader or somebody's history, and it only
+# addresses the tier that stamps cf-cache-status, which measurement says is not
+# the tier serving this. A 301 wins under both readings of the mechanism:
+#
+#   If it is Always Online, that path fires only while the origin errors, and a
+#   301 is not an error, so the archived copy stops being reachable with no purge
+#   and no provider default touched.
+#
+#   If it is some cache tier after all, the redirect means that whenever the
+#   entry does expire, the shared link lands on the article rather than on a 404.
+#
+# It also fixes the half a purge cannot: two URLs serving one article is a
+# duplicate for a search engine, and 301 is the instruction that consolidates
+# them. Deletion is not.
+#
+# Slug changes are cheap to make and expensive to leave, so a line goes here
+# every time one changes.
+
+/blog/o-nosso-sistema-nao-precisa-de-um-modelo-para-fazer-o-retrieval/  /blog/our-system-doesnt-need-a-model-to-do-the-retrieval/  301
