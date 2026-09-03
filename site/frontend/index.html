@@ -237,15 +237,15 @@
 
     <footer>
       <details>
-        <summary>No cookies, no analytics, nothing loaded from anyone else.</summary>
+        <summary>No cookies. One counter, and it is cookieless.</summary>
         <p>
-          This page sets no cookies and runs no analytics. Everything it loads
-          comes from ulpia.io: the stylesheet and the small scripts, and no
-          font file at all, since the type is whatever your system has. The
-          page's own Content-Security-Policy allows each kind of resource from
-          'self' and nothing from anywhere else, with the default set to
-          'none', so a request to another origin would be refused before it
-          left. Open the network tab and you will not find another origin.
+          This page sets no cookies. Everything it loads comes from ulpia.io
+          except one script: Cloudflare Web Analytics, which counts page views.
+          It uses no cookie and no local storage, and it builds no profile and
+          no identifier that would follow you to the next site. That is the
+          whole of it, and it is the only thing here from anyone else. The
+          stylesheet and the small scripts are ours, and there is no font file
+          at all, since the type is whatever your system has.
         </p>
         <p>
           It makes exactly one request that loading the page did not make, and

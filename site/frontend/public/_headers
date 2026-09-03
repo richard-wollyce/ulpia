@@ -10,8 +10,17 @@
 # connect-src and form-action are 'self' because the subscribe modal posts to our
 # own /api/subscribe. Without connect-src the fetch would be blocked by our own
 # policy, since it falls back to default-src 'none'.
+#
+# The two cloudflareinsights.com entries are Web Analytics, which is enabled on the
+# Pages project and injected at the edge, after the build, into every HTML response
+# that looks like it came from a browser. It needs both: static.cloudflareinsights.com
+# to load beacon.min.js, and cloudflareinsights.com to POST the page view back. While
+# script-src was 'self' alone the browser refused the injected script, so the setting
+# was on in the dashboard and dead on the page. A policy that silently blocks a
+# measurement you believe you are taking is worse than not measuring, because the
+# dashboard still shows a number and the number is of nothing.
 /*
-  Content-Security-Policy: default-src 'none'; style-src 'self'; script-src 'self'; img-src 'self'; font-src 'self'; connect-src 'self'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'
+  Content-Security-Policy: default-src 'none'; style-src 'self'; script-src 'self' https://static.cloudflareinsights.com; img-src 'self'; font-src 'self'; connect-src 'self' https://cloudflareinsights.com; base-uri 'none'; form-action 'self'; frame-ancestors 'none'
   X-Content-Type-Options: nosniff
   Referrer-Policy: no-referrer
   Permissions-Policy: camera=(), microphone=(), geolocation=()

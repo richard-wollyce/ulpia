@@ -67,12 +67,18 @@ async fn main() {
         .fallback_service(files)
         .layer(middleware::from_fn(cache_policy))
         .layer(CompressionLayer::new())
-        // The page loads nothing from anyone else's origin, so the policy can say
-        // exactly that. Every header here is one attack surface closed by default;
-        // loosen them the day a feature actually needs it, and name the feature.
+        // Every header here is one attack surface closed by default; loosen them the
+        // day a feature actually needs it, and name the feature. The named feature is
+        // Cloudflare Web Analytics: Pages injects its beacon at the edge, so the two
+        // cloudflareinsights.com entries are what let it run rather than be refused.
+        // This string is the one in site/frontend/public/_headers, and the two are
+        // meant to stay identical, so the page behaves the same whether this binary
+        // or Pages is in front of it. The binary never sees the injection, since that
+        // happens at Cloudflare's edge and not here, but a policy that differs by
+        // deployment target is a policy nobody can test in one place.
         .layer(header_layer(
             header::CONTENT_SECURITY_POLICY,
-            "default-src 'none'; style-src 'self'; script-src 'self'; img-src 'self'; font-src 'self'; connect-src 'self'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'",
+            "default-src 'none'; style-src 'self'; script-src 'self' https://static.cloudflareinsights.com; img-src 'self'; font-src 'self'; connect-src 'self' https://cloudflareinsights.com; base-uri 'none'; form-action 'self'; frame-ancestors 'none'",
         ))
         .layer(header_layer(header::X_CONTENT_TYPE_OPTIONS, "nosniff"))
         .layer(header_layer(header::REFERRER_POLICY, "no-referrer"))
