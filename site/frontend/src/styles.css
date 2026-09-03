@@ -53,8 +53,8 @@
   --field-alpha: 0.42;
   --field-accent-alpha: 0.14;
   --field-vignette: rgba(36, 29, 22, 0.055);
-  --grain-opacity: 0.055;
-  --grain-blend: multiply;
+  --grain-opacity: 0.10;
+  --grain-blend: normal;
 
   --plate: #ede5d5;
   --plate-ink: #241d16; /* 13.28:1 */
@@ -112,8 +112,8 @@
     --field-alpha: 0.30;
     --field-accent-alpha: 0.30;
     --field-vignette: rgba(0, 0, 0, 0.38);
-    --grain-opacity: 0.05;
-    --grain-blend: overlay;
+    --grain-opacity: 0.11;
+    --grain-blend: normal;
 
     --plate: #211b16;
     --plate-ink: #ede3d2; /* 13.40:1 */
@@ -144,8 +144,8 @@
   --field-alpha: 0.30;
   --field-accent-alpha: 0.30;
   --field-vignette: rgba(0, 0, 0, 0.38);
-  --grain-opacity: 0.05;
-  --grain-blend: overlay;
+  --grain-opacity: 0.11;
+  --grain-blend: normal;
 
   --plate: #211b16;
   --plate-ink: #ede3d2;
@@ -2194,6 +2194,7 @@ body::after {
   --shader-3: #f3ecde;
   --shader-brightness: 1.25;
   --shader-alpha: 0.9;
+  --shader-speed: 0.15;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -2203,6 +2204,7 @@ body::after {
     --shader-3: #201b13;
     --shader-brightness: 1;
     --shader-alpha: 0.9;
+    --shader-speed: 0.15;
   }
 }
 
@@ -2212,12 +2214,17 @@ body::after {
   --shader-3: #201b13;
   --shader-brightness: 1;
   --shader-alpha: 0.9;
+  --shader-speed: 0.15;
 }
 
 .field-canvas {
   position: fixed;
   inset: 0;
-  z-index: -1;
+  /* Below the vignette and the grain, which are body's own pseudo-elements at
+   * -1. The canvas is appended to body, so at equal z-index it would paint over
+   * them and the grain would be invisible under the shader, which is exactly
+   * what happened the first time the grain was raised and nothing changed. */
+  z-index: -2;
   width: 100%;
   height: 100%;
   display: block;
