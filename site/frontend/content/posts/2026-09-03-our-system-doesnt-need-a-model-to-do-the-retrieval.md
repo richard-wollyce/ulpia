@@ -16,7 +16,7 @@ reason why I decided to build it. So let's go.
 
 I've noticed that artificial intelligence really is part of our lives now, especially for
 anyone who works in software development. It's something we can't escape anymore, especially
-anyone already working at a production level, anyone already shipping product to the market
+for anyone already working at a production level, anyone already shipping product to the market
 and so on. These days there's no way for us to do things purely by hand, coding everything by
 hand. These days you need the efficiency that AI helps you get. And of course, following
 software engineering fundamentals so you don't ship anything without quality.
@@ -31,7 +31,7 @@ who develops software.
 
 And thinking about that, we get to another point, a point that is correlated to it, that
 doesn't necessarily only work for people who develop software. It solves problems for other
-people, in other areas, but in particular it solves it for anyone who needs an agent to have
+people, in other areas, but in particular it solves them for anyone who needs an agent to have
 a specific, detailed and persistent memory.
 
 ## We get to this AI Memory problem
@@ -80,9 +80,9 @@ And our system doesn't need a model to do the retrieval.
 We use an intelligent system for capturing information in your memory base, one that ranks
 those memories in order to rank the files that are compatible with your input, with what
 you're sending for your artificial intelligence to deal with. And only after we have a
-ranking is it that we actually hand it to an AI model, whether local, whether cloud, well, an
-external provider. Then that model starts to act on top of the information that file brings,
-that is, that memory file.
+ranking do we actually hand it to an AI model, whether local or cloud, well, an external
+provider. Then that model starts to act on the information that file brings, that is, that
+memory file.
 
 ## This repository is going to be open source
 
@@ -90,8 +90,8 @@ But anyway, that's it. Today I'm not going to be able to go into much detail, bu
 present the project. I'm going to leave the repository link, because this repository is going
 to be open source, it's going to be public. So you can contribute to the evolution of this
 project, and you can also self-host it, you can use it on your own machine and integrate it
-with any kind of LLM you want. Whether local, whether cloud, whether, for example, an AI
-provider, for example Anthropic, OpenAI, DeepSeek, well, any LLM model you want to use.
+with any kind of LLM you want. Whether local or cloud, whether, for example, from an AI
+provider like Anthropic, OpenAI, DeepSeek, well, any LLM model you want to use.
 
 You can implement this system. It works over MCP locally too. So you're going to have the
 system, and your agent is going to make calls over MCP and it's going to receive that
@@ -105,7 +105,7 @@ And you're going to be able to, obviously, like I said, handle the memory on you
 yourself can write information into the memory files, and you can also send an agent, a
 model, a specific agent that you might have built as well. That's another thing that's going
 to be left for another video, which is the format we use for building specialised agents. But
-anyway, you can also put that model to record in memory whatever you need, the information
+anyway, you can also set that model to record in memory whatever you need, the information
 you require.
 
 And that's it, folks. I hope you like the project. And we're open to feedback, obviously, so
