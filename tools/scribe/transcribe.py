@@ -25,6 +25,11 @@ Two ways in, and the choice is a real trade rather than a formality:
               length of the video on this CPU, and it returns punctuated,
               capitalised text with better word accuracy.
 
+The --asr path is handed the project's own vocabulary, because a decoder that has
+never seen the word Ulpia writes Upia, and it wrote Upia in all five places the
+name was spoken on the launch video. The list is VOCABULARY below, and adding to
+it is part of correcting a mishearing rather than a separate chore.
+
 Default: captions when they exist, audio when they do not, because most of the
 time the words are the expensive part and the punctuation is not. Pass --asr when
 the recording matters enough to wait.
@@ -43,6 +48,56 @@ from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
 OUT_DIR = HERE / "transcripts"
+
+# The decoder's vocabulary, and it is a measurement rather than a guess. On the
+# launch video, 8.7 minutes through large-v3, whisper produced "Upia" in all five
+# places Ulpia was spoken, "Memo", "Zap" and "Letra" for Mem0, Zep and Letta,
+# "DeepSea" for DeepSeek, "OpenStack Tem Source" for open source, and "chipar" for
+# shipar. Every one was then corrected by hand, and would be corrected by hand
+# again on the next recording, which is the work this removes.
+#
+# It is hardcoded here rather than kept in a file beside the script or passed on a
+# flag. A flag is the worst of the three: it has to be remembered on every run, and
+# a vocabulary nobody remembers to pass is a vocabulary that does not exist. A
+# separate file rots exactly as fast as this list does and adds a second place to
+# look, since the only people who edit it are the people already editing this file.
+#
+# The rule that keeps it current: when you correct a misheard technical term by
+# hand, add it here in the same move. A term corrected twice is a term that should
+# have been added the first time.
+VOCABULARY = [
+    "Ulpia", "Vesta",
+    "Mem0", "Zep", "Letta", "Cognee",
+    "DeepSeek", "Anthropic", "OpenAI",
+    "MCP", "SQLite", "BM25", "embedding",
+]
+
+# Terms whose spelling belongs to one language, kept apart from the names above
+# because the names are the same in every language and these are not. "open source"
+# only needs help when it is spoken inside Portuguese, and "shipar" is Brazilian
+# developer slang that would be noise pushed at an English recording. With
+# --language omitted, only the neutral list is used: the hint has to be built before
+# transcribe() runs, and that is the same call that detects the language.
+VOCABULARY_BY_LANGUAGE = {
+    "pt": ["open source", "shipar"],
+}
+
+# faster-whisper truncates the hint at max_length // 2 - 1, which is 223 tokens
+# (transcribe.py, get_prompt), and it truncates from the end, silently, so growth
+# costs you the newest entries first. Latin script runs roughly four characters to
+# the token, so this is a conservative line at which to say something out loud.
+VOCABULARY_CHAR_BUDGET = 600
+
+
+def vocabulary_for(language: str | None) -> str:
+    """The comma separated hint handed to the decoder, for a language or for none."""
+    terms = VOCABULARY + VOCABULARY_BY_LANGUAGE.get(language or "", [])
+    hint = ", ".join(terms)
+    if len(hint) > VOCABULARY_CHAR_BUDGET:
+        print(f"scribe: the vocabulary is {len(hint)} characters and the model keeps "
+              f"about {VOCABULARY_CHAR_BUDGET}. It drops the end of the list without "
+              f"saying so, so shorten it rather than trusting the tail.")
+    return hint
 
 
 def run(cmd, **kw):
@@ -228,11 +283,25 @@ def main() -> None:
         # what makes a long video finish at all on this machine.
         model = WhisperModel(args.model, device="cpu", compute_type="int8")
 
+        # hotwords rather than initial_prompt, and the difference is the whole
+        # reason this works past the first minute. initial_prompt is pushed once
+        # onto the front of the running token list, and every 30 second window is
+        # conditioned on only the last 223 tokens of that list, so the vocabulary
+        # is shoved off the end as soon as the transcript so far is longer than
+        # about a minute of speech. It is also discarded outright whenever the
+        # decoder falls back to a temperature above 0.5. hotwords is re-encoded
+        # into every window's prompt instead, outside that list, so it survives
+        # both. Read in faster_whisper/transcribe.py, get_prompt and the seek loop,
+        # version 1.2.1. condition_on_previous_text stays at its default True and
+        # does not interact with this: it only governs the running list.
+        vocabulary = vocabulary_for(args.language)
+        print(f"scribe: conditioning the decoder on {vocabulary.count(',') + 1} known terms")
         segments, info = model.transcribe(
             str(wav),
             language=args.language,
             vad_filter=True,  # drops silence, which is most of the pauses in speech
             beam_size=5,
+            hotwords=vocabulary,
         )
         minutes = info.duration / 60
         print(f"scribe: {minutes:.1f} minutes of audio, language {info.language}. Working.")
@@ -250,8 +319,11 @@ def main() -> None:
     text = " ".join(s["text"] for s in collected)
     (out_dir / f"{stem}.txt").write_text(text, encoding="utf-8")
     (out_dir / f"{stem}.json").write_text(
+        # The vocabulary goes in the sidecar for the same reason "method" does:
+        # a name in this transcript was partly produced by the hint, and anyone
+        # auditing a name later should be able to see which hint was in force.
         json.dumps({"source": args.source, "title": title, "language": info.language,
-                    "method": f"whisper-{args.model}",
+                    "method": f"whisper-{args.model}", "vocabulary": vocabulary,
                     "duration_s": round(info.duration, 1), "segments": collected},
                    ensure_ascii=False, indent=1),
         encoding="utf-8",
