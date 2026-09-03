@@ -2316,3 +2316,254 @@ body::after {
   color: var(--ink);
   opacity: 0.62;
 }
+
+/* ---- the comparison chart (Aldus, 2026-09-03) --------------------------
+ *
+ * Why it exists: the latency table on /benchmarks/ held this comparison
+ * already and held it well, but a table is read and a chart is seen, and the
+ * one fact a stranger should leave with is a ratio. This is the same numbers
+ * with the scanning cost removed. Nothing here is a new measurement.
+ *
+ * THE SCALE IS LINEAR AND THAT IS THE WHOLE ARGUMENT. On a log axis every bar
+ * becomes comfortable to read and 128x looks like two steps, which flatters
+ * the field at our expense and, worse, teaches the reader a shape that is not
+ * the shape of the data. Linear renders our bar as a hairline against a wall.
+ * That is what a 128x ratio actually looks like, so that is what is drawn.
+ *
+ * PROVENANCE IS ENCODED IN THE MARK, not only in the caption. A solid bar is
+ * a number this repository measured; a hatched, outlined bar is the vendor's
+ * own published claim about themselves. The mechanism matters more than it
+ * looks: a chart gets screenshotted away from its caption, and the two kinds
+ * of number must stay distinguishable when it does. If they were drawn alike,
+ * this page would be laundering four vendors' marketing into our measurement.
+ */
+/* Breaks out to the wide measure, the way the terminal plate and the bench
+ * tables already do, because a chart's resolution IS its track width: at the
+ * 32rem prose measure the track is 260px and a 0.39% bar is one device pixel.
+ *
+ * `margin-block`, not `margin`. Both `section > *` and `.doc > *` centre their
+ * children with `margin-inline: auto`, and those are element selectors, so a
+ * class writing the `margin` shorthand here silently resets the inline halves
+ * to zero and wins on specificity. The chart then sits hard against the left
+ * gutter while every paragraph around it stays centred. Rendered, found, fixed:
+ * the shorthand is the whole bug. */
+.cmp {
+  max-width: min(var(--measure-wide), 100%);
+  margin-block: 2rem;
+}
+
+/* Surface-proofing, and it is not defensive noise: this component travels to
+ * two pages whose own rules outrank its classes.
+ *
+ *   `.doc p`  and `.doc li` are 0,1,1 and add `margin-bottom: 1rem`
+ *   `.doc ol`                is 0,1,1 and adds list padding
+ *   `section:not(.hero) p + p` adds `text-indent: 1.5em` to the value line
+ *
+ * Every class below is 0,1,0 and loses to all three, so on /benchmarks/ the
+ * rows opened up by a rem each and the names stepped right off the figure's
+ * own left edge, while the same markup on the front page sat tight. Seen by
+ * rendering both. Descendant-scoping each declaration to `.cmp` buys the one
+ * point of specificity that makes the component look the same wherever it is
+ * put, which is the whole promise of a component that travels. */
+.cmp .cmp-rows,
+.cmp .cmp-row,
+.cmp .cmp-name,
+.cmp .cmp-track,
+.cmp .cmp-val,
+.cmp .cmp-head,
+.cmp .cmp-axis-scale {
+  margin-block: 0;
+  text-indent: 0;
+}
+
+.cmp .cmp-rows {
+  padding-inline: 0;
+}
+
+/* Scoped to `.cmp` like the reset above, and for the same reason: written as a
+ * bare class it would lose its bottom margin to that reset's `margin-block: 0`. */
+.cmp .cmp-head {
+  font-size: var(--size-small);
+  color: var(--ink-2);
+  margin: 0 0 1.25rem;
+}
+
+.cmp-head strong {
+  display: block;
+  font-size: var(--size-subhead);
+  font-weight: 600;
+  color: var(--ink);
+  letter-spacing: 0.01em;
+  margin-bottom: 0.15rem;
+}
+
+.cmp-rows {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+/* name | track | value. The value column is fixed so every figure aligns on
+ * one edge; a reader comparing numbers should never have to hunt for them. */
+.cmp-row {
+  display: grid;
+  grid-template-columns: 8.5rem 1fr 5.5rem;
+  align-items: center;
+  gap: 0 0.9rem;
+  padding: 0.6rem 0;
+  border-bottom: 1px solid var(--rule);
+}
+
+.cmp-row:last-child {
+  border-bottom: 0;
+}
+
+.cmp-name {
+  margin: 0;
+  font-size: var(--size-small);
+  font-weight: 600;
+  line-height: 1.3;
+}
+
+.cmp-prov {
+  display: block;
+  font-weight: 400;
+  font-style: italic;
+  color: var(--ink-2);
+  font-size: 0.86em;
+}
+
+.cmp-track {
+  margin: 0;
+  height: 0.85rem;
+  background: transparent;
+  position: relative;
+}
+
+.cmp-bar {
+  display: block;
+  height: 100%;
+  width: var(--w);
+  /* 2px floor. Ulpia's bar is 0.39% of this axis and would otherwise fall
+   * under a device pixel and vanish, which would read as a broken chart
+   * rather than as a small number. The figure beside it is the precise
+   * statement; this is the floor that keeps the mark visible at 320px. */
+  min-width: 2px;
+  background: var(--accent);
+}
+
+/* A vendor's own claim about itself: outlined and hatched, never filled.
+ * The hatch is a gradient rather than an image so it costs no request and
+ * inherits the scheme's ink automatically. */
+.cmp-row.is-claim .cmp-bar {
+  background: repeating-linear-gradient(
+    -45deg,
+    var(--ink-2) 0 1px,
+    transparent 1px 5px
+  );
+  border: 1px solid var(--ink-2);
+  opacity: 0.85;
+}
+
+.cmp-val {
+  margin: 0;
+  font-size: var(--size-small);
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.cmp-row.is-ours .cmp-val {
+  font-weight: 600;
+  color: var(--accent);
+}
+
+/* A row with no bar at all. Letta publishes no retrieval figure, and the
+ * honest mark for that is an absence with a rule through it, not a zero and
+ * not an omission: dropping the row would quietly improve the field. */
+.cmp-row.is-none .cmp-track::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 50%;
+  width: 100%;
+  border-top: 1px dashed var(--rule);
+}
+
+.cmp-row.is-none .cmp-val {
+  color: var(--ink-2);
+  font-style: italic;
+}
+
+.cmp-axis {
+  display: grid;
+  grid-template-columns: 8.5rem 1fr 5.5rem;
+  gap: 0 0.9rem;
+  margin-top: 0.35rem;
+}
+
+.cmp-axis-scale {
+  grid-column: 2;
+  display: flex;
+  justify-content: space-between;
+  font-size: var(--size-mono);
+  color: var(--ink-2);
+  border-top: 1px solid var(--rule);
+  padding-top: 0.3rem;
+}
+
+.cmp-legend {
+  font-size: var(--size-small);
+  font-style: italic;
+  color: var(--ink-2);
+  margin-top: 1rem;
+  line-height: 1.5;
+}
+
+/* The key marks are drawn, not described, so the legend is checkable against
+ * the chart above it without translating words into shapes. */
+.cmp-key {
+  display: inline-block;
+  width: 1.5rem;
+  height: 0.6rem;
+  vertical-align: -0.05em;
+  margin-right: 0.15rem;
+}
+
+.cmp-key-ours {
+  background: var(--accent);
+}
+
+.cmp-key-claim {
+  background: repeating-linear-gradient(
+    -45deg,
+    var(--ink-2) 0 1px,
+    transparent 1px 5px
+  );
+  border: 1px solid var(--ink-2);
+}
+
+/* Below 34rem the three-column row cannot hold: the name column alone eats
+ * half the width and the track collapses to nothing, which would leave a
+ * chart whose bars are all the same length. The row becomes two lines, name
+ * and figure on the first, the full-width track under them, so the bars keep
+ * the one property the chart exists for, comparable length. */
+@media (max-width: 34rem) {
+  .cmp-row {
+    grid-template-columns: 1fr auto;
+    gap: 0.3rem 0.9rem;
+  }
+
+  .cmp-track {
+    grid-column: 1 / -1;
+    grid-row: 2;
+  }
+
+  .cmp-axis {
+    grid-template-columns: 1fr;
+  }
+
+  .cmp-axis-scale {
+    grid-column: 1;
+  }
+}

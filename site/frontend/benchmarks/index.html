@@ -111,6 +111,56 @@
         worth nothing: nine runs of the same binary over the same corpus, with a
         browser and several agent sessions open, spread from 1.53 ms to 4.17 ms.
       </p>
+      <figure class="cmp">
+        <p class="cmp-head">
+          <strong>128x</strong>
+          mem0's published search p50 against our measured p50. Against Zep's
+          fastest published figure the ratio is 69x, p95 against p95. The table
+          under this chart is the same five rows with their sources.
+        </p>
+        <ol class="cmp-rows">
+          <li class="cmp-row is-ours">
+            <p class="cmp-name">Ulpia<span class="cmp-prov">we measured it</span></p>
+            <p class="cmp-track"><span class="cmp-bar" style="--w: 0.39%"></span></p>
+            <p class="cmp-val">1.16 ms</p>
+          </li>
+          <li class="cmp-row is-claim">
+            <p class="cmp-name">mem0<span class="cmp-prov">their paper</span></p>
+            <p class="cmp-track"><span class="cmp-bar" style="--w: 49.33%"></span></p>
+            <p class="cmp-val">148 ms</p>
+          </li>
+          <li class="cmp-row is-claim">
+            <p class="cmp-name">Zep<span class="cmp-prov">their blog</span></p>
+            <p class="cmp-track"><span class="cmp-bar" style="--w: 50%"></span></p>
+            <p class="cmp-val">150 ms</p>
+          </li>
+          <li class="cmp-row is-claim">
+            <p class="cmp-name">Supermemory<span class="cmp-prov">their site</span></p>
+            <p class="cmp-track"><span class="cmp-bar" style="--w: 100%"></span></p>
+            <p class="cmp-val">under 300 ms</p>
+          </li>
+          <li class="cmp-row is-none">
+            <p class="cmp-name">Letta<span class="cmp-prov">their docs</span></p>
+            <p class="cmp-track"></p>
+            <p class="cmp-val">none published</p>
+          </li>
+        </ol>
+        <div class="cmp-axis" aria-hidden="true">
+          <p class="cmp-axis-scale"><span>0</span><span>150 ms</span><span>300 ms</span></p>
+        </div>
+        <figcaption class="cmp-legend">
+          <span class="cmp-key cmp-key-ours"></span> measured here, in process,
+          on the laptop named above.
+          <span class="cmp-key cmp-key-claim"></span> the vendor's own claim
+          about itself, server-side or harness-side, before a caller adds the
+          network. Supermemory's row is drawn at the ceiling it states rather
+          than at a measurement, because "under 300 ms" carries no percentile.
+          Letta's row has no bar because it publishes no figure, and the row
+          stays because dropping it would quietly improve the field. The scale
+          is linear: on a logarithmic axis every bar would be comfortable to
+          read and 128x would look like two steps.
+        </figcaption>
+      </figure>
       <figure class="bench">
         <div class="bench-scroll">
           <table>

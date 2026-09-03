@@ -133,6 +133,63 @@
         </p>
       </section>
 
+      <section aria-labelledby="speed">
+        <h2 id="speed">How long one question&nbsp;takes.</h2>
+        <p data-anim="rise">
+          A hosted memory layer embeds your question, crosses a network,
+          searches, ranks and comes back. This one reads an index that lives
+          beside the files it indexes. The gap is not an optimisation, it is
+          the two mechanisms, and it is the reason the bar below is a hairline.
+        </p>
+        <figure class="cmp" data-anim="rise">
+          <p class="cmp-head">
+            <strong>128x</strong>
+            mem0's own published search p50 against ours, measured. Against
+            Zep's fastest published figure, 69x at the same percentile.
+          </p>
+          <ol class="cmp-rows">
+            <li class="cmp-row is-ours">
+              <p class="cmp-name">Ulpia<span class="cmp-prov">we measured it</span></p>
+              <p class="cmp-track"><span class="cmp-bar" style="--w: 0.39%"></span></p>
+              <p class="cmp-val">1.16 ms</p>
+            </li>
+            <li class="cmp-row is-claim">
+              <p class="cmp-name">mem0<span class="cmp-prov">their paper</span></p>
+              <p class="cmp-track"><span class="cmp-bar" style="--w: 49.33%"></span></p>
+              <p class="cmp-val">148 ms</p>
+            </li>
+            <li class="cmp-row is-claim">
+              <p class="cmp-name">Zep<span class="cmp-prov">their blog</span></p>
+              <p class="cmp-track"><span class="cmp-bar" style="--w: 50%"></span></p>
+              <p class="cmp-val">150 ms</p>
+            </li>
+            <li class="cmp-row is-claim">
+              <p class="cmp-name">Supermemory<span class="cmp-prov">their site</span></p>
+              <p class="cmp-track"><span class="cmp-bar" style="--w: 100%"></span></p>
+              <p class="cmp-val">under 300 ms</p>
+            </li>
+            <li class="cmp-row is-none">
+              <p class="cmp-name">Letta<span class="cmp-prov">their docs</span></p>
+              <p class="cmp-track"></p>
+              <p class="cmp-val">none published</p>
+            </li>
+          </ol>
+          <div class="cmp-axis" aria-hidden="true">
+            <p class="cmp-axis-scale"><span>0</span><span>150 ms</span><span>300 ms</span></p>
+          </div>
+          <figcaption class="cmp-legend">
+            <span class="cmp-key cmp-key-ours"></span> measured in this
+            repository, in process, on one laptop.
+            <span class="cmp-key cmp-key-claim"></span> the vendor's own
+            published claim about itself, server-side and before any network,
+            linked at its source on the
+            <a href="/benchmarks/#latency">benchmarks page</a>. No vendor bar
+            is our measurement, and none of them was run here. Linear scale,
+            so our bar is drawn at the width the ratio actually gives it.
+          </figcaption>
+        </figure>
+      </section>
+
       <section aria-labelledby="trade">
         <h2 id="trade">The other&nbsp;trade.</h2>
         <p data-anim="rise">
@@ -244,8 +301,8 @@
           It uses no cookie and no local storage, and it builds no profile and
           no identifier that would follow you to the next site. That is the
           whole of it, and it is the only thing here from anyone else. The
-          stylesheet and the small scripts are ours, and there is no font file
-          at all, since the type is whatever your system has.
+          stylesheet, the small scripts and the three EB Garamond files are
+          ours, served from ulpia.io under /assets/.
         </p>
         <p>
           It makes exactly one request that loading the page did not make, and
