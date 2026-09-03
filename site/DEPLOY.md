@@ -1,25 +1,41 @@
 # Deploying ulpia.io
 
-The site is static: `frontend/dist/` is the whole product. It ships on **Cloudflare
-Pages**, and the Rust binary in `server/` stays in the repository for the day
-something has to be computed per request.
+Three things ship, not one, and this file used to name only the first:
 
-Why this shape. Every job the binary does for this page (security headers, a real 404
-status, compression, immutable caching on hashed assets) is native to Pages, so a
-server in front of files we already have would be a component with no second use case.
-That is the same failure as a shortcut, pointing the other way. The binary is not
-wasted: it is written, tested, and it is what stands up on a subdomain the day a live
-`kb route` endpoint, an MCP endpoint, or anything else needs to run per request. Until
-then it serves the site locally, which is where it earns its keep today.
+1. **The static site.** `frontend/dist/`, on **Cloudflare Pages**.
+2. **One Pages Function.** `frontend/functions/api/subscribe.ts`, compiled by Pages into
+   the route `/api/subscribe` by its filename. It is live today.
+3. **One D1 database.** `ulpia-subscribers`, bound as `DB` in `frontend/wrangler.toml`,
+   holding the table in `frontend/schema.sql`.
 
-The trade accepted, named: Cloudflare terminates TLS and sees traffic. The page's claim
-in the footer is about what the page itself does, and it stays true, since the page sets
-no cookies, runs no analytics and requests nothing from another origin. If we later want
-that claim to cover the transport as well, that is the VPS path in section 6.
+**Sections 2 through 5 covered only the first for a long time, and that is how a person
+following this runbook end to end ships a site whose subscribe modal has no database
+behind it while `/privacy/` promises the visitor their address is stored in D1.** The
+database and the schema are steps now, in section 2b, because a step that lives only as
+a comment inside the file it applies is a step nobody runs twice.
+
+The Rust binary in `server/` stays in the repository. Every job it does for the static
+page (security headers, a real 404 status, compression, immutable caching on hashed
+assets) is native to Pages, so a server in front of files we already have would be a
+component with no second use case. **The per-request moment named below in section 6
+already arrived, on 2026-08-19, and was answered by a Pages Function rather than by
+standing the binary up.** Section 6 is still the path for the day something needs a
+process rather than a handler: a live `kb route` endpoint, an MCP endpoint, anything
+that has to hold state or run longer than an edge function should. Until then the binary
+serves the site locally, which is where it earns its keep today.
+
+The trade accepted, named: Cloudflare terminates TLS and sees traffic. It also counts the
+traffic, since Web Analytics is deliberately on (section 1). The footer and `/privacy/`
+say so in their own words rather than claiming a purity the deployment does not have. If
+we later want the transport out of Cloudflare's hands too, that is the VPS path in
+section 6.
 
 ## 1. Settings to change before the domain goes live
 
-Two Cloudflare defaults would break this page. Both are one toggle.
+Three Cloudflare settings decide what a visitor actually receives. Each is one toggle,
+and **each is invisible to a byte comparison against a local build**, because Cloudflare
+applies them at the edge after the build. Check them the way section 5 checks them, with
+a browser's `User-Agent`, or you will confirm a page that nobody is served.
 
 **Email Address Obfuscation: turn it off.** Cloudflare enables it automatically on
 signup. It rewrites email addresses in the HTML and injects `email-decode.min.js` to
@@ -33,8 +49,21 @@ not blocked by our CSP either, because it is served from our own origin under
 deliberately synchronous in `<head>` so the stored color scheme applies before first
 paint; deferring it reintroduces exactly the flash that placement exists to prevent.
 
-Re-check both after launch. A default that flips silently would falsify a claim we
-made in writing, which is worse than never having made it.
+**Web Analytics: on, deliberately.** Pages injects
+`static.cloudflareinsights.com/beacon.min.js` before `</body>` of every HTML response
+whose request looks like a browser's. It is cookieless and does not fingerprint, and
+the footer and `/privacy/` describe it rather than denying it.
+
+**It needs the two `cloudflareinsights.com` entries in `frontend/public/_headers` to
+work at all.** While `script-src` was `'self'` alone the browser refused the injected
+script, so the setting read as on in the dashboard and was dead on the page. That is the
+failure mode worth remembering here: a policy silently blocking a measurement you believe
+you are taking is worse than not measuring, because the dashboard still shows a number
+and the number is of nothing.
+
+Re-check all three after launch. A default that flips silently would falsify a claim we
+made in writing, which is worse than never having made it, and one of them already did:
+Web Analytics was on while the footer said "no analytics", found on 2026-09-03.
 
 ## 2. Build
 
@@ -47,6 +76,32 @@ cd site/frontend && npm ci && npm run build
 
 ```bash
 test -f dist/_headers && echo "headers present"
+```
+
+## 2b. The database, once per account
+
+The subscribe endpoint writes to D1. **Skip this and the site deploys clean, the modal
+submits, and every visitor gets a 500 while `/privacy/` promises their address was
+stored.** The failure is invisible from the outside, because the endpoint answers
+identically whether the row was written or the table was missing, by design: see the
+enumeration-oracle comment in `functions/api/subscribe.ts`.
+
+```bash
+cd site/frontend
+npx wrangler d1 create ulpia-subscribers          # prints database_id, paste into wrangler.toml
+npx wrangler d1 execute ulpia-subscribers --remote --file=./schema.sql
+```
+
+The `database_id` is an identifier, not a secret, and it is useless without an
+authenticated account. It already sits in `wrangler.toml` for this deployment.
+
+Verify the table exists rather than assuming the command worked, and note that
+`npx wrangler d1 list` reports `num_tables 0` for this database even when the table is
+there, measured 2026-09-03. **Ask the database, not the listing:**
+
+```bash
+npx wrangler d1 execute ulpia-subscribers --remote \
+  --command "SELECT name FROM sqlite_master WHERE type='table';"
 ```
 
 ## 3. Deploy
@@ -135,30 +190,67 @@ In the Pages project: Custom domains, add `ulpia.io`, then add `www.ulpia.io` an
 it to redirect to the apex. The apex, not `www`, is canonical: one canonical origin
 means one cache, one set of search results, and no cookie-scope surprises later.
 
+**Measured 2026-09-03: `www` does not redirect.** It answers 200 with a byte-identical
+copy of the apex, under its own certificate. The `<link rel="canonical">` on every page
+points at the apex, which is what keeps search results from splitting, so this is a
+runbook that describes a configuration the account does not have rather than a live
+defect. Either set the redirect or change this paragraph; leaving both is how the next
+person believes a redirect exists.
+
 Cloudflare creates the DNS records itself when the zone is on its nameservers. **Leave
 existing MX records alone**: `hello@ulpia.io` mail routing is independent of where the
 website points, and the page is useless if the address in it stops answering.
 
 ## 5. Verify, before calling it done
 
+**Send a browser's `User-Agent` or these checks lie to you.** Cloudflare decides what to
+inject from the request, so a bare `curl` is served a different page from the one a
+person gets. On 2026-09-03 a byte comparison of all twelve pages against a local build
+passed while every one of them was shipping an analytics beacon to real browsers: plain
+`curl` returned 19810 bytes, a browser `User-Agent` returned 20169. Set it once:
+
 ```bash
+UA="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36"
+B=(-H "User-Agent: $UA" -H "Accept: text/html,application/xhtml+xml")
+
 curl -sI https://ulpia.io/ | grep -i "content-security-policy\|cache-control\|x-content-type"
 curl -s -o /dev/null -w "%{http_code}\n" https://ulpia.io/no-such-page   # expect 404
-curl -s https://ulpia.io/ | grep -c "cdn-cgi"                            # expect 0
+curl -s "${B[@]}" https://ulpia.io/ | grep -c "cdn-cgi"                  # expect 0
+curl -s "${B[@]}" https://ulpia.io/ | grep -c "cloudflareinsights"       # expect 1
 curl -s https://ulpia.io/ | grep -o 'mailto:[^"]*'                       # expect the real address
+curl -s -o /dev/null -w "%{http_code}\n" https://ulpia.io/api/subscribe  # expect 405
 curl -sI https://ulpia.io/assets/$(curl -s https://ulpia.io/ | grep -o 'assets/styles-[^"]*css' | head -1 | cut -d/ -f2) | grep -i cache-control
 ```
 
-In order, those check that the policy arrived, that a wrong URL is honestly a 404, that
-Cloudflare injected nothing, that the CTA is still a real `mailto`, and that hashed
-assets are immutable while the HTML is not. The third one is the one that catches a
-silently re-enabled obfuscation setting.
+In order: the policy arrived; a wrong URL is honestly a 404; Cloudflare injected no
+email obfuscation; the analytics beacon **is** there, because it is meant to be and a 0
+means either the setting flipped off or the CSP is refusing it again; the CTA is still a
+real `mailto`; the subscribe endpoint exists and answers a GET honestly rather than
+falling through to the static 404; and hashed assets are immutable while the HTML is not.
 
-Then open the page and press the lamp. Automated checks do not have eyes.
+Two of those catch a silently changed provider default, in both directions: `cdn-cgi`
+expects 0 and `cloudflareinsights` expects 1. A check that only ever expects absence
+cannot tell you a feature you rely on has been turned off.
+
+Then open the page and press the lamp, and submit the form with an address you own.
+Automated checks do not have eyes, and the write path is the one thing here that cannot
+be verified from outside without writing: the endpoint answers 201 identically whether
+the row was stored or the table was missing, deliberately, so that it is not an email
+enumeration oracle. The count is the proof:
+
+```bash
+npx wrangler d1 execute ulpia-subscribers --remote --command "SELECT COUNT(*) FROM subscribers;"
+```
 
 ## 6. When the server earns its place
 
-The moment something must be computed per request, the binary moves to a VPS on a
+**That moment already came once and this section did not get it**: `/api/subscribe` has
+been computing per request since 2026-08-19, answered by a Pages Function. What is left
+here is the case a Function cannot take: something that must hold state between requests,
+run longer than an edge invocation allows, or ship a binary rather than a handler, such
+as a live `kb route` or MCP endpoint.
+
+When that lands, the binary moves to a VPS on a
 subdomain (`api.ulpia.io` or similar) while the page stays on Pages. That split keeps
 the landing page immune to the server being down.
 
