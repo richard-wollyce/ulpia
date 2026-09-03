@@ -80,18 +80,29 @@
           browser's local storage and never sent to us. We cannot read it.
         </li>
         <li>
-          No log of your visit. There is no server of ours behind this page: the
-          site is static files, and the one function we run is the one that adds
-          an address, which writes the address, the moment and the version, and
-          nothing about the request that carried them. Our host keeps its own
-          operational records under its own policy, which we do not control.
+          A count of the visit, through Cloudflare Web Analytics. It records that
+          a page was loaded, with the page, the referrer, and coarse things the
+          request already carried such as country and browser. It sets no cookie,
+          writes nothing to your browser's storage, and does not fingerprint, so
+          it cannot tell a returning visitor from a new one and builds no profile
+          and no identifier that follows you anywhere. We see totals, never a
+          person.
+        </li>
+        <li>
+          No log of your visit kept by us. There is no server of ours behind this
+          page: the site is static files, and the one function we run is the one
+          that adds an address, which writes the address, the moment and the
+          version, and nothing about the request that carried them. Our host
+          keeps its own operational records under its own policy, which we do not
+          control.
         </li>
       </ol>
       <p>
-        That is the complete list. There is no analytics, no advertising pixel,
-        no session cookie, no fingerprinting and no profile. The page's own
-        Content-Security-Policy refuses every origin but ulpia.io, so the check
-        is the network tab, where you will not find another origin.
+        That is the complete list. There is no advertising pixel, no session
+        cookie, no fingerprinting and no profile. Two origins serve this page and
+        no others: ulpia.io, and cloudflareinsights.com for the counter above.
+        The page's own Content-Security-Policy names exactly those two and
+        refuses the rest, so the check is the network tab.
       </p>
 
       <h2 id="why-we-have-your-address">Why we have your address</h2>

@@ -153,9 +153,16 @@ published artifact would be one nothing has ever executed, which is worth less t
 absence. Build from source there.
 
 ```
-gh release download kb-v0.1.0 -R richard-wollyce/ulpia -p "kb-linux-x64*"
+gh release download -R richard-wollyce/ulpia -p "kb-linux-x64*"
 sha256sum -c kb-linux-x64.sha256
 ```
+
+**No tag in that command, deliberately.** Without one `gh` resolves to the latest
+release, so this line cannot rot into pointing at an old binary while the prose around it
+describes a newer one. That is not hypothetical: it happened here between `kb-v0.1.0` and
+`kb-v0.2.0`, and the paragraph above went on promising behaviour the pinned download did
+not have. Name a tag only when you want a specific version and are willing to check what
+it does: `gh release download kb-v0.2.0 -R ...`.
 
 The Linux one is `x86_64-unknown-linux-musl`, statically linked, so it depends on nothing
 outside the file and runs on Alpine, Debian and the Amazon Linux images serverless

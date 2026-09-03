@@ -373,7 +373,7 @@
         than its absence.
       </p>
       <div class="note" role="note">
-        <p><strong>Note.</strong> Both binaries are on the tagged release <a href="https://github.com/richard-wollyce/ulpia/releases/tag/kb-v0.1.0"><code>kb-v0.1.0</code></a> of 28 August 2026, each with a <code>.sha256</code> beside it, and <a href="/docs/local/#build">On Your Machine</a> shows the download and the checksum line. The source is public at <a href="https://github.com/richard-wollyce/ulpia">github.com/richard-wollyce/ulpia</a>, under <a href="https://github.com/richard-wollyce/ulpia/blob/main/LICENSE">Apache 2.0</a>, and can be cloned today.</p>
+        <p><strong>Note.</strong> Both binaries are on the <a href="https://github.com/richard-wollyce/ulpia/releases/latest">latest release</a>, each with a <code>.sha256</code> beside it, and <a href="/docs/local/#build">On Your Machine</a> shows the download and the checksum line. <strong>Take the latest rather than a pinned tag</strong>: <code>kb-v0.1.0</code> predates <a href="/docs/decisions/">ADR-0034</a> and still asks git which files it may serve, so on a bundle with no <code>.git</code> it leaves every base out and answers with nothing. That is the exact deployment this page describes. The source is public at <a href="https://github.com/richard-wollyce/ulpia">github.com/richard-wollyce/ulpia</a>, under <a href="https://github.com/richard-wollyce/ulpia/blob/main/LICENSE">Apache 2.0</a>, and can be cloned today.</p>
       </div>
 
       <h2 id="reading-the-json">Reading the JSON</h2>

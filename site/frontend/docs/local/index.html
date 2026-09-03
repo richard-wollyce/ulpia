@@ -123,8 +123,15 @@ cargo build --release --manifest-path tools/kb/Cargo.toml</code></pre>
         has ever executed is worth less than its absence. Build from source
         there.
       </p>
-      <pre><code>gh release download kb-v0.1.0 -R richard-wollyce/ulpia -p "kb-linux-x64*"
+      <pre><code>gh release download -R richard-wollyce/ulpia -p "kb-linux-x64*"
 sha256sum -c kb-linux-x64.sha256</code></pre>
+      <p>
+        There is no tag in that command on purpose. Without one <code>gh</code>
+        resolves to the latest release, so the line cannot rot into fetching an
+        old binary while this page describes a newer one. Name a tag only when
+        you want a specific version:
+        <code>gh release download kb-v0.2.0 -R ...</code>.
+      </p>
 
       <h2 id="the-demo-fleet">The demo fleet</h2>
       <p>
