@@ -532,7 +532,7 @@ a deployment was not, and is marked.*
 
 | what | where | number |
 |---|---|---|
-| open the fleet and answer the first question, in process | Windows laptop, `examples/demo`, 2026-08-23 | 136.4 ms, then warm p50 0.68 ms over 1000 samples |
+| open the fleet and answer the first question, in process | Windows laptop, `examples/demo`, 2026-09-02 | 11.8 ms, then warm p50 1.16 ms over 1000 samples. The same run on the 2026-08-23 code measured 184.6 ms cold and 0.84 ms warm; ADR-0034 taking git out of the runtime is the cold difference |
 | spawn `kb route --json`, open, answer | the same laptop, release build, 40 samples after 3 warm-ups, 2026-08-30 | p50 **184.8 ms**, min 145.8, p90 252.2 |
 | the same spawn and answer | Linux, WSL2 on x86-64, a 9 entry base, 40 executions, 2026-08-29 | p50 **9.6 ms**, of which about 6 ms is process creation |
 
