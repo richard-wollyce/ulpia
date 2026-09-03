@@ -112,8 +112,28 @@
     --field-alpha: 0.30;
     --field-accent-alpha: 0.30;
     --field-vignette: rgba(0, 0, 0, 0.38);
-    --grain-opacity: 0.40;
-    --grain-blend: normal;
+    /* soft-light, not normal, and this is the whole fix (2026-09-03).
+     *
+     * The grain is grey noise. Composited normally at 0.40 over a near-black it
+     * does not texture the ground, it repaints it: measured on the live page, the
+     * band sat at rgb(18,16,13) and the body it is supposed to match sat at
+     * rgb(45,45,47). Two faults in one, and the second reads as wrong before
+     * anybody can name it. The lift is 27 points, which is why gold and off-white
+     * stopped separating from it. And the ground is a WARM black, R above B, while
+     * grey noise pulls to neutral: the body came out with B above R, so the header
+     * read warm and the page read cold, out of one token.
+     *
+     * soft-light modulates the base instead of covering it, so the black and its
+     * warmth both survive. Measured across twelve candidates: normal 0.40 gives
+     * (51,50,47); overlay and multiply hold the black but the tooth falls to a
+     * standard deviation of 0.2 to 0.6, which is grain nobody can see; soft-light
+     * at 1.0 gives (27,25,20), deviation 2.3, warmth +7. Within nine points of the
+     * band, warmer than before, and the texture still legible.
+     *
+     * Light is untouched. Over paper, grey noise darkens toward the ink rather
+     * than washing away from it, and it was right already. */
+    --grain-opacity: 1;
+    --grain-blend: soft-light;
 
     --plate: #211b16;
     --plate-ink: #ede3d2; /* 13.40:1 */
@@ -144,8 +164,28 @@
   --field-alpha: 0.30;
   --field-accent-alpha: 0.30;
   --field-vignette: rgba(0, 0, 0, 0.38);
-  --grain-opacity: 0.40;
-  --grain-blend: normal;
+  /* soft-light, not normal, and this is the whole fix (2026-09-03).
+   *
+   * The grain is grey noise. Composited normally at 0.40 over a near-black it
+   * does not texture the ground, it repaints it: measured on the live page, the
+   * band sat at rgb(18,16,13) and the body it is supposed to match sat at
+   * rgb(45,45,47). Two faults in one, and the second reads as wrong before
+   * anybody can name it. The lift is 27 points, which is why gold and off-white
+   * stopped separating from it. And the ground is a WARM black, R above B, while
+   * grey noise pulls to neutral: the body came out with B above R, so the header
+   * read warm and the page read cold, out of one token.
+   *
+   * soft-light modulates the base instead of covering it, so the black and its
+   * warmth both survive. Measured across twelve candidates: normal 0.40 gives
+   * (51,50,47); overlay and multiply hold the black but the tooth falls to a
+   * standard deviation of 0.2 to 0.6, which is grain nobody can see; soft-light
+   * at 1.0 gives (27,25,20), deviation 2.3, warmth +7. Within nine points of the
+   * band, warmer than before, and the texture still legible.
+   *
+   * Light is untouched. Over paper, grey noise darkens toward the ink rather
+   * than washing away from it, and it was right already. */
+  --grain-opacity: 1;
+  --grain-blend: soft-light;
 
   --plate: #211b16;
   --plate-ink: #ede3d2;
@@ -2712,19 +2752,6 @@ body::after {
   padding: 0.75rem 0.9rem;
   background: var(--ground);
   border: 1px solid var(--rule);
-}
-
-.nav-group {
-  margin: 0.5rem 0 0.25rem;
-  padding: 0;
-  font-size: var(--size-mono);
-  font-style: italic;
-  color: var(--ink-2);
-  line-height: 1.4;
-}
-
-.nav-group:first-child {
-  margin-top: 0;
 }
 
 .nav-panel ul {
