@@ -79,121 +79,84 @@
       <section aria-labelledby="library">
         <h2 id="library">A library that lives with&nbsp;you.</h2>
         <p class="opening" data-anim="rise">
-          Ulpia is a library. Your notes, your decisions, your protocols are
-          its books: markdown files, in folders, on your disk. Move the folder
-          and everything moves with it, because no absolute path exists
-          anywhere inside a fleet.
-        </p>
-        <p data-anim="rise">
-          Version it with git if you want the history; nothing is served on
-          that condition. A folder with a note in it is already a base, with no
-          git init, no manifest and no marker.
+          Ulpia is a library, named for Trajan's. Your notes, your decisions,
+          your protocols are its books: markdown files, in folders, on your
+          disk. A folder with a note in it is already a base, with no git init
+          and no manifest, and moving the folder moves everything, because no
+          absolute path exists anywhere inside a fleet.
         </p>
         <p data-anim="rise">
           Vesta is its librarian. Ask her a question and she answers with the
           files that should open, and no model reads your library to do it.
-          When she is wrong, she says why, in words you can act on.
-        </p>
-        <p data-anim="rise">
-          Named for the Bibliotheca Ulpia, Trajan's library: Rome's reading
-          room and its record office in one building. That pair, the knowledge
-          and the record of the decisions behind it, is what this software
-          holds.
+          When she is wrong, she says why.
         </p>
       </section>
 
       <section aria-labelledby="instead">
         <h2 id="instead">What you would use it&nbsp;instead of.</h2>
         <p data-anim="rise">
-          Two kinds of tool get used as a project's memory, and they lose for
-          two different reasons. One is worth swapping and the other is worth
-          keeping, so it is worth being exact about which is which.
+          <strong>A notes app, and Obsidian is the one people name.</strong>
+          Graph view, backlinks, canvas, sync, a plugin ecosystem years deep,
+          and Ulpia has none of them. Every one is drawn for a person to look
+          at. The agent in your repository opens a shell, not a vault: it greps
+          your markdown, and grep has no opinion about which file is right. If
+          you read your own notes with your own eyes, keep Obsidian.
         </p>
         <p data-anim="rise">
-          <strong>A notes app, and Obsidian is the one people name.</strong> It
-          keeps markdown on your disk and it is good at what it is built for:
-          graph view, backlinks, canvas, sync, a plugin ecosystem years deep.
-          Ulpia has none of those. If your job is reading your own notes with
-          your own eyes, keep it.
+          <strong>A vector memory layer.</strong> It fixes the matching and
+          leaves the certainty alone: a ranking has a top entry whether or not
+          the corpus holds the answer, so the confident wrong citation
+          survives the upgrade. It does ingest without asking you to write
+          anything, which Ulpia does not.
         </p>
         <p data-anim="rise">
-          The mechanism is who the organising is aimed at. Every one of those
-          features is drawn for a person to look at, and none of them is a call
-          an agent can make. The agent working in your repository opens a
-          shell, not a vault, so what it does with a folder of markdown is grep
-          it, and grep has no opinion about which file is the right one. Ulpia
-          organises the same files for the query instead of for the eye.
-        </p>
-        <p data-anim="rise">
-          <strong>A vector memory layer.</strong> It fixes the matching, which
-          is real, and it leaves the certainty alone. Retrieval comes back as a
-          ranking, and a ranking has a top entry whether or not the corpus holds
-          the answer, so the confident wrong citation survives the upgrade. It
-          also ingests without asking you to write anything, which Ulpia does
-          not, and that is a genuine advantage rather than a concession.
-        </p>
-        <p data-anim="rise">
-          What is ours is the middle of that comparison rather than the end of
-          it. Nothing in the retrieval path guesses, which is what lets one
-          answer be explainable, reproducible and offline at the same time, and
-          those three are what you feel on an ordinary Tuesday. The last one
-          follows from them: a score you can trust is also a score that can come
-          up short, and on
+          Ulpia organises the same files for the query instead of for the
+          eye, and nothing in its retrieval path guesses, which is also what
+          lets a score come up short. On
           <a href="/benchmarks/#longmemeval-s">LongMemEval</a>, a public
-          benchmark of 500 instances, the fleet got that call right 29 times out
-          of 30 on 24 August 2026. The same run answered 51 of 56 on
-          single-session-assistant, and the two figures travel together so
-          neither reads as one picked out of a table.
+          benchmark of 500 instances, the fleet got that call right 29 of 30
+          on 24 August 2026, and answered 51 of 56 on
+          single-session-assistant in the same run.
         </p>
       </section>
+
       <section aria-labelledby="work">
         <h2 id="work">Watch her&nbsp;work.</h2>
         <figure class="terminal" data-anim="rise">
           <pre class="term"><span class="line cmd-line"><span class="prompt">$ </span><span class="cmd">kb route "why is there no embedding model in the retrieval path" decisions <span class="flag">--hybrid</span></span></span><span class="blank"></span><span class="line meta">question: why is there no embedding model in the retrieval path</span><span class="line meta">indexed:  40 entries across 1 agents, 0 aliases</span><span class="blank"></span><span class="line hit"><span class="pad">  </span><span class="score">0.033</span><span class="pad">  </span><span class="base">decisions</span><span class="pad"> </span><span class="file">0018-no-model-in-the-retrieval-path.md</span><span class="pad">       </span><span class="agree">keywords #1 + text #2</span></span><span class="line hit"><span class="pad">  </span><span class="score">0.032</span><span class="pad">  </span><span class="base">decisions</span><span class="pad"> </span><span class="file">0027-a-model-decides-who-answers.md</span><span class="pad">          </span><span class="agree">keywords #4 + text #1</span></span><span class="line hit"><span class="pad">  </span><span class="score">0.029</span><span class="pad">  </span><span class="base">decisions</span><span class="pad"> </span><span class="file">0017-no-dense-scorer-yet.md</span><span class="pad">                  </span><span class="agree">keywords #6 + text #13</span></span></pre>
           <figcaption>
-            Real output, re-run 4 September 2026 at commit 9ffe0df, on Windows: the
-            first three of the five files it listed, with the passage preview
-            under each left out and nothing else touched.
+            Real output, re-run 4 September 2026 at commit 9ffe0df on Windows:
+            the first three of the five files it listed, with each passage
+            preview left out and nothing else touched.
           </figcaption>
         </figure>
         <p data-anim="rise">
-          Two independent scorers read every question. One is a keyword scorer
-          over the Search for line each note carries under its title, the label
-          on the book. The other is full text search over the content. The
-          verdict is hit, guess or nothing, and it comes from one number: the
-          top file's keyword score, measured against a floor that scales with
-          the size of the library. Whether the second scorer found the same
-          file is reported beside it, as in the last column above, and never as
-          the verdict. The number printed above is the fused score of both
-          rankings; the keyword score behind the verdict, and the floor it was
-          measured against, are printed by kb route --json.
+          Two scorers read every question: one over the Search for line each
+          note carries under its title, the label on the book, and one over
+          the full text. The verdict is hit, guess or nothing, from one
+          number: the top file's keyword score against a floor that scales
+          with the library.
         </p>
         <p data-anim="rise">
-          A miss is answered too. Rather than returning an empty screen, the
-          library offers the keys it does hold that look like the words you
-          used, so you learn what it covers instead of learning to stop asking.
-          That comparison is spelling and not meaning: it reaches a typo or a
-          cognate and never a translation, and the reply says which kind of help
-          it is.
+          Whether the second scorer agreed is reported beside it, in the last
+          column, and never as the verdict. The score shown fuses both
+          rankings; kb route --json prints the keyword score behind the
+          verdict and its floor.
         </p>
         <p data-anim="rise">
-          And when a subject belongs to nobody in your fleet, Vesta says
-          exactly that: nothing in this fleet covers it, which is a gap in the
-          fleet rather than a gap in your question. No score can produce that
-          sentence. It is a judgement about a subject, and the section on the
-          guest says who makes it.
+          A miss is answered too: instead of an empty screen, the library
+          offers the nearest keys it does hold. And when a subject belongs to
+          nobody in your fleet, Vesta says exactly that, which no score can do.
+          The guest below is who does.
         </p>
       </section>
-
-
 
       <section aria-labelledby="speed">
         <h2 id="speed">How long one question&nbsp;takes.</h2>
         <p data-anim="rise">
-          A hosted memory layer embeds your question, crosses a network,
-          searches, ranks and comes back. This one reads an index that lives
-          beside the files it indexes. The gap is not an optimisation, it is
-          the two mechanisms, and it is the reason the bar below is a hairline.
+          A hosted memory layer embeds your question and crosses a network.
+          This one reads an index sitting beside the files it indexes. That
+          gap is the two mechanisms, not an optimisation.
         </p>
         <figure class="cmp" data-anim="rise">
           <p class="cmp-head">
@@ -233,18 +196,17 @@
           </div>
           <figcaption class="cmp-legend">
             <span class="cmp-key cmp-key-ours"></span> <strong>Gold is
-            ours</strong>, measured in this repository, in process, on the one
-            laptop that built the thing.
+            ours</strong>, measured in this repository, in process, on the
+            laptop that built it.
             <span class="cmp-key cmp-key-mid"></span><span class="cmp-key cmp-key-worst"></span>
-            <strong>The redder the bar, the slower the system.</strong> Each of
-            these is that vendor's own published claim about itself, linked at
-            its source on the <a href="/benchmarks/#latency">benchmarks page</a>;
-            the hatching is what says the number is theirs rather than ours, so
-            the two things stay separable if this chart is ever seen without its
-            caption. No vendor bar is our measurement and none was run here.
+            <strong>The redder the bar, the slower the system.</strong> Each
+            red bar is that vendor's own published claim about itself, linked
+            at its source on the <a href="/benchmarks/#latency">benchmarks
+            page</a>, and the hatching is what says so if this chart is ever
+            seen without its caption. None of them was run here.
             <span class="cmp-key cmp-key-none"></span> A grey rule means the
-            vendor publishes no figure at all. Linear scale, so our bar is drawn
-            at the width the ratio actually gives it.
+            vendor publishes no figure at all. Linear scale, so our bar is
+            drawn at the width the ratio actually gives it.
           </figcaption>
           <figcaption class="cmp-legend">
             <strong>No bar here includes the network.</strong> Every vendor
@@ -252,118 +214,69 @@
             round trip; ours is a local process with no round trip to add. We
             measured that floor too, the TCP connect from this machine to each
             vendor's real API host before a single request is sent, and it ran
-            from 5 ms to 213 ms depending on the host. It is deliberately not
-            drawn, and not in our favour: four of the five resolve to CDN
-            edges, so the floor understates the distance to the application
-            behind them rather than overstating it. Whichever number it is, it
-            is a cost added to their bars and not to ours. The figures are in
+            from 5 ms to 213 ms. It is deliberately not drawn, and not in our
+            favour: four of the five resolve to CDN edges, so the floor
+            understates the distance to the application behind them rather
+            than overstating it. Either way it is a cost on their bars and
+            never on ours. The figures are in
             <a href="https://github.com/richard-wollyce/ulpia/blob/main/benchmarks/latency/RESULTS.md"><code>benchmarks/latency/RESULTS.md</code></a>.
           </figcaption>
         </figure>
-      </section>
-      <section aria-labelledby="trade">
-        <h2 id="trade">The other&nbsp;trade.</h2>
-        <p data-anim="rise">
-          Nothing is free. Putting an embedding model between you and your own
-          notes buys semantic matching, and the bill is four things: you cannot
-          run it offline, you cannot explain a bad result, you cannot reproduce
-          yesterday's answer, and your notes have been somewhere you did not
-          choose.
-        </p>
-        <p data-anim="rise">
-          Writing a line of keys on each note is a smaller bill, paid earlier,
-          and this is what it buys back.
-        </p>
-        <ul class="properties" data-anim="rise">
-          <li><strong>Offline</strong>, because your files are read on your machine and nowhere else.</li>
-          <li><strong>Explainable</strong>, because the answer names the words that matched under each file, and says when a file was found by its text alone.</li>
-          <li>
-            <strong>Reproducible</strong>, because the same question finds the
-            same files, today and in a year.
-          </li>
-          <li>
-            <strong>Private</strong>, because each base declares its own
-            private layer, and Vesta serves nothing inside it unless the owner
-            asks for it with --all.
-          </li>
-        </ul>
-        <p data-anim="rise">
-          Those four are properties of how your notes are read. The one step
-          that may call a model is about your fleet and not your notes, and it
-          is next.
-        </p>
       </section>
 
       <section aria-labelledby="guest">
         <h2 id="guest">The model is a&nbsp;guest.</h2>
         <p data-anim="rise">
-          Every memory product offers the same bargain: useful context, in
-          exchange for your notes living somewhere you do not control. Ulpia
-          gives you the context and leaves the ownership where it already was.
-          What follows is the mechanism that makes both true at once.
+          An embedding model between you and your own notes buys semantic
+          matching, and your notes have been somewhere you did not choose.
+          A line of keys on each note is a smaller bill, paid earlier, and
+          this is what it buys back.
+        </p>
+        <ul class="properties" data-anim="rise">
+          <li><strong>Offline</strong>, because your files are read on your machine and nowhere else.</li>
+          <li><strong>Explainable</strong>, because the answer names the words that matched under each file.</li>
+          <li><strong>Reproducible</strong>, because the same question finds the same files, today and in a year.</li>
+          <li><strong>Private</strong>, because each base declares its own private layer, and Vesta serves nothing inside it without --all.</li>
+        </ul>
+        <p data-anim="rise">
+          One step may still call a model, and it is about your fleet, not
+          your notes. Finding the file is a lookup, and code does that exactly.
+          Choosing the agent is a judgement, so a model does that one.
         </p>
         <p data-anim="rise">
-          Which file holds the answer and which of your agents should give it
-          are different questions. Finding the file is a lookup, and code does
-          that exactly. Choosing the agent is a judgement about a subject, so a
-          model does that one.
-        </p>
-        <p data-anim="rise">
-          That model is handed your question, the roster, the file names Vesta
-          found with the words that matched, and the one line at the top of
-          each of those files where you said what it is for. Never the files
-          themselves. It reads a briefing at the door, never the shelves.
-        </p>
-        <p data-anim="rise">
-          The step calls a command you name, which you can swap or remove; with
-          none configured, the keyword scores pick the agent on their own. It
-          takes seconds, and moving it onto your own machine is the work in
-          front of us. The code is open source under
-          <a href="https://github.com/richard-wollyce/ulpia/blob/main/LICENSE">Apache 2.0</a>.
+          It sees your question, the roster, the file names Vesta found with
+          the words that matched, and the one line at the top of each where you
+          said what it is for. Never the files: a briefing at the door, never
+          the shelves. It takes seconds, and you name the command it calls, or
+          remove it and let the keyword scores pick.
         </p>
         <p data-anim="rise">
           A model may stand between you and your fleet. Never between you and
-          your notes. Then you hand the files to whatever model you like:
-          yours, locally; Claude, through MCP; something else next year. The
-          memory outlives the model.
+          your notes. Hand the files to whatever model you like: yours,
+          locally; Claude, through MCP; something else next year. The memory
+          outlives the model.
         </p>
       </section>
 
       <section aria-labelledby="stands">
-        <h2 id="stands">Where it&nbsp;stands.</h2>
+        <h2 id="stands">Where it stands. The doors are&nbsp;open.</h2>
         <p data-anim="rise">
           Early, used daily, and honest about which is which. The core is
-          tested, and no count is printed because the number moves between
+          tested; no count is printed because the number moves between
           sessions. The tray app is Windows only and young. There is no macOS
-          binary and no hosted instance, and local model routing is not built.
+          binary, no hosted instance, and local model routing is not built.
+        </p>
+        <p data-anim="rise">
           The source is public at
-          <a href="https://github.com/richard-wollyce/ulpia">github.com/richard-wollyce/ulpia</a>.
-        </p>
-        <p data-anim="rise">
-          If that paragraph made you more curious instead of less, this is
-          being built for you.
-        </p>
-        <p data-anim="rise">
-          The first four pages of the <a href="/docs/">docs</a> are written to
-          be read in order, and say beside each how long it takes. The
-          <a href="/benchmarks/">benchmarks</a> put every number of ours beside its
-          command, machine and date, and the commit where the results file
-          records one.
-        </p>
-      </section>
-
-      <section aria-labelledby="door">
-        <h2 id="door">The doors are open. So is the&nbsp;mail.</h2>
-        <p data-anim="rise">
-          The source lives at
           <a href="https://github.com/richard-wollyce/ulpia">github.com/richard-wollyce/ulpia</a>,
-          Apache 2.0, cloneable today. If we ever run a hosted version, it is
-          this same folder, run for you; you leave by copying it out. Our
-          address is hello@ulpia.io, and it sits under this button as a plain
-          mailto, so with JavaScript off, or with a modified click, your mail
-          client opens. With it on, the button also puts the address on your
-          clipboard and offers the other direction: leave yours, and we write
-          when there is something you can install, rarely otherwise.
+          Apache 2.0, cloneable today. The <a href="/benchmarks/">benchmarks</a>
+          put every number of ours beside its command, machine and date.
+        </p>
+        <p data-anim="rise">
+          Our address is hello@ulpia.io, a plain mailto under this button.
+          Press it and the address goes to your clipboard, and you can leave
+          yours: we write when there is something you can install, rarely
+          otherwise.
         </p>
         <p class="cta-row" data-anim="rise">
           <a class="cta-primary" href="mailto:hello@ulpia.io" aria-haspopup="dialog">Write to hello@ulpia.io</a>
