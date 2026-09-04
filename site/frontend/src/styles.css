@@ -3038,3 +3038,334 @@ body::after {
     transition: none;
   }
 }
+
+
+/* ============================================================================
+ * THE LATENCY CHART'S ONE PERFORMANCE (Aldus, 2026-09-04)
+ *
+ * THE ARGUMENT IN ONE LINE. Duration = latency, 1:1, so every bar grows at the
+ * same velocity, so at any instant every still-filling bar's leading edge sits
+ * at the same x, and that x is the axis tick for the elapsed time. The x-axis
+ * and the clock become the same axis. Every frame of the transit is therefore
+ * a true chart of latency-so-far, which is the strongest available form of the
+ * rule that a width must never lie, even in motion.
+ *
+ * WHY NOT A GENEROUS MAPPING, which is the trap here. Distance ALREADY encodes
+ * latency, in --w. If duration encodes it too but on a different scale, the eye
+ * reads the quotient, velocity, and velocity inverts the argument. Work it: a
+ * floored mapping like max(90ms, 1.2 x latency) gives our bar 0.39% of the
+ * track in 90ms, and mem0 49.33% in 178ms. Ours would crawl 64x slower than
+ * theirs. The fastest system on the page would look like the slowest thing on
+ * it. Every floored mapping does this, and the more generous the floor, the
+ * worse the inversion. k = 1 removes the second scale entirely.
+ *
+ * WHY THE FILL IS THE ONE MOTION HERE THAT IS NOT EASED. Easing is a distortion
+ * of time, and in this figure time is data. `linear` on the fill is not a style
+ * choice, it is the honesty of the chart: under any easing, a freeze frame at
+ * t=100ms would show mem0 at 80% of its value and Supermemory at 60% of its
+ * own, which is a chart of nothing.
+ *
+ * OUR BAR NEVER VISIBLY LOADS, AND THAT IS THE POINT. 1.16ms is 7% of one frame
+ * at 60Hz, so the bar is simply there. Slowing it down is the only way to lie
+ * here, so the arrival gets a MARK instead of a duration: a 240ms spark at the
+ * bar's tip that claims no width. It inflates salience, never data, and it is
+ * still ringing while the vendor bars are between 40% and 80% filled.
+ *
+ * THE TWO GROUND LAWS ARE SATISFIED BY THE TOKEN, NOT BY AN EXCEPTION. Every
+ * colour below is var(--accent), neat or through color-mix. The system has
+ * exactly one emphatic hue per scheme and --accent IS it: red on paper, gold on
+ * cover. So the brief's "feixe de luz dourado" is literal gold in dark, where
+ * gold is legal, and arrives as the Mastery red in light, where it is not.
+ * --gold-sheen is the trap two lines from --gold in this file: its own comment
+ * says "hover on cover material only", and law 1 forbids gold on paper at
+ * 2.02:1 as text, border and ornament alike.
+ *
+ * LETTA IS NOT DRAWN IN THE ACCENT, and this is a correction to the spec this
+ * was built from. In this chart --accent means "we measured it": it fills our
+ * bar and it is the legend's own cmp-key-ours swatch. Painting the one vendor
+ * with no published number in our measurement colour would invert the legend,
+ * which is a worse fault than a palette violation. Their dash is --ink-2.
+ *
+ * LETTA MOVES ONLY AFTER THE RACE, which is the second correction. Under k = 1
+ * the reader's grammar for the first 300ms is "duration = latency". A row with
+ * no number breathing inside that window would make the one vendor who
+ * published nothing the slowest thing on the chart, a claim we cannot make.
+ * Its breath therefore begins once every bar has come to rest, where the
+ * grammar has ended and motion is ornament again.
+ *
+ * THE BUDGET, and it is load-bearing for WCAG 2.2.2. Worst case is .delay-2:
+ *   560 load + 300 fills + 1120 Letta + 240 silence + 2400 glint = 4620ms,
+ * which is 380ms inside the five second line. NOTHING HERE MAY BE LENGTHENED
+ * WITHOUT REDOING THAT SUM. The infinite loop is opt in, behind a button that
+ * is its own stop control, which is the mechanism 2.2.2 asks for.
+ *
+ * THE FAILURE MODE IS THE FINISHED CHART. Not one static declaration below sets
+ * a clip, transform or opacity that differs from the resting state; every
+ * non-final value lives inside a @keyframes and every animation is `backwards`.
+ * So no JS, reduced motion, print, or a missing --ms all render the true chart.
+ * ========================================================================= */
+
+/* Ungated on purpose: the control must not exist where the performance does
+ * not. 0,2,0 because on /benchmarks/ this figure sits inside `.doc`, whose bare
+ * `.doc p` is 0,1,1 and outranks a lone class. */
+.cmp .cmp-ctl {
+  display: none;
+  margin: 0.5rem 0 0;
+  text-indent: 0;
+}
+
+@media screen and (prefers-reduced-motion: no-preference) {
+  /* `screen`, matching this sheet's practice: print does not scroll, so a
+   * printed page gets the finished chart like every other static path. */
+
+  /* ==== keyframes ======================================================= */
+
+  /* A clip, never a scale. scaleX would shear the 45deg hatch and squash the
+   * 1px outline to a sub-pixel line, so the vendor bars would visibly unsquash
+   * as they arrived, which is a lie about the mark the legend defines. inset()
+   * clips the border box, so the outline draws in with the hatch. Zero layout
+   * and zero CLS: the box never changes, only what is revealed of it. */
+  @keyframes cmp-fill {
+    from { clip-path: inset(0 100% 0 0); }
+    to   { clip-path: inset(0 0 0 0); }
+  }
+
+  /* The vendor breath. Its period IS the fill duration, so the pulse rate is a
+   * second honest encoding of latency for free: Supermemory breathes over
+   * 300ms and mem0 over 148ms. One cycle only; two would put the 148ms row at
+   * 13.5Hz, which is a flicker and a photosensitivity question, not a breath.
+   * 0.85 is the bar's existing static opacity, so it begins and ends at rest. */
+  @keyframes cmp-work {
+    0%, 100% { opacity: 0.85; }
+    50%      { opacity: 0.62; }
+  }
+
+  /* The spark. Transform is stated at all three offsets so the scale has no
+   * velocity kink at the opacity peak. */
+  @keyframes cmp-spark {
+    0%   { opacity: 0;   transform: translate(-50%, -50%) scale(0.35); }
+    15%  { opacity: 0.9; transform: translate(-50%, -50%) scale(0.55); }
+    100% { opacity: 0;   transform: translate(-50%, -50%) scale(1); }
+  }
+
+  /* Letta. A 560ms envelope: 200ms in, 160ms hold, 200ms out, twice. The stops
+   * are the segment boundaries, 200/560 and 360/560. Peak 0.42 is the brief's
+   * "bem leve e fraco", and it returns to 0 so the finished row is byte for
+   * byte what ships today. */
+  @keyframes cmp-absent {
+    0%   { opacity: 0; }
+    36%  { opacity: 0.42; }
+    64%  { opacity: 0.42; }
+    100% { opacity: 0; }
+  }
+
+  /* The glint. An 800ms envelope holding exactly 300ms of travel and 500ms of
+   * nothing. That shape is what lets a watchable rhythm coexist with the rule
+   * that nothing may out-perform the lamp: the lamp caps the MOVE at 360ms, and
+   * the only thing that moves here is a 300ms pass. The element is parked off
+   * the right edge for the remaining 500ms, and the jump back to the left
+   * happens outside the row's clip, so it is never seen. */
+  @keyframes cmp-sweep {
+    0%          { transform: translateX(-115%); }
+    37.5%, 100% { transform: translateX(115%); }
+  }
+
+  /* Byte identical under a second name, and not duplication for its own sake: a
+   * CSS animation restarts only when its computed animation-name changes, so a
+   * name swap is the only way to make the reader's press start a fresh sweep
+   * rather than drop them into the middle of iteration 17. This sheet already
+   * carries the trick for the lamp, as chain-tug-a and chain-tug-b. */
+  @keyframes cmp-sweep-loop {
+    0%          { transform: translateX(-115%); }
+    37.5%, 100% { transform: translateX(115%); }
+  }
+
+  /* ==== the clock ======================================================= */
+
+  /* When the bars start, measured from the frame .is-shown lands. 300ms is the
+   * existing rise transition and 120ms is THE BEAT, this site's own
+   * TYPE_BEAT_MS, so the eye is settled and pointed at the figure before
+   * anything inside it moves. The overrides are not decoration: anim.js assigns
+   * .delay-1 / .delay-2 from DOM order and those are transition delays on the
+   * rise, so the load has to follow. .instant is set by the focus guard and the
+   * 6s failsafe, which kill the transition, so waiting 300ms would be a stall.
+   * Source order matters: .instant is last so it wins over .delay-1. */
+  .cmp         { --cmp-load: 420ms; }
+  .cmp.delay-1 { --cmp-load: 490ms; }
+  .cmp.delay-2 { --cmp-load: 560ms; }
+  .cmp.instant { --cmp-load: 120ms; }
+
+  /* ==== the load ======================================================== */
+
+  /* If --ms is ever missing or unitful, calc() is invalid at computed-value
+   * time, the shorthand drops, animation-name becomes none and the bar sits at
+   * its true width. Silent, but the safe failure. No var() fallback on purpose:
+   * a row that loses its timing must fail visibly to a reviewer, not quietly
+   * inherit somebody else's number. */
+  html[data-js] .cmp.is-shown .cmp-row .cmp-bar {
+    animation: cmp-fill calc(var(--ms) * 1ms) linear var(--cmp-load) backwards;
+  }
+
+  /* 0,5,0 beats the 0,4,0 above, which is how the breath is added without
+   * restating the fill's timing anywhere the two could drift apart. ease-in-out
+   * because a breath is symmetric and has no arrival to ease into. */
+  html[data-js] .cmp.is-shown .cmp-row.is-claim .cmp-bar {
+    animation:
+      cmp-fill calc(var(--ms) * 1ms) linear var(--cmp-load) backwards,
+      cmp-work calc(var(--ms) * 1ms) ease-in-out var(--cmp-load) backwards;
+  }
+
+  /* The spark sits on the track, not on the bar: the bar carries the fill's
+   * clip-path and clip-path clips its own pseudo-elements, so a spark parented
+   * to the bar would be cut to a 2px sliver. `max(var(--w), 2px)` mirrors the
+   * bar's own min-width floor, so it centres on the tip the reader can actually
+   * see rather than 1px away from it. */
+  html[data-js] .cmp-row.is-ours .cmp-track::before {
+    content: "";
+    position: absolute;
+    top: 50%;
+    left: max(var(--w), 2px);
+    width: 2.2rem;
+    height: 1.1rem;
+    margin: 0;
+    border-radius: 50%;
+    pointer-events: none;
+    opacity: 0;
+    transform: translate(-50%, -50%) scale(0.35);
+    background: radial-gradient(
+      ellipse closest-side,
+      color-mix(in srgb, var(--accent) 62%, transparent) 0%,
+      transparent 100%
+    );
+  }
+
+  html[data-js] .cmp.is-shown .cmp-row.is-ours .cmp-track::before {
+    animation: cmp-spark 240ms cubic-bezier(0.33, 1, 0.68, 1)
+      var(--cmp-load) backwards;
+  }
+
+  /* Letta's dash, laid exactly over the existing grey one, in --ink-2 rather
+   * than the accent for the legend reason in the header. It rests at opacity 0
+   * and the existing `.is-none .cmp-track::after` is untouched. The delay puts
+   * it after the last bar has landed: 300ms is Supermemory's fill, the longest
+   * on the chart. */
+  html[data-js] .cmp-row.is-none .cmp-track::before {
+    content: "";
+    position: absolute;
+    left: 0;
+    right: 0;
+    top: 50%;
+    border-top: 1px dashed var(--ink-2);
+    pointer-events: none;
+    opacity: 0;
+  }
+
+  html[data-js] .cmp.is-shown .cmp-row.is-none .cmp-track::before {
+    animation: cmp-absent 560ms ease-in-out
+      calc(var(--cmp-load) + 300ms) 2 backwards;
+  }
+
+  /* ==== the glint ======================================================= */
+
+  /* It sweeps the ROW and not the bar, and that is practical before it is
+   * aesthetic: our bar is 2px at its floor and you cannot run a beam across two
+   * pixels. Sweeping the row also makes it impossible to misread the band as a
+   * bar filling the track, because it crosses the name and the value too. It is
+   * light falling on a line of gold leaf, which is the material this page is
+   * dressed as.
+   *
+   * overflow:hidden is what parks the element off screen between passes, and it
+   * is declared here rather than in the base rules because it belongs to the
+   * performance: under reduced motion the row keeps its normal overflow. */
+  html[data-js] .cmp-row.is-ours {
+    position: relative;
+    overflow: hidden;
+  }
+
+  html[data-js] .cmp-row.is-ours::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    z-index: 1;
+    pointer-events: none;
+    transform: translateX(-115%);
+    background: linear-gradient(
+      105deg,
+      transparent 0 41%,
+      color-mix(in srgb, var(--accent) 26%, transparent) 50%,
+      transparent 59% 100%
+    );
+  }
+
+  /* 26% is a measured ceiling and not a taste. At peak the wash leaves the row's
+   * ink at 8.19:1 in light and 7.52:1 in dark, both far above the 4.5:1 floor,
+   * and the band covers about 18% of the row at a time. Past roughly 40% that
+   * argument fails, so this number is load-bearing for WCAG 1.4.3.
+   *
+   * The delay is the whole thesis as arithmetic: 300ms of fills, 1120ms of
+   * Letta, 240ms of silence, so the stage is empty before the ornament starts.
+   * Three passes, then it is over. DO NOT LENGTHEN WITHOUT REDOING THE SUM in
+   * the header: the last frame is --cmp-load + 1660 + 2400, which is 4620ms at
+   * worst, 380ms inside WCAG 2.2.2's five second line. */
+  html[data-js] .cmp.is-shown .cmp-row.is-ours::after {
+    animation: cmp-sweep 800ms cubic-bezier(0.33, 1, 0.68, 1)
+      calc(var(--cmp-load) + 1660ms) 3 backwards;
+  }
+
+  /* The owner's loop, on demand. Same specificity as the rule above, so source
+   * order decides and these two must stay below it. A name swap rather than a
+   * count change, because only a name change restarts an animation, and delay 0
+   * so the press is answered on the very next frame. */
+  html[data-js] .cmp.is-shown.is-looping .cmp-row.is-ours::after {
+    animation-name: cmp-sweep-loop;
+    animation-delay: 0ms;
+    animation-iteration-count: infinite;
+  }
+
+  /* The stop half of the same button. `animation: none` returns the element to
+   * its static transform, translateX(-115%), off the left edge and clipped.
+   * Without that static transform this rule would strand a permanent wash
+   * across the row, which is the bug this line exists to prevent. */
+  html[data-js] .cmp.is-shown.is-stopped .cmp-row.is-ours::after {
+    animation: none;
+  }
+
+  /* ==== the control ===================================================== */
+
+  .cmp .cmp-ctl {
+    display: block;
+  }
+
+  /* This site's text-button vocabulary: accent on hover and focus, the 2px ring
+   * at 3px offset, the 160ms micro duration. The underline is text-decoration
+   * rather than a border so the 24px target minimum (WCAG 2.5.8) can be bought
+   * with padding without the rule drifting away from the text. */
+  .cmp .cmp-loop {
+    font: inherit;
+    font-size: var(--size-small);
+    font-style: italic;
+    color: var(--ink-2);
+    background: none;
+    border: 0;
+    padding: 0.35rem 0;
+    min-height: 24px;
+    cursor: pointer;
+    text-decoration: underline;
+    text-decoration-color: var(--rule);
+    text-underline-offset: 3px;
+    transition:
+      color 160ms cubic-bezier(0.33, 1, 0.68, 1),
+      text-decoration-color 160ms cubic-bezier(0.33, 1, 0.68, 1);
+  }
+
+  .cmp .cmp-loop:hover,
+  .cmp .cmp-loop:focus-visible {
+    color: var(--accent);
+    text-decoration-color: var(--accent);
+  }
+
+  .cmp .cmp-loop:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 3px;
+  }
+}

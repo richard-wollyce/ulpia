@@ -104,6 +104,42 @@
       if (box) show(box, true);
     });
 
+    // ---- the latency chart's one control (motion spec, 2026-09-04).
+    // The glint plays three passes and stops, so nothing in the figure moves
+    // for longer than 4.62s and WCAG 2.2.2 never engages on a plain page load.
+    // This button is the loop the brief asked for, opt in, and it is its own
+    // stop control, which is the mechanism 2.2.2 wants for perpetual motion.
+    // Built here and never in markup, so it cannot exist without JS and cannot
+    // exist under reduced motion: this file returns at line 8. Nothing is
+    // stored, so a loop can never greet a reader who did not ask for one.
+    //
+    // The label does NOT change with state. A toggle button that swaps its
+    // accessible name while also setting aria-pressed announces two opposite
+    // things at once ("Stop the highlight, pressed"), which is worse than
+    // either alone. aria-pressed carries the state; the name stays the action.
+    [].slice.call(document.querySelectorAll(".cmp")).forEach(function (fig) {
+      var axis = fig.querySelector(".cmp-axis");
+      if (!axis) return;
+      var p = document.createElement("p");
+      var b = document.createElement("button");
+      p.className = "cmp-ctl";
+      b.type = "button";
+      b.className = "cmp-loop";
+      b.setAttribute("aria-pressed", "false");
+      b.textContent = "Loop the highlight";
+      b.addEventListener("click", function () {
+        var on = fig.classList.toggle("is-looping");
+        // is-stopped kills the animation outright, so it must be present
+        // whenever the loop is off. Without it, turning the loop off would
+        // fall back to the three-pass rule, whose delay has long since
+        // elapsed, and the row would simply sit there looking broken.
+        fig.classList.toggle("is-stopped", !on);
+        b.setAttribute("aria-pressed", on ? "true" : "false");
+      });
+      p.appendChild(b);
+      axis.parentNode.insertBefore(p, axis.nextSibling);
+    });
+
     // No script failure may leave content hidden.
     setTimeout(function () {
       heroEls.concat(riseEls).forEach(function (el) {
