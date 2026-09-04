@@ -18,6 +18,16 @@ use std::path::Path;
 /// code 2.7. Four is close enough for a budget and honest about being an estimate.
 const CHARS_PER_TOKEN: f64 = 4.0;
 
+/// Bytes to tokens, in the one place that does the arithmetic.
+///
+/// A second caller wanted this the moment a panel had to price the artifact its reviewers
+/// read as well as the constitutions they boot with. Two estimates of the same thing drift
+/// by a factor nobody notices until a report and a budget disagree, so the constant stays
+/// private and this is how it is reached.
+pub fn tokens(bytes: usize) -> usize {
+    (bytes as f64 / CHARS_PER_TOKEN).round() as usize
+}
+
 #[derive(PartialEq, Clone, Copy, Debug)]
 pub enum Mode {
     /// Loaded into the prompt at wake, and paid for by every question afterwards.
@@ -37,7 +47,7 @@ pub struct Block {
 
 impl Block {
     pub fn tokens(&self) -> usize {
-        (self.bytes as f64 / CHARS_PER_TOKEN).round() as usize
+        tokens(self.bytes)
     }
 }
 

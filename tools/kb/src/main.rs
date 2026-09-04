@@ -9,7 +9,7 @@ use kb::checks::{Finding, Level};
 use kb::{
     answer, base, blocks, boot, capture, checks, classify, commit, eval, gate, index, init, json,
     list,
-    mcp, memory, misroute, misses, promote, remember, store, ui, write,
+    mcp, memory, misroute, misses, panel, promote, remember, store, ui, write,
 };
 use base::Base;
 use std::path::Path;
@@ -39,6 +39,11 @@ usage:
     kb misses [path]... [--all] [--top N] [--json] [--apply --gold <tsv>]
     kb misroute <message> --chose <agent> --owner <agent|none> [--why <text>] [path]
     kb misroutes [path] [--top N]
+    kb panel <artifact> [path] --owner <agent> [--reviewer <agent>]... [--out D] [--json]
+    kb panel <artifact> [path] --from <agent> (--objection <text> [--blocking]
+                                              | --nothing | --not-returned) [--why <text>]
+    kb panel <artifact> [path] --resolve <n> (--taken | --refused | --escalated) [--why <text>]
+    kb panel [<artifact>] [path] --ledger [--json]
 
     path        base to work on, defaults to the current directory
     --emit      blocks: print the assembled resident constitution instead of the report
@@ -116,6 +121,40 @@ the loop that can tell `this is not mine` while it is still true.
 
 Evidence, never action. Nothing reads this log and edits a base. It widens what the
 proposer can see, and every proposal still has to survive the gate.
+
+panel is the objection round, and the router usually opens it rather than you. `kb boot`
+already asks a model who owns a message, with every agent's role and edge in front of it;
+that verdict now carries REVIEWERS as well, so a message landing in two domains arrives
+with the owner, the panel, and the command below already written. Running it by hand is
+how a round opens for a piece nobody asked a question about.
+
+One agent owns the piece and is accountable for it. The panel returns named objections
+and never rewrites. Every objection is taken, refused in writing, or escalated, and a
+blocking objection cannot be refused at all. `--ledger` prints the table that travels with
+the piece and exits 1 while the round is open, so a release step can gate on it.
+
+Four things it enforces rather than asks for: the owner cannot review their own piece, an
+agent with no blocks.txt cannot be seated because a subagent with no constitution is a
+reviewer in costume, blocking is bounded to one per reviewer, and a reviewer who never
+answered is recorded as `not-returned` and never as `nothing`.
+    --owner     the one agent accountable for the piece
+    --reviewer  an agent that must object before it ships. Repeatable, capped at
+                three, and never the owner. Left out, the command proposes a panel
+                with each agent's role, edge and boot cost, and opens nothing
+    --out       where the assembled constitutions are written, default .kb/panel
+    --from      which reviewer an answer belongs to, and which reviewer's objection
+                a --resolve number refers to when two of them raised one
+    --objection what that reviewer found wrong, in one line
+    --blocking  this one cannot be refused. One per reviewer
+    --resolve   the objection number, as --ledger prints it
+    --why       the owner's reason. Required to refuse, because a refusal with no
+                reason cannot be audited after the piece underperforms
+
+With no classifier configured there is no panel. margin and contenders look like the
+signal and were measured against this fleet's 49 question gold set on 2026-09-04: every
+single-owner question has 2 to 10 contenders, and a margin cut of 1.5 fires on 25% of
+them, 2.0 on 40%. No cut separates the cases, and the errors are not symmetric: a panel
+not convened costs one review, a panel convened wrongly costs about 206,000 tokens.
 
 commit exists because more than one session writes these repositories at once.
 It commits exactly the paths you name and then reads the commit back to prove it,
@@ -228,6 +267,7 @@ const LINES_SHOWN: usize = 3;
 const VALUE_FLAGS: &[&str] = &[
     "--top", "--keys", "--summary", "--folder", "--provenance", "--stage", "--base", "--kind",
     "-m", "--port", "--max", "--gold", "--chose", "--owner", "--why",
+    "--reviewer", "--out", "--from", "--objection", "--resolve",
 ];
 
 fn main() -> ExitCode {
@@ -339,6 +379,7 @@ fn main() -> ExitCode {
             flag_value(&args, "--why").as_deref(),
         ),
         "misroutes" => cmd_misroutes(paths_or_default(&positional)[0], top),
+        "panel" => cmd_panel(&args, &positional, all, top, json),
         "capture" => {
             let paths = paths_or_default(&positional);
             cmd_capture(paths[0], flag_value(&args, "--session").as_deref())
@@ -445,6 +486,20 @@ fn positionals<'a>(args: &[&'a str]) -> Vec<&'a str> {
 fn flag_value(args: &[String], flag: &str) -> Option<String> {
     let i = args.iter().position(|a| a == flag)?;
     args.get(i + 1).cloned()
+}
+
+/// Every value given for a flag that may be repeated, as in `--reviewer a --reviewer b`.
+///
+/// `flag_value` takes the first and drops the rest, which is right for `--top` and wrong
+/// for a panel: a round opened with three reviewers named and one seated is a round that
+/// looks reviewed and was not.
+fn flag_values(args: &[String], flag: &str) -> Vec<String> {
+    args.iter()
+        .enumerate()
+        .filter(|(_, a)| *a == flag)
+        .filter_map(|(i, _)| args.get(i + 1).cloned())
+        .filter(|v| !v.starts_with("--"))
+        .collect()
 }
 
 fn paths_or_default<'a>(given: &[&'a str]) -> Vec<&'a str> {
@@ -1610,6 +1665,595 @@ fn cmd_misroutes(path: &str, top: usize) -> ExitCode {
     println!("  A count above one is a standing defect in the keys or the aliases, not an");
     println!("  unusual message. Delete the line once the routing it describes is fixed.");
     ExitCode::SUCCESS
+}
+
+// ---------------------------------------------------------------------------
+// panel
+// ---------------------------------------------------------------------------
+
+/// `kb panel`: the objection round, for any owner and any artifact.
+///
+/// **It does not coordinate and it does not call a model.** The protocol it promotes says
+/// exactly that about itself: it runs on the mechanism this fleet already has rather than
+/// on a coordinator agent that does not exist. So this assembles what a session needs to
+/// run the round, prices it before anything is spent, and keeps the accounting.
+///
+/// **The output is written for the model driving the session, not only for a terminal.**
+/// That is why it prints the exact instruction to hand a subagent and the exact commands
+/// that record what comes back: a report a model has to translate into commands is a
+/// report a model will translate wrongly. `--json` carries the same facts for a caller
+/// that parses rather than reads.
+fn cmd_panel(args: &[String], positional: &[&str], all: bool, top: usize, json: bool) -> ExitCode {
+    let ledger_mode = args.iter().any(|a| a == "--ledger");
+    let from = flag_value(args, "--from");
+    let resolving = flag_value(args, "--resolve");
+
+    // The artifact is the first positional and the fleet root is the second, so a round
+    // and the base it is scored against never have to be told apart by shape.
+    let artifact = positional.first().copied();
+    let root = Path::new(positional.get(1).copied().unwrap_or("."));
+
+    if ledger_mode {
+        return panel_ledger(root, artifact, json);
+    }
+    // **`--resolve` is tested before `--from`, and the order is not arbitrary.** `--from`
+    // also disambiguates which reviewer's objection a number refers to, so a resolve that
+    // names one would otherwise be dispatched as a recording and refused for lacking an
+    // answer flag. Found by reading the dispatch after documenting the flag.
+    if let Some(n) = resolving {
+        return panel_resolve(args, root, artifact, &n);
+    }
+    if let Some(agent) = from {
+        return panel_record(args, root, artifact, &agent);
+    }
+    panel_open(args, root, artifact, all, top, json)
+}
+
+/// Opens a round, or proposes a panel when none was named.
+///
+/// **A proposed panel is never seated.** The router elects an owner from a question, and a
+/// reviewer is not an owner: an agent whose subject the piece stakes a claim on without
+/// using its vocabulary scores zero here and would be silently left off. So the ranking is
+/// printed with every agent's edge beside it and `--reviewer` is still required, which is
+/// the same division `kb misses` draws between proposing an alias and writing one.
+fn panel_open(
+    args: &[String],
+    root: &Path,
+    artifact: Option<&str>,
+    all: bool,
+    top: usize,
+    json: bool,
+) -> ExitCode {
+    let Some(artifact) = artifact else {
+        eprintln!("kb: panel needs the artifact under review, as a path or a name.");
+        eprintln!("    `kb panel --ledger` lists the rounds that are already open.");
+        return ExitCode::from(2);
+    };
+    let Some(owner) = flag_value(args, "--owner") else {
+        eprintln!("kb: panel needs --owner <agent>: the one agent accountable for this piece.");
+        eprintln!("    A panel with no owner is a committee, and a committee cannot own an arc.");
+        return ExitCode::from(2);
+    };
+
+    let memory = match memory::Memory::open(&[root], all) {
+        Ok(m) => m,
+        Err(e) => {
+            eprintln!("kb: {e}");
+            return ExitCode::from(1);
+        }
+    };
+    let roster = memory.roster();
+    if !roster.iter().any(|r| r.eq_ignore_ascii_case(&owner)) {
+        eprintln!("kb: no routable agent named `{owner}`. The fleet: {}", roster.join(", "));
+        return ExitCode::from(2);
+    }
+
+    // Read once, here, so the round is priced on the piece rather than on the boot alone.
+    let body = std::fs::read_to_string(artifact).ok();
+    let artifact_bytes = body.as_ref().map(|b| b.len()).unwrap_or(0);
+
+    let reviewers = flag_values(args, "--reviewer");
+    if reviewers.is_empty() {
+        return panel_propose(&memory, artifact, body.as_deref(), &owner, top);
+    }
+
+    let out_dir = flag_value(args, "--out")
+        .map(std::path::PathBuf::from)
+        .unwrap_or_else(|| root.join(".kb").join("panel"));
+
+    // Checked before anything is assembled. `panel::open` refuses this too, and would
+    // refuse it after three constitutions had already been written to disk for a round
+    // that was never going to exist.
+    if let Some(same) = reviewers.iter().find(|r| r.eq_ignore_ascii_case(&owner)) {
+        eprintln!("kb: {}", panel::Error::OwnerOnPanel(same.to_lowercase()));
+        return ExitCode::from(2);
+    }
+
+    let mut booted = Vec::new();
+    for name in &reviewers {
+        let Some(agent) = memory
+            .agents
+            .iter()
+            .find(|a| a.routable && a.name.eq_ignore_ascii_case(name))
+        else {
+            eprintln!("kb: {}", panel::Error::NoSuchAgent(name.clone()));
+            return ExitCode::from(2);
+        };
+        match panel::boot(&agent.name.to_lowercase(), &agent.root, &out_dir) {
+            Ok(b) => booted.push(b),
+            Err(e) => {
+                eprintln!("kb: {e}");
+                return ExitCode::from(2);
+            }
+        }
+    }
+
+    let seated = match panel::open(root, artifact, &owner, &reviewers, &misses::today()) {
+        Ok(s) => s,
+        Err(e) => {
+            eprintln!("kb: {e}");
+            return ExitCode::from(2);
+        }
+    };
+    let cost = panel::cost(&booted, artifact_bytes);
+    let key = panel::key_of(artifact);
+
+    if json {
+        let mut v = json::Value::obj();
+        v.set("artifact", key.as_str().into());
+        v.set("owner", owner.to_lowercase().into());
+        v.set("seated", json::Value::from(seated.clone()));
+        v.set(
+            "panel",
+            json::Value::Arr(
+                booted
+                    .iter()
+                    .map(|b| {
+                        let mut o = json::Value::obj();
+                        o.set("agent", b.agent.as_str().into());
+                        o.set("constitution", b.path.display().to_string().into());
+                        o.set("tokens", b.tokens.into());
+                        o
+                    })
+                    .collect(),
+            ),
+        );
+        let mut c = json::Value::obj();
+        c.set("boot", cost.boot.into());
+        c.set("reading", cost.reading.into());
+        c.set("total", cost.total().into());
+        c.set("reviewers", cost.reviewers.into());
+        c.set("artifact_tokens", blocks::tokens(artifact_bytes).into());
+        v.set("cost", c);
+        v.set("ask", panel_ask(artifact).into());
+        v.set("log", panel::path_in(root).display().to_string().into());
+        println!("{}", v.to_string());
+        return ExitCode::SUCCESS;
+    }
+
+    println!("round open on {key}, owned by {}", owner.to_lowercase());
+    if seated.len() < reviewers.len() {
+        println!(
+            "  ({} already seated, so nothing was added for them)",
+            reviewers.len() - seated.len()
+        );
+    }
+    println!();
+    println!("  {:<12} {:>7}   {}", "reviewer", "~boot", "constitution");
+    for b in &booted {
+        println!("  {:<12} {:>7}   {}", b.agent, b.tokens, b.path.display());
+    }
+    println!();
+    println!("  boot            {:>7}", cost.boot);
+    match artifact_bytes {
+        0 => println!(
+            "  reading         {:>7}   {artifact} is not a readable file, so nothing was priced for it",
+            0
+        ),
+        n => println!(
+            "  reading         {:>7}   {} tokens of artifact, read once by each of {}",
+            cost.reading,
+            blocks::tokens(n),
+            cost.reviewers
+        ),
+    }
+    println!("  {:-<24}", "");
+    println!(
+        "  total           {:>7} tokens, before a word of the review is written",
+        cost.total()
+    );
+    println!();
+    println!("  One owner pays that once per revision cycle. A round table pays it again on");
+    println!("  every exchange, and convergence has no bounded number of exchanges, so the");
+    println!("  cost is unbounded in exactly the case where the disagreement is real. That is");
+    println!("  why this is an owner with named objections and not a table.");
+    println!();
+    println!("Boot one subagent per reviewer, and never two constitutions in one context:");
+    println!("two identities in one context is one model averaging them.");
+    println!();
+    println!("Hand each subagent its own file, and ask it exactly this:");
+    println!();
+    for line in panel_ask(artifact).lines() {
+        println!("  {line}");
+    }
+    println!();
+    println!("Record every answer, the silences included:");
+    println!();
+    println!("  kb panel {key} --from <agent> --objection \"<text>\" [--blocking]");
+    println!("  kb panel {key} --from <agent> --nothing");
+    println!("  kb panel {key} --from <agent> --not-returned --why \"<what was decided instead>\"");
+    println!();
+    println!("Account for every objection, then read the round back:");
+    println!();
+    println!("  kb panel {key} --resolve <n> --taken --why \"<text>\"");
+    println!("  kb panel {key} --resolve <n> --refused --why \"<text>\"");
+    println!("  kb panel {key} --resolve <n> --escalated --why \"<text>\"   (blocking only)");
+    println!("  kb panel {key} --ledger");
+    ExitCode::SUCCESS
+}
+
+/// The instruction a reviewer is booted with, in one place.
+///
+/// It is printed for a person, handed to a subagent, and carried in `--json`, and those
+/// three drifting apart is how a panel ends up with one reviewer that was asked for
+/// objections and another that was asked for feedback.
+fn panel_ask(artifact: &str) -> String {
+    format!(
+        "Read <constitution> in full and answer as that agent for as long as this task holds.\n\
+         Then read {artifact}.\n\
+         Return the single strongest thing wrong with it from inside your own domain, or one\n\
+         line saying you found nothing. \"I like it\" is not an objection and neither is praise\n\
+         with a caveat attached. Do not rewrite it: a suggested line is allowed only as an\n\
+         illustration of an objection, never as a patch, because two writers on one sentence is\n\
+         how a voice dies. An objection from outside your own domain is advisory and has to say\n\
+         so. You may mark at most one objection blocking, and only when both hold: it sits\n\
+         inside your own domain, and it names something falsifiable."
+    )
+}
+
+/// Who the artifact's own words reach, with every agent's edge beside it.
+///
+/// **The ranking is a suggestion and the reason it can be wrong is printed with it.** It
+/// scores the piece against each base's keys, so it finds the agents the piece talks like
+/// and misses the agent whose subject the piece stakes a claim on in somebody else's
+/// vocabulary. The unranked remainder is printed for exactly that case, because a menu
+/// that hides half the kitchen is worse than a long menu.
+fn panel_propose(
+    memory: &memory::Memory,
+    artifact: &str,
+    body: Option<&str>,
+    owner: &str,
+    top: usize,
+) -> ExitCode {
+    println!("nothing was opened. This proposes a panel; --reviewer seats one.");
+    println!();
+    println!("artifact: {artifact}");
+    match body {
+        Some(b) => println!(
+            "          {} bytes, about {} tokens, paid once by every reviewer",
+            b.len(),
+            blocks::tokens(b.len())
+        ),
+        None => println!("          not a readable file, so it could not be scored or priced"),
+    }
+    println!("owner:    {owner}");
+    println!();
+
+    let ranked: Vec<(String, f64)> = body
+        .map(|b| memory.ask(b, top))
+        .and_then(|a| a.agent)
+        .map(|c| c.totals)
+        .unwrap_or_default();
+
+    let mut listed: Vec<String> = Vec::new();
+    if !ranked.is_empty() {
+        println!("  Ranked by what this artifact's own words reach:");
+        println!();
+        for (name, score) in ranked.iter() {
+            if name.eq_ignore_ascii_case(owner) {
+                continue;
+            }
+            panel_agent_line(memory, name, Some(*score));
+            listed.push(name.to_lowercase());
+        }
+        println!();
+    }
+
+    let rest: Vec<String> = memory
+        .roster()
+        .into_iter()
+        .filter(|n| !n.eq_ignore_ascii_case(owner) && !listed.iter().any(|l| l == n))
+        .collect();
+    if !rest.is_empty() {
+        println!("  Everyone else, unranked:");
+        println!();
+        for name in &rest {
+            panel_agent_line(memory, name, None);
+        }
+        println!();
+    }
+
+    println!("  The ranking scores the piece against each base's keys, so it finds the agents");
+    println!("  this piece talks like. An agent whose subject the piece stakes a claim on in");
+    println!("  somebody else's vocabulary scores zero here and is in the second list. Read the");
+    println!("  edges: what none of them covers is the judgement a ranking cannot make.");
+    println!();
+    println!("  kb panel {artifact} --owner {owner} --reviewer <agent> --reviewer <agent>");
+    ExitCode::SUCCESS
+}
+
+/// One agent on the proposal menu: name, what it owns, and where it stops.
+///
+/// The edge is not decoration here. On 2026-09-04 a session read a roster of bare names,
+/// could not tell which agent owned written surfaces, and reported that the fleet had none.
+/// A panel picked off a list of words has the same failure available to it.
+fn panel_agent_line(memory: &memory::Memory, name: &str, score: Option<f64>) {
+    let Some(agent) = memory.agents.iter().find(|a| a.name.eq_ignore_ascii_case(name)) else {
+        return;
+    };
+    let card = kb::fleet::card(&agent.root, "agent.txt", &agent.name);
+    let tokens = blocks::read(&agent.root)
+        .map(|bs| {
+            bs.iter()
+                .filter(|b| b.mode == blocks::Mode::Resident)
+                .map(|b| b.tokens())
+                .sum::<usize>()
+        })
+        .unwrap_or(0);
+
+    match score {
+        Some(s) => println!("    {:<12} {:>7} tokens   score {s:.2}", name.to_lowercase(), tokens),
+        None => println!("    {:<12} {:>7} tokens", name.to_lowercase(), tokens),
+    }
+    if tokens == 0 {
+        println!("      cannot be booted as itself: no blocks.txt in {}", agent.root.display());
+    }
+    if let Some(role) = card.role {
+        println!("      owns:     {}", first_sentence(&role, 100));
+    }
+    if let Some(ends) = card.ends {
+        println!("      stops at: {}", first_sentence(&ends, 150));
+    }
+}
+
+/// The opening sentence of a mandate, capped, so one wordy agent cannot push the rest off
+/// the screen. Cuts on a word boundary because a role sliced mid-word reads as corruption.
+fn first_sentence(text: &str, cap: usize) -> String {
+    let text = text.trim();
+    if let Some(end) = text.find(". ") {
+        if end < cap {
+            return text[..end].to_string();
+        }
+    }
+    if text.len() <= cap {
+        return text.to_string();
+    }
+    let end = text
+        .char_indices()
+        .map(|(i, _)| i)
+        .take_while(|i| *i <= cap)
+        .last()
+        .unwrap_or(0);
+    match text[..end].rfind(char::is_whitespace) {
+        Some(cut) => format!("{}...", text[..cut].trim_end()),
+        None => text.to_string(),
+    }
+}
+
+fn panel_record(args: &[String], root: &Path, artifact: Option<&str>, agent: &str) -> ExitCode {
+    let Some(artifact) = artifact else {
+        eprintln!("kb: panel needs the artifact the answer is about.");
+        return ExitCode::from(2);
+    };
+    let nothing = args.iter().any(|a| a == "--nothing");
+    let not_returned = args.iter().any(|a| a == "--not-returned");
+    let objection = flag_value(args, "--objection");
+    let why = flag_value(args, "--why").unwrap_or_default();
+
+    // **Three flags and not one with three values, because two of them are the pair that
+    // must never merge.** A reviewer that found nothing and a reviewer that never answered
+    // are different facts, and the protocol stalled once on exactly that collapse.
+    let answer = match (objection, nothing, not_returned) {
+        (Some(text), false, false) => panel::Answer::Objection {
+            text,
+            blocking: args.iter().any(|a| a == "--blocking"),
+        },
+        (None, true, false) => panel::Answer::Nothing,
+        (None, false, true) => panel::Answer::NotReturned { why: why.clone() },
+        _ => {
+            eprintln!(
+                "kb: --from needs exactly one of --objection <text>, --nothing or --not-returned."
+            );
+            eprintln!("    --nothing means the reviewer read it and found nothing from inside its own");
+            eprintln!("    domain. --not-returned means it never answered. Those are different facts");
+            eprintln!("    and there is deliberately no flag that means either.");
+            return ExitCode::from(2);
+        }
+    };
+
+    match panel::record(root, artifact, agent, &answer, &misses::today()) {
+        Ok(Some(n)) => {
+            println!("objection {n} from {agent} on {}", panel::key_of(artifact));
+            println!("  account for it with --resolve {n}. The round does not close until you do.");
+            ExitCode::SUCCESS
+        }
+        Ok(None) => {
+            match answer {
+                panel::Answer::Nothing => println!(
+                    "{agent} found nothing on {}, and that is on the record too: a reviewer who \
+                     never objects is a reviewer who is not being read.",
+                    panel::key_of(artifact)
+                ),
+                _ => println!(
+                    "{agent} did not return on {}. Recorded as `not returned`, never as `no \
+                     objection`.",
+                    panel::key_of(artifact)
+                ),
+            }
+            ExitCode::SUCCESS
+        }
+        Err(e) => {
+            eprintln!("kb: {e}");
+            ExitCode::from(2)
+        }
+    }
+}
+
+fn panel_resolve(args: &[String], root: &Path, artifact: Option<&str>, n: &str) -> ExitCode {
+    let Some(artifact) = artifact else {
+        eprintln!("kb: panel needs the artifact the objection is about.");
+        return ExitCode::from(2);
+    };
+    let Ok(seq) = n.parse::<u32>() else {
+        eprintln!(
+            "kb: --resolve takes an objection number. `kb panel {artifact} --ledger` numbers them."
+        );
+        return ExitCode::from(2);
+    };
+    let taken = args.iter().any(|a| a == "--taken");
+    let refused = args.iter().any(|a| a == "--refused");
+    let escalated = args.iter().any(|a| a == "--escalated");
+    let outcome = match (taken, refused, escalated) {
+        (true, false, false) => panel::Outcome::Taken,
+        (false, true, false) => panel::Outcome::Refused,
+        (false, false, true) => panel::Outcome::Escalated,
+        _ => {
+            eprintln!("kb: --resolve needs exactly one of --taken, --refused or --escalated.");
+            return ExitCode::from(2);
+        }
+    };
+    let why = flag_value(args, "--why").unwrap_or_default();
+    if why.trim().is_empty() && outcome == panel::Outcome::Refused {
+        eprintln!("kb: a refusal needs --why. The refusal is the price of single ownership and it");
+        eprintln!("    is paid in writing: a refusal with no reason cannot be audited after the");
+        eprintln!("    piece underperforms, which is the only thing that makes refusing legitimate.");
+        return ExitCode::from(2);
+    }
+
+    match panel::resolve(
+        root,
+        artifact,
+        seq,
+        flag_value(args, "--from").as_deref(),
+        outcome,
+        &why,
+        &misses::today(),
+    ) {
+        Ok(row) => {
+            println!("objection {seq} from {}: {}", row.reviewer, row.state.as_str());
+            ExitCode::SUCCESS
+        }
+        Err(e) => {
+            eprintln!("kb: {e}");
+            ExitCode::from(2)
+        }
+    }
+}
+
+/// The round read back: the table that travels with the piece, and what is still open.
+///
+/// **Exit 1 while a round is open**, so a build step or a hook can ask whether a piece has
+/// been through its round without parsing prose. A ledger that always exits 0 is a ledger
+/// nothing can gate on.
+fn panel_ledger(root: &Path, artifact: Option<&str>, json: bool) -> ExitCode {
+    let log = panel::path_in(root);
+    let rows = panel::load(&log);
+
+    let Some(artifact) = artifact else {
+        println!("log: {}", log.display());
+        let all = panel::artifacts(&rows);
+        if all.is_empty() {
+            println!();
+            println!("  no round has been opened here.");
+            return ExitCode::SUCCESS;
+        }
+        println!();
+        for a in &all {
+            let l = panel::ledger(&rows, a);
+            println!(
+                "  {:<40} {}  ({} objections, {} still out)",
+                a,
+                if l.closed() { "closed" } else { "OPEN  " },
+                l.objections.len(),
+                l.silent().len()
+            );
+        }
+        return ExitCode::SUCCESS;
+    };
+
+    let l = panel::ledger(&rows, artifact);
+    if !l.exists() {
+        eprintln!("kb: {}", panel::Error::NoRound(panel::key_of(artifact)));
+        return ExitCode::from(2);
+    }
+
+    if json {
+        let mut v = json::Value::obj();
+        v.set("artifact", l.artifact.as_str().into());
+        v.set("owner", l.owner.as_str().into());
+        v.set("closed", l.closed().into());
+        v.set(
+            "objections",
+            json::Value::Arr(
+                l.objections
+                    .iter()
+                    .enumerate()
+                    .map(|(i, r)| {
+                        let mut o = json::Value::obj();
+                        o.set("n", (i + 1).into());
+                        o.set("reviewer", r.reviewer.as_str().into());
+                        o.set("blocking", r.blocking.into());
+                        o.set("state", r.state.as_str().into());
+                        o.set("text", r.text.as_str().into());
+                        o.set("why", r.why.as_str().into());
+                        o
+                    })
+                    .collect(),
+            ),
+        );
+        v.set(
+            "still_out",
+            json::Value::from(l.silent().iter().map(|r| r.reviewer.clone()).collect::<Vec<_>>()),
+        );
+        v.set("markdown", l.to_markdown().into());
+        println!("{}", v.to_string());
+        return match l.closed() {
+            true => ExitCode::SUCCESS,
+            false => ExitCode::from(1),
+        };
+    }
+
+    println!("{}  owned by {}", l.artifact, l.owner);
+    println!();
+    print!("{}", l.to_markdown());
+    println!();
+
+    if l.closed() {
+        println!("  Closed. Every objection is accounted for and nobody is still out.");
+        println!("  The table above is part of the deliverable: a piece that arrives without its");
+        println!("  ledger has not been through the round, whatever was said in chat.");
+        return ExitCode::SUCCESS;
+    }
+
+    println!("  OPEN.");
+    for (n, r) in l.blocking_open() {
+        println!(
+            "    objection {n} from {} is blocking and has not gone to the person yet.",
+            r.reviewer
+        );
+        println!("      It cannot be refused. --taken, or --escalated.");
+    }
+    for (n, r) in l.unaccounted() {
+        if r.blocking {
+            continue;
+        }
+        println!("    objection {n} from {} is unaccounted for.", r.reviewer);
+    }
+    for r in l.silent() {
+        println!("    {} was booted and has not answered.", r.reviewer);
+        println!("      --not-returned when the window closes, never --nothing.");
+    }
+    ExitCode::from(1)
 }
 
 /// One logged question and what nearly caught it, on a terminal.

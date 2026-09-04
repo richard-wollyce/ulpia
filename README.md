@@ -41,6 +41,11 @@ place in an ordinary day:
 - **Keep several specialists and get the right one.** `kb boot` scores a message across
   every base and hands the conversation to the one that owns the subject, so the
   architect does not end up answering a security question.
+- **Get more than one specialist on the work that needs it.** When the router judges a
+  message to land in a second agent's domain, it names the owner and the panel, and
+  `kb panel` boots each reviewer from its own constitution, prices the round before it is
+  spent, and keeps a ledger where every objection is taken, refused with a reason, or
+  escalated. One agent stays accountable; nobody votes.
 - **Get prose when a file list is not what you wanted.** `kb answer` puts a reader after
   the verdict, and the retrieval underneath it stays deterministic.
 - **Write in a tree several sessions are editing at once.** `kb commit <paths>` builds the

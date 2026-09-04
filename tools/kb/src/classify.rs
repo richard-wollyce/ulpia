@@ -60,7 +60,45 @@ pub struct Verdict {
     /// fleet says nobody covers something, and what a new agent would be created for.
     pub subject: String,
     pub reason: String,
+    /// The agents that must object before this ships, when the message makes a claim
+    /// that lands in a second domain. Empty is the normal answer.
+    ///
+    /// **The router decides this, and it decides it here rather than in arithmetic.**
+    /// The deterministic side computes `margin` and `contenders` on every message and
+    /// they look like the right signal. Measured against this fleet's own 49 question
+    /// gold set on 2026-09-04: every question with exactly one correct owner had between
+    /// 2 and 10 contenders, median 4, so `contenders > 1` fires on all of them; and a
+    /// margin cut of 1.5 fires on 25% of them, 2.0 on 40%, 3.0 on 78%. There is no cut
+    /// that separates a two domain question from a one domain question with a shared
+    /// vocabulary, which is the same shape `MIN_MARGIN` already recorded for a different
+    /// use. So the judgement goes where ADR-0027 put the owner judgement: to the model
+    /// that reads the roles and the edges.
+    pub reviewers: Vec<Reviewer>,
 }
+
+/// One agent that has to object before a piece ships, and what it is being asked to check.
+///
+/// The `why` is not decoration. A reviewer arrives with somebody else's constitution and
+/// no idea why it was called, and *what does your domain say about this* is a different
+/// question from *what do you think of this*. The second one produces praise.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Reviewer {
+    pub agent: String,
+    pub why: String,
+}
+
+/// How many reviewers a verdict may name.
+///
+/// **Measured, on this machine, 2026-09-04.** A three reviewer panel run through real
+/// subagents on a 7.5 KB artifact cost 60,010 + 67,537 + 78,408 = 205,955 tokens, about
+/// 69,000 per reviewer. The static estimate of the same panel, the constitutions plus the
+/// artifact read once each, was 30,906: the subagent's own harness is the larger half, and
+/// a report that counts only the documents understates a panel by about 6.7x.
+///
+/// So the cap is a budget rather than a style rule. Three is what the objection round
+/// protocol already used as its default panel, and a fourth reviewer is another 69,000
+/// tokens spent on a domain the piece probably only touches.
+pub const MAX_PANEL: usize = 3;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Coverage {
@@ -156,6 +194,25 @@ fn stable_prefix(memory: &Memory) -> String {
          building them. Answering `covered` there hides a real gap behind a confident \
          name, and the gap is the useful part: it tells the person a new agent may be \
          worth creating.\n",
+    );
+
+    // **The panel question, and it is in the cached half deliberately.** `stable_prefix`
+    // is identical for every message, so prefix caching pays for these lines once; the
+    // same text in `variable_tail` would be recomputed on every message forever.
+    //
+    // Kept short against the measured warning below: a rule added here competes with every
+    // other rule for the model's attention, and the last paragraph added to this prompt
+    // cost one question on the coverage set. The default answer is stated first and stated
+    // as the normal one, so the cheap outcome is the one the model reaches for.
+    out.push_str(
+        "\nMost messages have one owner and one owner is the normal answer. A few make a \
+         claim that lands squarely in a second agent's domain as well: a page that has to \
+         sell and also has to be true, a launch note that is really a security statement, \
+         a script that quotes a benchmark. For those, and only those, name REVIEWERS: the \
+         agents that must object before the work ships, and say in a few words what each \
+         one is being asked to check, in that agent's own terms. Naming a reviewer costs \
+         that agent's entire constitution and its attention, so name none unless the work \
+         would be wrong without them. Never name the owner as a reviewer.\n",
     );
 
     // **A second worked example, for `uncovered`, was written here and measured out.**
@@ -362,11 +419,12 @@ fn variable_tail(
     // narrated around it. Naming the subject first costs about twenty tokens of output
     // and gives the choice something to follow from.
     out.push_str(
-        "\nAnswer in exactly these four lines, in this order:\n\
+        "\nAnswer in exactly these five lines, in this order:\n\
          SUBJECT: <two to five words naming the domain this message belongs to>\n\
          REASON: <one sentence>\n\
          COVERAGE: <covered|adjacent|uncovered>\n\
-         OWNER: <name from the list, or none>\n",
+         OWNER: <name from the list, or none>\n\
+         REVIEWERS: <none, or up to three as `name: what they must check`, separated by ;>\n",
     );
     out
 }
@@ -403,11 +461,58 @@ pub fn parse(reply: &str, roster: &[String]) -> Option<Verdict> {
     }
 
     Some(Verdict {
+        reviewers: reviewers(&field("REVIEWERS").unwrap_or_default(), roster, owner.as_deref()),
         owner,
         coverage,
         subject: field("SUBJECT").unwrap_or_default(),
         reason: field("REASON").unwrap_or_default(),
     })
+}
+
+/// The reviewer list, filtered to names that exist and bounded to [`MAX_PANEL`].
+///
+/// **Three rules, and every one of them is a way a panel quietly becomes theatre.**
+///
+/// A name off the roster is dropped, for the same reason an owner off the roster is: every
+/// surface downstream treats it as real, and `kb panel` would refuse it later anyway, after
+/// the person had already been told to convene it.
+///
+/// The owner is dropped, because an objection from the owner is a revision. The prompt says
+/// so and this enforces it, because a rule a prompt asks for is a rule a model follows most
+/// of the time.
+///
+/// The list is truncated rather than refused. A verdict that named four is a verdict that
+/// judged the message correctly and overspent, and throwing the whole answer away over the
+/// fourth name would lose the first three.
+fn reviewers(raw: &str, roster: &[String], owner: Option<&str>) -> Vec<Reviewer> {
+    let raw = raw.trim();
+    if raw.is_empty() || raw.eq_ignore_ascii_case("none") || raw == "-" {
+        return Vec::new();
+    }
+    let mut out: Vec<Reviewer> = Vec::new();
+    for part in raw.split(';') {
+        let part = part.trim().trim_start_matches(['*', '-', ' ']);
+        if part.is_empty() {
+            continue;
+        }
+        let (name, why) = match part.split_once(':') {
+            Some((n, w)) => (n.trim(), w.trim()),
+            None => (part, ""),
+        };
+        let name = name.trim_matches(['*', '`', ' ']);
+        let Some(known) = roster.iter().find(|r| r.eq_ignore_ascii_case(name)) else { continue };
+        if owner.is_some_and(|o| o.eq_ignore_ascii_case(known)) {
+            continue;
+        }
+        if out.iter().any(|r| r.agent.eq_ignore_ascii_case(known)) {
+            continue;
+        }
+        out.push(Reviewer { agent: known.clone(), why: why.to_string() });
+        if out.len() == MAX_PANEL {
+            break;
+        }
+    }
+    out
 }
 
 /// **Built, measured and rejected on 2026-08-19.** Kept, with its number, because the
@@ -633,6 +738,16 @@ pub fn fallback(choice: Option<AgentChoice>, why: FellBack) -> Option<Verdict> {
         coverage: Coverage::Covered,
         subject: String::new(),
         reason: why.reason().into(),
+        // **No classifier, no panel, and this empty vector is the decision rather than an
+        // omission.** The deterministic side could be made to guess one from `margin` and
+        // `contenders`, and it must not: measured on this fleet's 49 question gold set on
+        // 2026-09-04, every single owner question has 2 to 10 contenders and no margin cut
+        // separates them, so any arithmetic rule convenes panels on questions that have one
+        // owner. The cost is asymmetric and that is what settles it. A panel this fleet
+        // failed to convene costs one review nobody had. A panel it convened wrongly costs
+        // about 206,000 tokens and three agents' attention, measured the same day. When the
+        // instrument cannot tell, the cheap error is the one to make.
+        reviewers: Vec::new(),
     })
 }
 
@@ -662,6 +777,128 @@ impl FellBack {
                 "chosen by keyword score, because the configured classifier did not answer"
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod panel_tests {
+    use super::*;
+
+    fn roster() -> Vec<String> {
+        ["zed", "steve", "apelles", "cicero", "aldus"].iter().map(|s| s.to_string()).collect()
+    }
+
+    fn verdict(reviewers_line: &str) -> Verdict {
+        let reply = format!(
+            "SUBJECT: landing page copy
+REASON: it sells and it claims
+COVERAGE: covered
+OWNER: steve
+REVIEWERS: {reviewers_line}
+"
+        );
+        parse(&reply, &roster()).expect("a verdict")
+    }
+
+    /// The normal answer, and the prompt says so first, because a panel costs about 69,000
+    /// tokens per reviewer measured against real subagents.
+    #[test]
+    fn none_is_a_panel_of_nobody_and_so_is_a_missing_line() {
+        assert!(verdict("none").reviewers.is_empty());
+        assert!(verdict("").reviewers.is_empty());
+        assert!(verdict("-").reviewers.is_empty());
+    }
+
+    /// The wrapper script that drives the classifier is not versioned with the binary, so a
+    /// model answering the four lines it used to be asked for must still produce a verdict.
+    /// Anything else turns a prompt change into a fleet that stops routing.
+    #[test]
+    fn a_reply_with_no_reviewers_line_at_all_is_still_a_verdict() {
+        let v = parse(
+            "SUBJECT: nutrition
+REASON: it is about food
+COVERAGE: covered
+OWNER: zed
+",
+            &roster(),
+        )
+        .expect("four lines still parse");
+        assert_eq!(v.owner.as_deref(), Some("zed"));
+        assert!(v.reviewers.is_empty());
+    }
+
+    #[test]
+    fn a_reviewer_is_read_with_what_it_is_being_asked_to_check() {
+        let v = verdict("zed: whether the latency figure is true; apelles: whether it says what we are");
+        assert_eq!(v.reviewers.len(), 2);
+        assert_eq!(v.reviewers[0].agent, "zed");
+        assert_eq!(v.reviewers[0].why, "whether the latency figure is true");
+        assert_eq!(v.reviewers[1].agent, "apelles");
+    }
+
+    /// Every surface downstream treats a named agent as real, and `kb panel` would refuse
+    /// this name later, after the owner had already been told to convene it.
+    #[test]
+    fn a_name_that_is_not_in_the_fleet_is_dropped_rather_than_passed_on() {
+        let v = verdict("zed: true; goldoni: pacing; nobody: nothing");
+        assert_eq!(v.reviewers.len(), 1, "{:?}", v.reviewers);
+        assert_eq!(v.reviewers[0].agent, "zed");
+    }
+
+    /// An objection from the owner is a revision. The prompt asks for this and this
+    /// enforces it, because a rule a prompt asks for is a rule a model follows most of the
+    /// time.
+    #[test]
+    fn the_owner_is_never_seated_on_the_panel_for_their_own_work() {
+        let v = verdict("steve: whether it converts; zed: whether it is true");
+        assert_eq!(v.reviewers.len(), 1);
+        assert_eq!(v.reviewers[0].agent, "zed");
+    }
+
+    /// A fourth reviewer is another 69,000 tokens. The verdict is truncated rather than
+    /// refused, because a verdict that named four judged the message correctly and only
+    /// overspent, and throwing it away would lose the first three.
+    #[test]
+    fn a_panel_is_capped_and_the_first_three_survive() {
+        let v = verdict("zed: a; apelles: b; cicero: c; aldus: d");
+        assert_eq!(v.reviewers.len(), MAX_PANEL);
+        assert_eq!(
+            v.reviewers.iter().map(|r| r.agent.as_str()).collect::<Vec<_>>(),
+            vec!["zed", "apelles", "cicero"]
+        );
+    }
+
+    #[test]
+    fn a_name_repeated_is_seated_once() {
+        assert_eq!(verdict("zed: a; zed: b").reviewers.len(), 1);
+    }
+
+    /// Models decorate, and the owner field already had to learn this.
+    #[test]
+    fn decoration_around_a_name_does_not_hide_it() {
+        let v = verdict("**zed**: whether it is true");
+        assert_eq!(v.reviewers.len(), 1, "{:?}", v.reviewers);
+        assert_eq!(v.reviewers[0].agent, "zed");
+    }
+
+    /// No classifier means no panel, and that is the decision rather than an omission: no
+    /// margin cut separates a two domain question from a one domain question, and the cost
+    /// of guessing wrong is about 206,000 tokens against one review nobody had.
+    #[test]
+    fn the_deterministic_fallback_never_convenes_a_panel() {
+        let choice = crate::memory::AgentChoice {
+            agent: "zed".into(),
+            score: 90.0,
+            files: 2,
+            margin: 1.02,
+            contenders: 6,
+            totals: vec![("zed".into(), 90.0), ("steve".into(), 88.0)],
+        };
+        let v = fallback(Some(choice), FellBack::NotConfigured).expect("a fallback verdict");
+        assert!(
+            v.reviewers.is_empty(),
+            "a margin of 1.02 across six contenders is exactly the shape that looks like a              panel and measures as an ordinary single owner question"
+        );
     }
 }
 

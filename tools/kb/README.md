@@ -36,7 +36,7 @@ plainly when nothing matched rather than returning a confident guess.
 
 ## What is in the box, and the pain each piece answers
 
-Eighteen verbs. Each exists because something went wrong without it, and the table says what.
+Nineteen verbs. Each exists because something went wrong without it, and the table says what.
 A verb whose pain you do not have is a verb you do not need to learn.
 
 | Verb | The pain | What it does | What it never does |
@@ -50,7 +50,7 @@ A verb whose pain you do not have is a verb you do not need to learn.
 | `index` | Full text search needs an index, and an index that drifts from the files lies | Builds one SQLite file per base from the markdown, content hashed so unchanged files cost nothing, and counts what it could build no entry for: the files no question can reach, and the ones exempt by name | Holds anything that cannot be rebuilt from the files. Runs in the background |
 | `list` | A filter question has no ranking problem in it, so scoring it against a floor answers a guess | Lists the files a base holds, narrowed by base, folder, species, stage or provenance, with no score and no verdict | Rank anything. Take a question. Hide a file because no question can reach it |
 | `eval` | "Does retrieval work?" answered by feel | Grades the router against a gold file of questions and expected answers, including questions it is supposed to refuse, and prints hit, guess and refusal rates | Grades a gold file that names files the fleet does not have |
-| `boot` | Every session starts as nobody, and picking an agent by reading a conditional woke the wrong one | On a hook, routes the incoming message across the fleet, picks the owner, and injects that agent's constitution before the model reads anything | Picks an agent when no base covers the message. It says so instead |
+| `boot` | Every session starts as nobody, and picking an agent by reading a conditional woke the wrong one | On a hook, routes the incoming message across the fleet, picks the owner, and injects that agent's constitution before the model reads anything. When the work lands in more than one domain it names the panel too, and hands over the `kb panel` command that opens the round | Picks an agent when no base covers the message. It says so instead. Convenes a panel from arithmetic, which was measured and cannot separate the cases |
 | `blocks` | A constitution is several files, and assembling them by hand drifts | Assembles the resident blocks in order and reports what is missing | Invents a block that is not on disk |
 | `fleet` | "Who is in this fleet and what does each one do?" | Reads `fleet.txt` and every `agent.txt`, and prints the roster | Reads the index. Identity is never derived from retrieval |
 | `init` | An agent created by hand is missing the one file that makes it findable | Generates a base with the shape the router needs, or a person base with the questions a fleet must answer about its human | Writes a word about the person. The skeleton is empty on purpose |
@@ -58,6 +58,7 @@ A verb whose pain you do not have is a verb you do not need to learn.
 | `serve` | Other people's runtimes need the same answers, not a port of the pipeline | Speaks MCP over stdio: `kb_route`, `kb_retrieve`, `kb_remember`, `kb_fleet`, `kb_list`, all through the same `Memory` the CLI uses | Writes to stdout anything that is not protocol. Serves a base the caller did not name |
 | `ui` | Reading a base through a terminal is reading a library through a keyhole | A local reading room over the same contract: shelves, books, broken citations shown rather than hidden | Serves a file discovery did not produce, however the path is spelled |
 | `capture` | A session ends and everything it could not answer ends with it | Turns the session's record, appended by `boot` on every message, into one raw file in the last routed agent's `inbox/`: the refused questions with the vocabulary offered back, and where the conversation went. Then `promote` reads it | Runs a model. Writes a `Search for:` line, so the router never names a raw session as an answer. Captures a session no agent was routed in |
+| `panel` | A piece gets reviewed by whoever is in the room, and the objection that killed it is remembered by nobody | Boots a named panel from each agent's own `blocks.txt`, prices the round before it is spent, and keeps a ledger where every objection is taken, refused with a reason, or escalated | Call a model. Choose the panel for you. Let a blocking objection be refused, or a reviewer's silence be recorded as agreement |
 | `misses` | The log records what was asked and could not be answered, and stops there. The file that nearly held the answer, and the key it was missing, is the half nobody can look up | Reads `kb-misses.txt` back, most asked first, and beside each question names the files today's index nearly caught it with, the keys each of those files declares, and the path it read | Write anything. It proposes the alias line and a person adds it |
 
 ### How the pieces make two memories
@@ -287,6 +288,97 @@ one that changes most often, which is the worst combination available.
 It is still resident only because the agent routes by reading it. **The moment `kb route` is wired
 into the loop, the map becomes on-demand and the resident set drops by 46% across the fleet**, because
 routing is the map's whole job and it will be happening outside the model by then.
+
+### `kb panel`: an objection round any agent can run
+
+```
+kb panel <piece> --owner goldoni                                  # who could review it, and what each costs
+kb panel <piece> --owner goldoni --reviewer apelles --reviewer zed # open the round
+kb panel <piece> --from zed --objection "minute six states a latency the base does not produce" --blocking
+kb panel <piece> --from apelles --nothing
+kb panel <piece> --resolve 1 --escalated --why "to the person, it is blocking"
+kb panel <piece> --ledger
+```
+
+A review with more than one reviewer has one failure mode that matters and it is not
+disagreement: it is **nobody owning the piece.** So this implements one shape and refuses the
+other. One agent is accountable, the panel returns named objections rather than rewrites, and
+the owner accounts for every one of them in writing.
+
+**Why not everyone arguing to convergence.** Every reviewer has to be booted with its own
+constitution before it can judge anything, and `kb blocks` says what that costs. One owner pays
+it once per revision cycle. A round table pays it again on every exchange, and convergence has
+no bounded number of exchanges, so the cost is unbounded in exactly the case where the
+disagreement is real. **The protocol that costs the most is the one that runs when the argument
+is hardest.**
+
+The number is read off disk rather than written down, because a cost table in prose goes stale:
+
+```
+  reviewer       ~boot   constitution
+  apelles         6885   .kb/panel/apelles-constitution.txt
+  steve          12832   .kb/panel/steve-constitution.txt
+  cicero          5576   .kb/panel/cicero-constitution.txt
+
+  boot              25293
+  reading            5613   1871 tokens of artifact, read once by each of 3
+  ------------------------
+  total             30906 tokens, before a word of the review is written
+```
+
+**That estimate is the floor and the real number is about six times it.** Measured on this machine on
+2026-09-04, that exact panel run through three real subagents on that exact artifact cost 60,010,
+67,537 and 78,408 tokens, 205,955 in total, roughly 69,000 per reviewer. The gap is the reviewer's own
+harness: its system prompt, its tool schemas and the turns it takes. The command counts the documents
+because those are the part it can read off disk; the rest is charged by whatever runs the subagent.
+
+**The reading line is the half a prose estimate leaves out.** Every reviewer reads the piece as
+well as its own constitution, so a long artifact reviewed by four agents costs four times its own
+length on top of four constitutions.
+
+**It never calls a model and it coordinates nothing.** It assembles each reviewer's constitution
+through the same [`blocks::assemble`](src/blocks.rs) that `kb blocks --emit` uses, writes it where
+a subagent can be pointed at it, and prints the exact instruction to hand that subagent and the
+exact commands that record what comes back. The session drives. There is no scheduler, no shared
+state, and no agent talking to another agent unprompted.
+
+**The panel is decided by the router, not by whoever runs the command.** `kb boot` already asks a
+model who owns each message, with the roster, every agent's role and every agent's edge in front of
+it. That is the same material the panel question needs, so the verdict gained one line: `REVIEWERS`,
+up to three names with what each is being asked to check. When it comes back non-empty the boot
+briefing tells the owner who has to object, prices the panel from those agents' own `blocks.txt`, and
+prints the `kb panel` command that opens the round. Running `kb panel` by hand still works and is how
+a round opens for a piece nobody asked a question about.
+
+**The arithmetic was the obvious way to decide this and it was measured out.** `margin` and
+`contenders` are computed on every message and look like the signal: a close race across several
+bases reads as a question that spans two domains. Against this fleet's own 49 question gold set on
+2026-09-04, every question with exactly one correct owner had between 2 and 10 contenders, median 4,
+and a margin cut of 1.5 fires on 25% of them, 2.0 on 40%, 3.0 on 78%. No cut separates a two domain
+question from a one domain question with a shared vocabulary, which is the second time that shape has
+been measured here; see `MIN_MARGIN`. So with no classifier configured there is no panel, and that
+is a decision rather than an omission: **a panel this fleet failed to convene costs one review nobody
+had, and a panel it convened wrongly costs about 206,000 tokens and three agents' attention.** When
+the instrument cannot tell, the cheap error is the one to make.
+
+Four rules are enforced rather than asked for, and each one is a way a review quietly becomes
+theatre:
+
+- **The owner cannot sit on the panel.** An objection from the owner is a revision.
+- **An agent with no `blocks.txt` cannot be seated.** A subagent handed no constitution answers as
+  the base model wearing a name, and the whole value of the round is that an objection comes from
+  inside a domain.
+- **A blocking objection cannot be refused**, only taken or escalated to the person. Everything
+  else is the owner's judgement on purpose; this is the one valve on it, and a valve a rule asks
+  nicely for is not a valve. It is bounded to one per reviewer so that blocking stays expensive.
+- **A reviewer who never answered is `not-returned`, never `nothing`.** Those are different facts
+  and no code path merges them, because collapsing them is how a silent reviewer becomes a fake
+  endorsement.
+
+`--ledger` prints the markdown table that travels with the piece, and **exits 1 while the round is
+open**, so a release step can ask whether a piece has been through its round without parsing prose.
+The log is `kb-rounds.txt` at the fleet root, one row per fact, gitignored for the same reason the
+miss log is: it holds work in progress and a second agent's criticism of it.
 
 ### `kb remember`: the write side
 

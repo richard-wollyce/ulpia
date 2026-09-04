@@ -111,6 +111,15 @@ fn remember_agent(root: &Path, session: &str, agent: &str) {
 pub struct Briefing {
     /// The agent the fleet chose, if it was confident enough to choose one.
     pub agent: Option<String>,
+    /// The agents that must object before this work ships, when the router judged the
+    /// message to land in more than one domain. Empty is the normal answer.
+    ///
+    /// **A panel is not a different kind of routing, it is an owner plus reviewers**, which
+    /// is why this sits beside `agent` rather than replacing it. The objection round has one
+    /// accountable owner by construction, the session file already remembers exactly one
+    /// agent, and a type that could hold two owners would be a type that can express the
+    /// committee this protocol exists to refuse.
+    pub panel: Vec<crate::classify::Reviewer>,
     /// True when the constitution is included, which happens on the first message of a
     /// session and whenever the routed agent changes under the conversation.
     pub switched: bool,
@@ -153,7 +162,7 @@ pub fn brief(memory: &Memory, root: &Path, req: &Request, top: usize) -> Briefin
     // An empty prompt is a session opening rather than a question. Routing it would rank
     // files against nothing and pick whichever base is largest.
     if req.prompt.trim().is_empty() {
-        return Briefing { agent: None, switched: false, text: roster(memory) };
+        return Briefing { agent: None, panel: Vec::new(), switched: false, text: roster(memory) };
     }
 
     // **Machine text is not a question.** The runtime submits background task
@@ -170,7 +179,7 @@ pub fn brief(memory: &Memory, root: &Path, req: &Request, top: usize) -> Briefin
     // is for a session opening, which is a different event with a different right answer.
     let asked = without_machine_blocks(&req.prompt);
     if asked.trim().is_empty() {
-        return Briefing { agent: None, switched: false, text: String::new() };
+        return Briefing { agent: None, panel: Vec::new(), switched: false, text: String::new() };
     }
 
     // Everything downstream scores `asked` rather than the raw prompt, so an envelope
@@ -237,6 +246,7 @@ pub fn brief(memory: &Memory, root: &Path, req: &Request, top: usize) -> Briefin
                 .unwrap_or_default();
             return Briefing {
                 agent: None,
+                panel: Vec::new(),
                 switched: false,
                 text: format!("{note}{nearest}\n{}", roster(memory)),
             };
@@ -253,6 +263,8 @@ pub fn brief(memory: &Memory, root: &Path, req: &Request, top: usize) -> Briefin
         .is_some_and(|v| v.reason == crate::classify::FellBack::DidNotAnswer.reason());
 
     let chosen = verdict.as_ref().and_then(|v| v.owner.clone());
+    let panel: Vec<crate::classify::Reviewer> =
+        verdict.as_ref().map(|v| v.reviewers.clone()).unwrap_or_default();
 
     let Some(agent) = chosen else {
         // **No agent owns it, and that has two meanings the fleet used to run together.**
@@ -284,6 +296,7 @@ pub fn brief(memory: &Memory, root: &Path, req: &Request, top: usize) -> Briefin
         if !mine.is_empty() && answer.confidence.verdict != Verdict::Nothing {
             return Briefing {
                 agent: None,
+                panel: Vec::new(),
                 switched: false,
                 text: format!(
                     "VESTA: no agent owns this and it does not need one. The library holds \
@@ -319,6 +332,7 @@ pub fn brief(memory: &Memory, root: &Path, req: &Request, top: usize) -> Briefin
         };
         return Briefing {
             agent: None,
+            panel: Vec::new(),
             switched: false,
             text: format!(
                 "VESTA: routed this message and found no owner.\n\n\
@@ -405,6 +419,38 @@ pub fn brief(memory: &Memory, root: &Path, req: &Request, top: usize) -> Briefin
         );
     }
 
+    // **The panel, when the router judged there is one, and it is an instruction rather
+    // than a note.** The hook's only output channel is text injected into the model's
+    // context, so Vesta cannot convene anything: it decides and it instructs, and the
+    // session executes. What makes that workable is that the instruction is a command the
+    // session can run rather than prose it has to translate into one.
+    //
+    // **Deciding the panel and opening the round are two moments and they are not
+    // collapsed here.** At routing time the piece does not exist yet, so there is no
+    // artifact to key a round on and the command below carries a placeholder. A router
+    // that invented a filename in order to look complete would be writing a round against
+    // a file nobody is going to write.
+    if !panel.is_empty() {
+        let boot_cost: usize = panel
+            .iter()
+            .filter_map(|r| {
+                memory
+                    .agents
+                    .iter()
+                    .find(|a| a.name.eq_ignore_ascii_case(&r.agent))
+                    .and_then(|a| crate::blocks::read(&a.root))
+            })
+            .map(|bs| {
+                bs.iter()
+                    .filter(|b| b.mode == crate::blocks::Mode::Resident)
+                    .map(|b| b.tokens())
+                    .sum::<usize>()
+            })
+            .sum();
+
+        text.push_str(&panel_instruction(&agent, &panel, boot_cost));
+    }
+
     if files.is_empty() {
         text.push_str("No file ranked for this message.\n");
     } else {
@@ -413,7 +459,47 @@ pub fn brief(memory: &Memory, root: &Path, req: &Request, top: usize) -> Briefin
         text.push('\n');
     }
 
-    Briefing { agent: Some(agent), switched, text }
+    Briefing { agent: Some(agent), panel, switched, text }
+}
+
+/// What the owner is told when the router judged the work to need more than one agent.
+///
+/// Split out because it is the part with rules in it, and the rules are the reason the
+/// panel decision is worth making at all: draft before asking, the command that opens the
+/// round, the price, and the two things the owner may not do with what comes back. Testing
+/// it through [`brief`] would need a live classifier subprocess, which is how a paragraph
+/// like this goes untested until it goes wrong.
+fn panel_instruction(
+    owner: &str,
+    panel: &[crate::classify::Reviewer],
+    boot_cost: usize,
+) -> String {
+    let mut out = String::from(
+        "VESTA: this one is not yours alone. You own the answer and you are accountable \
+         for it; these agents have to object to it before it ships, each from inside its \
+         own domain:\n\n",
+    );
+    for r in panel {
+        match r.why.is_empty() {
+            true => out.push_str(&format!("  {}\n", r.agent)),
+            false => out.push_str(&format!("  {}: {}\n", r.agent, r.why)),
+        }
+    }
+    out.push_str(&format!(
+        "\nDraft first and never poll them for direction: a panel asked what the work \
+         should be returns a topic list. Then open the round, which boots each one as \
+         itself and keeps the ledger:\n\n  kb panel <the file you wrote> --owner \
+         {owner} {}\n\nThat costs about {boot_cost} tokens of constitutions, plus \
+         the piece read once by each of them, and measured against real subagents a panel \
+         has run about six times higher than that. An objection you refuse is refused in \
+         writing; one marked blocking is not yours to refuse.\n\n",
+        panel
+            .iter()
+            .map(|r| format!("--reviewer {}", r.agent))
+            .collect::<Vec<_>>()
+            .join(" ")
+    ));
+    out
 }
 
 /// The names that could actually answer, which is not every base that was opened.
@@ -495,6 +581,35 @@ fn first_clause(text: &str, cap: usize) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// The paragraph a session acts on when the router says the work needs more than one
+    /// agent. It has to carry a command rather than advice, because the hook's only output
+    /// channel is text and the session is what executes.
+    #[test]
+    fn a_panel_briefing_names_who_must_object_and_hands_over_the_command_to_do_it() {
+        let panel = vec![
+            crate::classify::Reviewer {
+                agent: "zed".into(),
+                why: "whether the latency figure is true".into(),
+            },
+            crate::classify::Reviewer { agent: "apelles".into(), why: String::new() },
+        ];
+        let text = panel_instruction("steve", &panel, 23079);
+
+        assert!(text.contains("zed: whether the latency figure is true"), "{text}");
+        assert!(text.contains("  apelles
+"), "a reviewer with no reason still gets a line");
+        assert!(
+            text.contains("kb panel <the file you wrote> --owner steve --reviewer zed --reviewer apelles"),
+            "the command has to be runnable, not described: {text}"
+        );
+        assert!(text.contains("23079"), "the price is stated before it is spent");
+        assert!(text.contains("Draft first"), "a panel asked for direction returns a topic list");
+        assert!(
+            text.contains("blocking is not yours to refuse"),
+            "the one thing the owner may not do has to be in the briefing: {text}"
+        );
+    }
 
     #[test]
     fn the_roster_says_what_each_agent_does_and_where_it_stops() {

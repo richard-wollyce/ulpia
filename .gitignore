@@ -50,6 +50,14 @@ kb-alias-rejections.txt
 # on the first automatic run, which is one `git add` away from publishing somebody's base.
 kb-rejections.txt
 
+# The objection round ledger, ignored for the same reason and in the same change that
+# created it. `kb panel` writes one row per fact about a piece under review: what a
+# reviewer objected to, what the owner refused, and the reason for the refusal in the
+# owner's own words. That is work in progress plus a second agent's criticism of it, so
+# it is private base content in a file named after tooling. The assembled constitutions
+# it writes beside it live under `.kb/`, which is already ignored and already disposable.
+kb-rounds.txt
+
 # The marker that stops two promotion runs overlapping. Normally it exists for the minutes
 # a run takes and then it is gone. It survives a crash on purpose, so the next run can see
 # that one died, and a crashed run should not also leave something in `git status` that
