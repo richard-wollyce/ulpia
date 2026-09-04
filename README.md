@@ -502,7 +502,12 @@ language over a base written in another.
 kb serve .
 ```
 
-Four read-only tools over stdio: `kb_route`, `kb_retrieve`, `kb_remember`, `kb_fleet`.
+Five read-only tools over stdio: `kb_route`, `kb_retrieve`, `kb_remember`, `kb_fleet` and
+`kb_list`. The first four answer a question; `kb_list` answers what exists, filtered by
+facet, with nothing ranked and no verdict, because a filter has no ranking problem to
+solve. **None of them writes**, and that is a decision rather than an omission: a write
+tool reached by a model is a different security surface and gets built deliberately.
+
 The server speaks both the current stateless revision and the older handshake era, and
 answers `initialize` when asked without ever requiring it.
 
