@@ -2585,6 +2585,27 @@ body::after {
   position: relative;
 }
 
+/* THE DATA, and it lives here because the page's CSP will not let it live in
+ * the markup. `style-src 'self'` has no 'unsafe-inline', which blocks inline
+ * `style` ATTRIBUTES as well as <style> blocks, so the `style="--w: ..."` these
+ * rows carried from 2026-09-03 to 2026-09-04 was silently dropped in production
+ * and every bar fell back to `width: auto`, which inside the track is 100%.
+ * The chart shipped four equal bars under a headline claiming 128x, and it did
+ * so only on the real site: `vite preview` sends no CSP, so every local check
+ * passed. That is the same trap the feed stylesheet hit the day before.
+ *
+ * Keeping the numbers here has a second benefit worth naming: the figure exists
+ * on two pages, so this is now one place to edit when the latency is measured
+ * again rather than two that can disagree.
+ *
+ * --w must stay exactly --ms / 300, because the motion below derives its
+ * duration from --ms and its distance from --w, and the wavefront argument is
+ * only true while those two agree. */
+.cmp-row[data-sys="ulpia"]       { --w: 0.39%;  --ms: 1.16; }
+.cmp-row[data-sys="mem0"]        { --w: 49.33%; --ms: 148; }
+.cmp-row[data-sys="zep"]         { --w: 50%;    --ms: 150; }
+.cmp-row[data-sys="supermemory"] { --w: 100%;   --ms: 300; }
+
 .cmp-bar {
   display: block;
   height: 100%;
