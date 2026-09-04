@@ -3277,14 +3277,6 @@ body::after {
 
   /* ==== the clock ======================================================= */
 
-  /* When the bars start, measured from the frame .is-shown lands. 300ms is the
-   * existing rise transition and 120ms is THE BEAT, this site's own
-   * TYPE_BEAT_MS, so the eye is settled and pointed at the figure before
-   * anything inside it moves. The overrides are not decoration: anim.js assigns
-   * .delay-1 / .delay-2 from DOM order and those are transition delays on the
-   * rise, so the load has to follow. .instant is set by the focus guard and the
-   * 6s failsafe, which kill the transition, so waiting 300ms would be a stall.
-   * Source order matters: .instant is last so it wins over .delay-1. */
   /* THE ONE NUMBER THAT SETS EVERY DURATION. 13.333 = 4000 / 300, so
    * Supermemory's 300ms fills in four seconds, mem0 and Zep land at just under
    * two, and ours at 1.16ms x 13.333 is 15.5ms, still inside one frame at 60Hz
@@ -3300,10 +3292,19 @@ body::after {
    * like the slowest thing on it. One multiplier, no floor, no exceptions. */
   .cmp         { --cmp-k: 13.333ms; }
 
-  .cmp         { --cmp-load: 420ms; }
-  .cmp.delay-1 { --cmp-load: 490ms; }
-  .cmp.delay-2 { --cmp-load: 560ms; }
-  .cmp.instant { --cmp-load: 120ms; }
+  /* THE BEAT between the figure arriving and the bars moving, measured from the
+   * frame `.is-playing` lands rather than `.is-shown`. One value now, and the
+   * four-way table that used to sit here is gone along with the reason for it:
+   * those overrides existed to chase anim.js's .delay-1 / .delay-2 / .instant,
+   * which are all about WHEN THE RISE HAPPENS, and the performance no longer
+   * starts from the rise. Its own observer fires at the 55% line, below the
+   * rise's 65% line, so the reveal is always already under way and there is
+   * nothing left to compensate for.
+   *
+   * 200ms rather than the hero's 120ms TYPE_BEAT_MS, because a reader who has
+   * just scrolled this figure into place is still settling their eye on it,
+   * which is a longer moment than the beat between two lines of a standfirst. */
+  .cmp { --cmp-load: 200ms; }
 
   /* ==== the load ======================================================== */
 
@@ -3312,7 +3313,7 @@ body::after {
    * its true width. Silent, but the safe failure. No var() fallback on purpose:
    * a row that loses its timing must fail visibly to a reviewer, not quietly
    * inherit somebody else's number. */
-  html[data-js] .cmp.is-shown .cmp-row .cmp-bar {
+  html[data-js] .cmp.is-playing .cmp-row .cmp-bar {
     animation: cmp-fill calc(var(--ms) * var(--cmp-k)) linear var(--cmp-load)
       backwards;
   }
@@ -3320,7 +3321,7 @@ body::after {
   /* 0,5,0 beats the 0,4,0 above, which is how the breath is added without
    * restating the fill's timing anywhere the two could drift apart. ease-in-out
    * because a breath is symmetric and has no arrival to ease into. */
-  html[data-js] .cmp.is-shown .cmp-row.is-claim .cmp-bar {
+  html[data-js] .cmp.is-playing .cmp-row.is-claim .cmp-bar {
     animation:
       cmp-fill calc(var(--ms) * var(--cmp-k)) linear var(--cmp-load) backwards,
       cmp-work calc(var(--ms) * var(--cmp-k)) ease-in-out var(--cmp-load)
@@ -3351,7 +3352,7 @@ body::after {
     );
   }
 
-  html[data-js] .cmp.is-shown .cmp-row.is-ours .cmp-track::before {
+  html[data-js] .cmp.is-playing .cmp-row.is-ours .cmp-track::before {
     animation: cmp-spark 240ms cubic-bezier(0.33, 1, 0.68, 1)
       var(--cmp-load) backwards;
   }
@@ -3379,7 +3380,7 @@ body::after {
    * 4000ms, so Supermemory owns that title, which is the truth. Letta simply
    * pulses while the field fills, which is what a row that never entered the
    * race should do. */
-  html[data-js] .cmp.is-shown .cmp-row.is-none .cmp-track::before {
+  html[data-js] .cmp.is-playing .cmp-row.is-none .cmp-track::before {
     animation: cmp-absent 560ms ease-in-out var(--cmp-load) 2 backwards;
   }
 
@@ -3427,7 +3428,7 @@ body::after {
    * which is past WCAG 2.2.2's five second line, and the pause control below is
    * what answers for that. Lengthen this and you lengthen the run, not the
    * compliance: the control is what carries it now. */
-  html[data-js] .cmp.is-shown .cmp-row.is-ours::after {
+  html[data-js] .cmp.is-playing .cmp-row.is-ours::after {
     animation: cmp-sweep 800ms cubic-bezier(0.33, 1, 0.68, 1)
       calc(var(--cmp-load) + 4240ms) 3 backwards;
   }
@@ -3457,11 +3458,11 @@ body::after {
    * class on each, so every selector below outranks its own target and nothing
    * relies on source order. Add an animation to this figure and you must add its
    * mirror here, or the pause will silently not cover it. */
-  html[data-js] .cmp.is-shown.is-paused .cmp-row .cmp-bar,
-  html[data-js] .cmp.is-shown.is-paused .cmp-row.is-claim .cmp-bar,
-  html[data-js] .cmp.is-shown.is-paused .cmp-row.is-ours .cmp-track::before,
-  html[data-js] .cmp.is-shown.is-paused .cmp-row.is-none .cmp-track::before,
-  html[data-js] .cmp.is-shown.is-paused .cmp-row.is-ours::after {
+  html[data-js] .cmp.is-playing.is-paused .cmp-row .cmp-bar,
+  html[data-js] .cmp.is-playing.is-paused .cmp-row.is-claim .cmp-bar,
+  html[data-js] .cmp.is-playing.is-paused .cmp-row.is-ours .cmp-track::before,
+  html[data-js] .cmp.is-playing.is-paused .cmp-row.is-none .cmp-track::before,
+  html[data-js] .cmp.is-playing.is-paused .cmp-row.is-ours::after {
     animation-play-state: paused;
   }
 

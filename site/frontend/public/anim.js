@@ -104,6 +104,39 @@
       if (box) show(box, true);
     });
 
+    // ---- the latency chart plays only to somebody who is looking at it.
+    //
+    // REVEALING AND PERFORMING ARE DIFFERENT JOBS AND THEY NEEDED DIFFERENT
+    // CLASSES. `is-shown` means the block is visible, and the 6s failsafe below
+    // adds it to everything on the page whether or not it was ever scrolled to,
+    // because no script failure may leave content hidden. That is correct for a
+    // paragraph and wrong for a chart: the figure was getting `is-shown` at the
+    // six second mark while still far below the fold, spending its four seconds
+    // of fill on an empty screen, and by the time a reader arrived it had
+    // finished. Measured, not guessed: at t=6500ms the figure had the class with
+    // its bounding box entirely outside the viewport.
+    //
+    // So `is-playing` is a second, narrower class with its own observer, and
+    // NOTHING else may add it: not the failsafe, not the focus guard. If the
+    // figure is never scrolled to, it simply never plays, and what renders is
+    // the finished chart, which is the true one. That is why this needs no
+    // failsafe of its own.
+    //
+    // The line is 55% down the viewport, deliberately BELOW the 65% line the
+    // rise uses. Scrolling down, an element crosses 65% first and 55% second, so
+    // the reveal always starts before the performance and the bars never fill
+    // while the figure is still faded out.
+    var chartObs = new IntersectionObserver(function (entries, obs) {
+      entries.forEach(function (e) {
+        if (!e.isIntersecting) return;
+        obs.unobserve(e.target);
+        e.target.classList.add("is-playing");
+      });
+    }, { rootMargin: "0px 0px -45% 0px" });
+    [].slice.call(document.querySelectorAll(".cmp")).forEach(function (fig) {
+      chartObs.observe(fig);
+    });
+
     // ---- the latency chart's one control (motion spec, 2026-09-04).
     // At 13.333x the figure's whole sequence runs about 7.2s, past the five
     // seconds at which WCAG 2.2.2 requires automatically starting motion to be
