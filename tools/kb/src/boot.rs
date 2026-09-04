@@ -43,6 +43,7 @@
 use std::path::{Path, PathBuf};
 
 use crate::json;
+use crate::fleet;
 use crate::memory::{Memory, Verdict};
 
 /// What the runtime handed us on stdin.
@@ -424,17 +425,121 @@ pub fn brief(memory: &Memory, root: &Path, req: &Request, top: usize) -> Briefin
 /// only the sentence a person reads did not.
 ///
 /// A menu that lists dishes the kitchen does not make is worse than a short menu.
+///
+/// **And a menu of bare names is not a menu either.** This printed thirteen names and
+/// nothing else, which defeats the sentence three paragraphs up: nobody can pick from a
+/// list of words like `goldoni` and `apelles` unless they already know the fleet by heart.
+/// A model reading this off a hook certainly cannot, and that is the reader it is actually
+/// written for.
+///
+/// It cost a real answer on 2026-09-04. Routing abstained on a request to review the
+/// landing page copy, the session read this roster, could not tell that `goldoni` is the
+/// fleet's scriptwriter, and reported to Richard that the fleet had no copywriter at all.
+/// It has one. The roster simply would not say so.
+///
+/// So each line now carries the role from `agent.txt`, and the edge when the agent declared
+/// one. Both were already parsed by `fleet::card` and were never asked for here. The edge
+/// matters as much as the role, for the reason `Card::ends` gives: a roster of roles tells
+/// a reader what each agent does and never what none of them does, and that second thing is
+/// the judgement this whole message exists to hand over.
 fn roster(memory: &Memory) -> String {
     let mut out = String::from("The fleet:\n");
     for a in memory.agents.iter().filter(|a| a.routable) {
-        out.push_str(&format!("  {}\n", a.name));
+        let card = fleet::card(&a.root, "agent.txt", &a.name);
+        match card.role {
+            Some(role) => out.push_str(&format!("  {}: {}\n", a.name, first_clause(&role, 96))),
+            None => out.push_str(&format!("  {}\n", a.name)),
+        }
+        // The edge gets more room than the role, and deliberately. `Card::ends` exists
+        // because a roster of roles says what each agent does and never what none of them
+        // does, and an edge cut before its second half does exactly the damage it was
+        // written to prevent: "ends where the question stops being about what the brand
+        // means and starts being about how it" tells a reader nothing at all.
+        if let Some(ends) = card.ends {
+            out.push_str(&format!("      stops at: {}\n", first_clause(&ends, 150)));
+        }
     }
     out
+}
+
+/// The opening clause of a mandate, capped, so one wordy agent cannot push the others off
+/// the screen.
+///
+/// Cuts at a sentence end when one falls inside the cap and at a word boundary otherwise,
+/// because a role sliced mid-word reads as corruption rather than as a summary. The full
+/// mandate lives in the agent's own base, which is where whoever gets chosen will read it.
+fn first_clause(text: &str, cap: usize) -> String {
+    let text = text.trim();
+    if let Some(end) = text.find(". ") {
+        if end < cap {
+            return text[..end].to_string();
+        }
+    }
+    if text.len() <= cap {
+        return text.to_string();
+    }
+    // Slicing bytes would panic on a multi-byte boundary, and these mandates are written
+    // in two languages. Walk to the last whitespace at or before the cap instead.
+    let end = text
+        .char_indices()
+        .map(|(i, _)| i)
+        .take_while(|i| *i <= cap)
+        .last()
+        .unwrap_or(0);
+    match text[..end].rfind(char::is_whitespace) {
+        Some(cut) => format!("{}...", text[..cut].trim_end()),
+        None => text.to_string(),
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn the_roster_says_what_each_agent_does_and_where_it_stops() {
+        // The regression this guards: the roster printed bare names, a session read it,
+        // could not tell that `goldoni` is the scriptwriter, and told Richard the fleet had
+        // no copywriter. A menu has to name the dishes.
+        let root = std::env::temp_dir().join(format!("kb-roster-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&root);
+        let agent = root.join("fleet").join("goldoni");
+        std::fs::create_dir_all(agent.join("knowledge")).expect("dirs");
+        std::fs::write(
+            agent.join("agent.txt"),
+            "name = Goldoni\nrole = The scriptwriter: turns an argument into a script\nends = Ends at the moment of performance\n",
+        )
+        .expect("agent");
+        std::fs::write(
+            agent.join("knowledge").join("a.md"),
+            "# A\n\n**Search for:** `roteiro`\n\nbody\n",
+        )
+        .expect("note");
+
+        let memory = Memory::open(&[root.as_path()], true).expect("memory");
+        let text = roster(&memory);
+        assert!(text.contains("goldoni: The scriptwriter"), "role is missing: {text}");
+        assert!(text.contains("stops at: Ends at the moment"), "edge is missing: {text}");
+    }
+
+    #[test]
+    fn a_long_mandate_is_cut_on_a_word_and_never_mid_character() {
+        // Both halves matter. Cutting mid-word reads as corruption, and these mandates are
+        // written in two languages, so a byte slice would panic on an accented character
+        // rather than merely look wrong.
+        let long = "Operacoes: cuida do que ja esta no ar, a conta da Cloudflare e a zona, \
+                    a release, a verificacao por fora e o rollback, e o registro do que roda";
+        let cut = first_clause(long, 96);
+        assert!(cut.ends_with("..."), "should be truncated: {cut}");
+        assert!(cut.chars().count() <= 100, "cap overrun: {cut}");
+        assert!(!cut.trim_end_matches('.').ends_with(char::is_alphabetic) || cut.contains(' '));
+
+        // A sentence that ends inside the cap keeps its full first sentence and no ellipsis.
+        assert_eq!(first_clause("Operations: runs what is live. And more.", 96), "Operations: runs what is live");
+
+        // Short input is returned whole.
+        assert_eq!(first_clause("Brand", 96), "Brand");
+    }
 
     #[test]
     fn the_prompt_and_session_come_off_the_hook_payload() {
