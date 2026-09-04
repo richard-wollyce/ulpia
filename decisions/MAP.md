@@ -435,6 +435,19 @@
   the species, which is the second answer to the volume problem, the first having been
   measured dead. Ingestion may only ever write memory, as a rule in code.
 
+- **[[0032-the-answerer-sits-after-the-verdict]]** 🟢 accepted 2026-08-24.
+  **A model may write the answer, and it may not decide whether there is one.** `kb answer`
+  sits after the verdict, so the refusal ADR-0018 produces survives being turned into prose
+  instead of being smoothed away by it. The retrieval path is untouched: the model reads the
+  passages that were already served and never the base.
+
+- **[[0033-the-text-scorer-prunes-what-cannot-rank]]** 🟢 accepted 2026-08-26.
+  **A term that appears in most of the corpus cannot rank anything, so it is not worth
+  searching for.** Measured on a 57,486-chunk haystack, where the text scorer had become the
+  latency. The prune is document frequency based and only engages above `PRUNE_MIN_CHUNKS`,
+  which is why a personal-scale base pays nothing for it and pays a little of its median for
+  the tail it buys.
+
 - **[[0034-git-leaves-the-runtime]]** 🟢 accepted 2026-09-01.
   **`kb` stops asking git what it may serve.** The oracle refused folders without `git init`,
   hid every note until it was tracked, served nothing from a deployment bundle, shelled out once

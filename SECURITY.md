@@ -18,9 +18,18 @@ prioritized by blast radius, not a corporate SLA.
 
 Anything that moves private data across the lines the design draws:
 
-- The privacy gate: anything git does not track must never be served, indexed, or
-  suggested. A path that dodges that rule is a vulnerability even when nothing
-  sensitive was behind it on your machine.
+- The privacy gate: a base declares its own private layer, as a `private =` line in
+  `agent.txt`, defaulting to `profile/`, `projects/` and `records/`. What that line
+  covers must never be served, indexed, or suggested unless the caller passed `--all`.
+  A path that dodges that rule is a vulnerability even when nothing sensitive was
+  behind it on your machine.
+
+  **This rule changed on 2026-09-01 and this file said the old one until 2026-09-03.**
+  It used to read "anything git does not track must never be served", which is what
+  the code did until [ADR-0034](decisions/0034-git-leaves-the-runtime.md) took git out
+  of the runtime. Anybody who read this file and went looking for a hole would have
+  tested a gate that no longer exists. The rule to test is the declaration, read off
+  the base itself, with no git anywhere in the path.
 - The boot hook and the MCP server run locally and send nothing anywhere. Anything
   that makes them do otherwise is a vulnerability.
 - The promotion pipeline must not write without its reviewer. A way to make it do so

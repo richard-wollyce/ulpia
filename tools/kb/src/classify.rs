@@ -485,6 +485,76 @@ pub(crate) fn scratch_cwd(root: &Path) -> PathBuf {
     }
 }
 
+/// Splits a command line into program and arguments, honouring double quotes.
+///
+/// Deliberately not a shell parser: no variable expansion, no globbing, no single quotes,
+/// no escapes. `Command::new` is called with separate arguments and nothing is ever handed
+/// to `sh -c`, so there is no injection surface to protect and no reason to grow one. The
+/// only job here is that a quoted path with a space in it survives, which is the whole of
+/// what breaks on Windows.
+fn split_command(cmd: &str) -> Vec<String> {
+    let mut out = Vec::new();
+    let mut cur = String::new();
+    let mut quoted = false;
+    let mut started = false;
+    for c in cmd.chars() {
+        match c {
+            '"' => {
+                quoted = !quoted;
+                started = true;
+            }
+            c if c.is_whitespace() && !quoted => {
+                if started {
+                    out.push(std::mem::take(&mut cur));
+                    started = false;
+                }
+            }
+            c => {
+                cur.push(c);
+                started = true;
+            }
+        }
+    }
+    if started {
+        out.push(cur);
+    }
+    out
+}
+
+#[cfg(test)]
+mod split_command_tests {
+    use super::split_command;
+
+    #[test]
+    fn a_quoted_path_with_a_space_stays_one_argument() {
+        let got = split_command(r#""C:\Program Files\llama\main.exe" -q --fast"#);
+        assert_eq!(got, vec![r"C:\Program Files\llama\main.exe", "-q", "--fast"]);
+    }
+
+    #[test]
+    fn the_ordinary_case_is_unchanged() {
+        assert_eq!(
+            split_command("tools/classify-claude.cmd --model sonnet"),
+            vec!["tools/classify-claude.cmd", "--model", "sonnet"]
+        );
+    }
+
+    #[test]
+    fn an_empty_quoted_argument_survives_rather_than_vanishing() {
+        assert_eq!(split_command(r#"prog "" x"#), vec!["prog", "", "x"]);
+    }
+
+    #[test]
+    fn runs_of_whitespace_do_not_produce_empty_arguments() {
+        assert_eq!(split_command("  prog   a  "), vec!["prog", "a"]);
+    }
+
+    #[test]
+    fn nothing_at_all_yields_nothing() {
+        assert!(split_command("   ").is_empty());
+    }
+}
+
 /// Runs the classifier and returns its verdict, or None when it cannot be reached.
 ///
 /// Every failure path returns None rather than an error, because the caller's fallback is
@@ -493,7 +563,13 @@ pub(crate) fn scratch_cwd(root: &Path) -> PathBuf {
 pub fn run(classifier: &Classifier, root: &Path, dossier: &str, roster: &[String]) -> Option<Verdict> {
     let Classifier::Command(cmd) = classifier else { return None };
 
-    let mut parts = cmd.split_whitespace();
+    // Quotes are honoured, because the first thing a Windows user types is a path with a
+    // space in it. `split_whitespace` alone turned `"C:\Program Files\llama\main.exe" -q`
+    // into a program called `"C:\Program` and an argument called `Files\llama\main.exe"`,
+    // then failed to find it and returned None, which this function turns into the silent
+    // fallback above. The classifier simply never ran and nothing said why.
+    let parts = split_command(cmd);
+    let mut parts = parts.iter().map(String::as_str);
     let program = parts.next()?;
     let args: Vec<&str> = parts.collect();
 
