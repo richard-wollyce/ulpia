@@ -497,3 +497,24 @@
   `translation`, `cross language`, `idioma diferente`, `modelo depois do veredito`,
   `model after the verdict`, `trigram`, `SUGGEST_FLOOR`, `kb-aliases.txt`, `kb misses`,
   `privacidade da consulta`, `query privacy`, `comparative study`.
+
+- **[[0039-the-routing-layer-may-write-to-itself]]** The rule that only a person may write an
+  alias line, reversed, and what replaced it. The old reason was weak: the evidence is a
+  question a real person asked, not something the machine produced. The reason that holds is
+  about signal, and it was found in the code rather than the doc: `recall_loss` records
+  nothing unless the verdict is `Nothing`, so only a total miss is logged, and alias
+  expansion is additive so an alias can never cause a miss, only a confident hit on the
+  wrong thing. The only feedback kept is blind to the only damage possible. So `kb misses
+  --apply` exists, refuses to run without `--gold`, and admits a line only on two sides:
+  the question it was proposed for stops missing, and no deterministic eval column drops,
+  with the abstention column compared the other way round. A model proposes and never
+  decides. `kb misroute` collects the other half, written by the agent rather than by
+  Richard, because `kb boot` already asks the agent to say when the choice was wrong and
+  nothing kept the answer. Evidence, never action. The gate caught its designed failure on
+  its first real run.
+  Search for: `escrever alias automaticamente`, `write an alias automatically`,
+  `kb misses --apply`, `--gold`, `portao do alias`, `alias gate`, `auto aperfeicoamento`,
+  `agent self improvement`, `expansao aditiva`, `additive expansion`, `perda de precisao`,
+  `precision loss`, `kb misroute`, `registro de roteamento errado`, `misroute log`,
+  `o agente reporta`, `the agent reports it`, `modelo propoe e nao decide`,
+  `model proposes and does not decide`, `coluna de abstencao`, `abstention column`.

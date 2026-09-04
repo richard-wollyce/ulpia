@@ -375,7 +375,10 @@ pub fn brief(memory: &Memory, root: &Path, req: &Request, top: usize) -> Briefin
             "VESTA: this message routes to {agent}. You are {agent} for as long as that \
              holds. This was decided by the fleet's router before you saw the message, \
              not by a file you read, so it is not yours to override: if it is wrong, say \
-             so rather than answering as somebody else.\n\n"
+             so rather than answering as somebody else, and record it with `kb \
+             misroute`, naming the message with --chose {agent} and --owner, so the \
+             fleet keeps what you noticed instead of losing it with the \
+             conversation. That log is evidence and never an edit.\n\n"
         ));
 
         if let Some(agent_root) = agent_root {

@@ -7,8 +7,9 @@
 
 use kb::checks::{Finding, Level};
 use kb::{
-    answer, base, blocks, boot, capture, checks, classify, commit, eval, index, init, json, list,
-    mcp, memory, misses, promote, remember, store, ui, write,
+    answer, base, blocks, boot, capture, checks, classify, commit, eval, gate, index, init, json,
+    list,
+    mcp, memory, misroute, misses, promote, remember, store, ui, write,
 };
 use base::Base;
 use std::path::Path;
@@ -35,7 +36,9 @@ usage:
     kb ui [path]... [--port N] [--all]
     kb capture [path] [--session ID]
     kb serve [path]... [--top N] [--all]
-    kb misses [path]... [--all] [--top N] [--json]
+    kb misses [path]... [--all] [--top N] [--json] [--apply --gold <tsv>]
+    kb misroute <message> --chose <agent> --owner <agent|none> [--why <text>] [path]
+    kb misroutes [path] [--top N]
 
     path        base to work on, defaults to the current directory
     --emit      blocks: print the assembled resident constitution instead of the report
@@ -71,10 +74,48 @@ read, because KB_MISSES_PATH can move the log and two fleets pointed at one path
 share it. --top N is candidates carried per question, the same meaning it has for
 every other verb, and not how many questions to print.
 
-It proposes and never applies. There is deliberately no flag that applies one.
-kb-aliases.txt is a record of real misses rather than a dictionary, and a machine
-that appends to it on evidence it produced itself closes that loop with nobody in
-it. The step from proposing an alias to writing one is a person, on purpose.
+It proposes and never applies, unless --apply is given with a gold set, and the
+--gold requirement is the whole safety property rather than an argument.
+
+The rule this replaced said the step from proposing an alias to writing one is a
+person, on purpose, because a machine that appends on evidence it produced itself
+closes the loop with nobody in it. That reason was weaker than it looked: the
+evidence is a question a real person asked and this base really failed, which is
+as external as evidence gets here.
+
+The reason that does hold is about signal. recall_loss records nothing unless the
+verdict is `nothing`, so only a total miss is ever logged; a guess is not, and a
+confident hit on the wrong file is not. Alias expansion is additive, so an alias
+can never cause a miss, only a confident hit on something else. The one feedback
+this system keeps is therefore blind to the only damage an alias can do, and a
+writer fed by it would improve the column it can see while quietly degrading the
+one it cannot.
+
+So --apply does not close that loop with a model. It closes it with arithmetic.
+Every candidate must pass two sides, and both are required: the question it was
+proposed for has to stop missing, and no deterministic column of kb eval may drop.
+A model proposes the lines and never decides one, which is the division ADR-0018
+already draws through retrieval, moved one layer up. The gate never consults the
+classifier, so the same candidate judged twice gets the same verdict and an
+admitted line can be re-derived. Each admitted line is written with the two
+measurements above it, and every refusal is counted in kb-alias-rejections.txt,
+because a proposer that keeps offering the same refused line is a signal about
+the proposer.
+
+misroute is the half the miss log cannot see, and the agent reports it rather than
+you. kb-misses.txt only records a question that reached nothing, so a router that was
+confident and wrong leaves it empty. Alias expansion is additive and can only ever
+cause that second kind of failure, so a loop reading the miss log alone optimises the
+column it can see and degrades the one it cannot.
+
+The reporter is the agent because the agent already knows. kb boot hands it the
+constitution above a line saying the choice was the router's and to say so if it is
+wrong; it does say so, in prose, and until this verb existed nothing kept it. It sees
+the message, the payload and its own base at once, which is the only vantage point in
+the loop that can tell `this is not mine` while it is still true.
+
+Evidence, never action. Nothing reads this log and edits a base. It widens what the
+proposer can see, and every proposal still has to survive the gate.
 
 commit exists because more than one session writes these repositories at once.
 It commits exactly the paths you name and then reads the commit back to prove it,
@@ -186,7 +227,7 @@ const LINES_SHOWN: usize = 3;
 /// Flags that consume the argument after them.
 const VALUE_FLAGS: &[&str] = &[
     "--top", "--keys", "--summary", "--folder", "--provenance", "--stage", "--base", "--kind",
-    "-m", "--port", "--max",
+    "-m", "--port", "--max", "--gold", "--chose", "--owner", "--why",
 ];
 
 fn main() -> ExitCode {
@@ -283,7 +324,21 @@ fn main() -> ExitCode {
             cmd_commit(&positional, &message)
         }
         "boot" => cmd_boot(&paths_or_default(&positional), all, top),
-        "misses" => cmd_misses(&paths_or_default(&positional), all, top, json),
+        "misses" => cmd_misses(
+            &paths_or_default(&positional),
+            all,
+            top,
+            json,
+            args.iter().any(|a| a == "--apply"),
+            flag_value(&args, "--gold").as_deref(),
+        ),
+        "misroute" => cmd_misroute(
+            &positional,
+            flag_value(&args, "--chose").as_deref(),
+            flag_value(&args, "--owner").as_deref(),
+            flag_value(&args, "--why").as_deref(),
+        ),
+        "misroutes" => cmd_misroutes(paths_or_default(&positional)[0], top),
         "capture" => {
             let paths = paths_or_default(&positional);
             cmd_capture(paths[0], flag_value(&args, "--session").as_deref())
@@ -1242,7 +1297,14 @@ fn route_as_json(question: &str, memory: &memory::Memory, top: usize) -> ExitCod
 ///
 /// Exit 0 when there is no log: a fleet nothing has missed against is healthy, not
 /// broken. Exit 1 only when the base cannot be opened or the log cannot be read.
-fn cmd_misses(paths: &[&str], all: bool, top: usize, as_json: bool) -> ExitCode {
+fn cmd_misses(
+    paths: &[&str],
+    all: bool,
+    top: usize,
+    as_json: bool,
+    apply: bool,
+    gold: Option<&str>,
+) -> ExitCode {
     let given: Vec<&Path> = paths.iter().map(Path::new).collect();
     let memory = match memory::Memory::open(&given, all) {
         Ok(m) => m,
@@ -1300,11 +1362,253 @@ fn cmd_misses(paths: &[&str], all: bool, top: usize, as_json: bool) -> ExitCode 
         print_miss(m, &memory.near_misses(&m.question, top), floor);
     }
 
+    if apply {
+        return apply_aliases(&memory, &root, &lost, top, gold);
+    }
+
     println!();
     println!("  Write the alias line, or add the key to that file's `Search for:` line,");
-    println!("  then delete the question from the log. This verb will not do it for you:");
-    println!("  kb-aliases.txt is a record of real misses, not a dictionary.");
+    println!("  then delete the question from the log. Or hand it to `--apply --gold <tsv>`,");
+    println!("  which proposes with a model and admits only what the gold set survives.");
 
+    ExitCode::SUCCESS
+}
+
+/// The apply half, kept out of `cmd_misses` so the reading path stays the reading path.
+///
+/// Two preconditions, and both refuse rather than degrade. **No gold set, no apply**: the
+/// gate is the only thing that makes writing safe, and a gate with nothing to measure
+/// against is a rubber stamp. **No model, no apply**: falling back to generating candidates
+/// mechanically would put an unreviewed proposer in the loop, which is the shape this whole
+/// design exists to avoid. `kb promote` refuses on the same grounds and for the same reason.
+fn apply_aliases(
+    memory: &memory::Memory,
+    root: &Path,
+    lost: &[misses::Miss],
+    top: usize,
+    gold: Option<&str>,
+) -> ExitCode {
+    let Some(gold_path) = gold else {
+        eprintln!();
+        eprintln!("kb: --apply needs --gold <tsv>, and that is the safety property rather than");
+        eprintln!("    an argument. The gate admits a line only when the question it was");
+        eprintln!("    proposed for stops missing AND no column of the gold set drops. With no");
+        eprintln!("    set to measure against, the second half cannot run and the first half");
+        eprintln!("    alone admits any line that widens recall at any cost to precision.");
+        return ExitCode::from(2);
+    };
+
+    let rows = match eval::read_gold(Path::new(gold_path)) {
+        Ok(r) => r,
+        Err(e) => {
+            eprintln!("kb: {e}");
+            return ExitCode::from(2);
+        }
+    };
+    let stale = eval::stale_answers(&rows, memory);
+    if !stale.is_empty() {
+        eprintln!("kb: the gold set points at {} file(s) that are not here:", stale.len());
+        for s in &stale {
+            eprintln!("      {s}");
+        }
+        eprintln!("    Refusing to gate against a set that has gone stale, for the same reason");
+        eprintln!("    `kb eval` refuses to grade against one.");
+        return ExitCode::from(2);
+    }
+
+    let model = memory.promoter();
+    if matches!(model, classify::Classifier::None) {
+        eprintln!();
+        eprintln!("kb: --apply needs a model to propose with. Add `promoter = ...` to fleet.txt.");
+        eprintln!("    The model proposes and never decides; the gate decides and never guesses.");
+        return ExitCode::from(2);
+    }
+
+    let paths: Vec<&Path> = vec![root];
+    let today = misses::today();
+    let (mut admitted, mut refused, mut proposed) = (0usize, 0usize, 0usize);
+    let (mut silent, mut declined, mut unparseable) = (0usize, 0usize, 0usize);
+
+    println!();
+    println!("applying, gated on {} ({} rows)", gold_path, rows.len());
+
+    for m in lost.iter().take(top) {
+        let near = memory.near_misses(&m.question, top);
+        println!();
+        println!("  {}x  {}", m.count, m.question);
+        let candidates = match gate::propose(&model, root, &m.question, &m.looked_like, &near) {
+            gate::Proposal::ModelSilent => {
+                silent += 1;
+                println!("      the proposer did not answer. Not a decision, an outage.");
+                continue;
+            }
+            gate::Proposal::Declined => {
+                declined += 1;
+                println!("      the proposer declined: no alias here would honestly help.");
+                continue;
+            }
+            gate::Proposal::Lines { candidates, dropped } => {
+                if dropped > 0 {
+                    unparseable += dropped;
+                    println!("      {dropped} line(s) dropped as unparseable, not repaired.");
+                }
+                candidates
+            }
+        };
+        for c in candidates {
+            proposed += 1;
+            match gate::judge(&paths, true, &rows, top, &c) {
+                Err(e) => {
+                    refused += 1;
+                    println!("      refused  {}", e);
+                    gate::record_refusal(root, &c, &e, &today);
+                }
+                Ok(v) if !v.admitted => {
+                    refused += 1;
+                    println!("      refused  {}  {}", c.line(), v.reason);
+                    gate::record_refusal(root, &c, &v.reason, &today);
+                }
+                Ok(v) => {
+                    let base_root = memory
+                        .agents
+                        .iter()
+                        .find(|a| a.name.eq_ignore_ascii_case(&c.base))
+                        .map(|a| a.root.clone());
+                    let Some(base_root) = base_root else {
+                        refused += 1;
+                        let why = format!("no base named `{}` in this fleet", c.base);
+                        println!("      refused  {}  {why}", c.line());
+                        gate::record_refusal(root, &c, &why, &today);
+                        continue;
+                    };
+                    match gate::write_line(&base_root, &c, &v, &today) {
+                        Ok(path) => {
+                            admitted += 1;
+                            println!("      ADMITTED {}", c.line());
+                            println!("               {} -> {}", v.before.line(), v.after.line());
+                            println!("               written to {}", path.display());
+                        }
+                        Err(e) => {
+                            refused += 1;
+                            println!("      refused  {}  {e}", c.line());
+                            gate::record_refusal(root, &c, &e, &today);
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    println!();
+    println!("  proposed {proposed}, admitted {admitted}, refused {refused}");
+    // Kept apart on purpose. A run that admits nothing because the proposer never ran and a
+    // run that admits nothing because the proposer judged there was nothing to add are the
+    // same number and opposite facts.
+    println!("  proposer: declined {declined}, silent {silent}, unparseable lines {unparseable}");
+    if silent > 0 {
+        println!("  A silent proposer is an outage and not a verdict. Check the `promoter =`");
+        println!("  command in fleet.txt before reading this run as `nothing to fix`.");
+    }
+    if admitted > 0 {
+        println!("  Run `kb index` so the second scorer sees the widened queries, then re-run");
+        println!("  `kb eval` yourself: this gate proves no column dropped, not that anything");
+        println!("  improved beyond the questions it was measured on.");
+    }
+    if refused > 0 {
+        println!("  Refusals are counted in {}.", root.join(gate::ALIAS_REJECTIONS_TXT).display());
+    }
+    ExitCode::SUCCESS
+}
+
+/// Records one misroute, reported by the agent that was handed the message.
+///
+/// **Both agent names are checked against the roster.** A typo here is not a harmless
+/// typo: it produces a row that reads like evidence, folds into its own count, and points
+/// at an agent that does not exist, so nobody can act on it and nobody can tell it apart
+/// from a real report by looking. `none` and `-` are accepted for the owner, and they mean
+/// something a name cannot: that no agent should have taken this at all, which is a finding
+/// about the fleet rather than about the router.
+fn cmd_misroute(
+    positional: &[&str],
+    chose: Option<&str>,
+    owner: Option<&str>,
+    why: Option<&str>,
+) -> ExitCode {
+    let (Some(chose), Some(owner)) = (chose, owner) else {
+        eprintln!("kb: misroute needs --chose <agent> and --owner <agent|none>.");
+        eprintln!("    --chose is who kb boot picked, --owner is who should have had it.");
+        eprintln!("    Reading the log back is `kb misroutes`.");
+        return ExitCode::from(2);
+    };
+    let Some(question) = positional.first() else {
+        eprintln!("kb: misroute needs the message that was routed wrong, as one argument.");
+        return ExitCode::from(2);
+    };
+    let root = Path::new(positional.get(1).copied().unwrap_or("."));
+
+    let memory = match memory::Memory::open(&[root], true) {
+        Ok(m) => m,
+        Err(e) => {
+            eprintln!("kb: {e}");
+            return ExitCode::from(1);
+        }
+    };
+    let roster = memory.roster();
+    let known = |name: &str| roster.iter().any(|r| r.eq_ignore_ascii_case(name));
+    let nobody = owner.eq_ignore_ascii_case("none") || owner == "-";
+
+    if !known(chose) {
+        eprintln!("kb: no routable agent named `{chose}`. The fleet: {}", roster.join(", "));
+        return ExitCode::from(2);
+    }
+    if !nobody && !known(owner) {
+        eprintln!("kb: no routable agent named `{owner}`. The fleet: {}", roster.join(", "));
+        eprintln!("    Use `none` when the message belonged to no agent at all.");
+        return ExitCode::from(2);
+    }
+    if !nobody && chose.eq_ignore_ascii_case(owner) {
+        eprintln!("kb: `{chose}` was chosen and is named as the owner, so nothing was wrong.");
+        return ExitCode::from(2);
+    }
+
+    let stored_owner = if nobody { "-" } else { owner };
+    misroute::record(root, chose, stored_owner, question, why.unwrap_or(""), &misses::today());
+    println!("recorded: {chose} was handed a message that belongs to {}", if nobody { "nobody" } else { owner });
+    println!("  {}", misroute::path_in(root).display());
+    println!();
+    println!("  This is evidence and not a fix. Nothing reads it and edits a base: it widens");
+    println!("  what `kb misses --apply` can propose, and the gate still decides.");
+    ExitCode::SUCCESS
+}
+
+/// Reads the misroute log back, busiest first, which is which one to fix next.
+fn cmd_misroutes(path: &str, top: usize) -> ExitCode {
+    let root = Path::new(path);
+    let log = misroute::path_in(root);
+    let rows = misroute::load(&log);
+
+    println!("log:      {}", log.display());
+    if rows.is_empty() {
+        println!();
+        println!("  nothing reported. Either the router has not been caught yet, or the agents");
+        println!("  are not calling `kb misroute` when they notice. The second one is the more");
+        println!("  likely of the two and it is silent, which is why this line says so.");
+        return ExitCode::SUCCESS;
+    }
+    let total: u32 = rows.iter().map(|r| r.count).sum();
+    println!("reported: {} distinct, {total} in total", rows.len());
+    for r in rows.iter().take(top.max(1) * 4) {
+        println!();
+        let owner = if r.owner == "-" { "nobody".to_string() } else { r.owner.clone() };
+        println!("   {}x  {} to {}  ({} to {})", r.count, r.chose, owner, r.first, r.last);
+        println!("        {}", r.question);
+        if !r.why.is_empty() {
+            println!("        why: {}", r.why);
+        }
+    }
+    println!();
+    println!("  A count above one is a standing defect in the keys or the aliases, not an");
+    println!("  unusual message. Delete the line once the routing it describes is fixed.");
     ExitCode::SUCCESS
 }
 
@@ -3415,7 +3719,7 @@ with a body"];
 
         let path = root.to_str().expect("a utf-8 scratch path");
         assert_eq!(
-            format!("{:?}", cmd_misses(&[path], true, 4, true)),
+            format!("{:?}", cmd_misses(&[path], true, 4, true, false, None)),
             format!("{:?}", ExitCode::SUCCESS),
             "a healthy fleet is not a failure"
         );
@@ -3467,21 +3771,48 @@ with a body"];
         }
     }
 
-    /// The deliberate missing step, made executable rather than left in prose.
+    /// The step that used to be missing, and the condition that replaced its absence.
     ///
-    /// A verb that proposes an alias sits one step from a verb that writes one, and
-    /// `kb-aliases.txt` is a record of misses rather than a dictionary: a machine that
-    /// appends to it on evidence it also generated closes that loop with nobody in it.
-    /// A decision recorded only in a doc comment is a decision the next change deletes
-    /// without noticing it was one, so the flag's absence and the reason for it are
-    /// both asserted.
+    /// This test asserted the opposite until 2026-09-03: that `--apply` did not exist and
+    /// that the reason travelled with its absence. **It is kept and re-pointed rather than
+    /// deleted**, because the thing worth guarding never was the absence of the flag. It
+    /// was that the decision could not be removed by accident.
+    ///
+    /// What the flag may not lose: the gold set. `--apply` without `--gold` is a writer with
+    /// nothing to measure against, and every argument for letting a machine write here rests
+    /// on the measurement. So the requirement is asserted in the text a person reads, and
+    /// the reason is asserted beside it.
     #[test]
-    fn there_is_no_way_to_apply_a_suggestion_from_this_verb() {
-        assert!(!USAGE.contains("--apply"), "the flag is not offered anywhere a person reads");
-        assert!(!VALUE_FLAGS.contains(&"--apply"), "nor parsed");
+    fn applying_an_alias_cannot_lose_the_gold_set_that_makes_it_safe() {
         assert!(
-            USAGE.contains("There is deliberately no flag that applies one."),
-            "the reason travels with the absence:
+            USAGE.contains("[--apply --gold <tsv>]"),
+            "the flag is never offered without the set that gates it:
+{USAGE}"
+        );
+        assert!(VALUE_FLAGS.contains(&"--gold"), "and --gold takes a value, so it is parsed");
+        assert!(
+            USAGE.contains("the whole safety property rather than an argument"),
+            "the reason travels with the requirement:
+{USAGE}"
+        );
+        assert!(
+            USAGE.contains("A model proposes the lines and never decides one"),
+            "and so does the division of labour that makes it auditable:
+{USAGE}"
+        );
+    }
+
+    /// The asymmetry the gate exists for, pinned where a reader of the CLI will find it.
+    ///
+    /// An alias cannot cause a miss, only a confident hit on the wrong thing, and the miss
+    /// log is the only feedback kept. Anybody reading `--apply` and reaching for a simpler
+    /// design needs that sentence in front of them, so it is asserted rather than trusted
+    /// to survive an edit.
+    #[test]
+    fn the_help_says_why_recall_is_not_the_only_column_that_matters() {
+        assert!(
+            USAGE.contains("can never cause a miss, only a confident hit on something else"),
+            "the mechanism travels with the feature:
 {USAGE}"
         );
     }

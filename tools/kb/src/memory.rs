@@ -666,6 +666,26 @@ impl Memory {
         self
     }
 
+    /// Adds alias lines that are not on disk, so a candidate can be measured before it
+    /// is written.
+    ///
+    /// **This exists so that writing an alias can be gated on evidence rather than on
+    /// somebody's confidence.** `kb-aliases.txt` expands additively, which is the
+    /// property that makes an alias safe to add and impossible to audit: a wrong line
+    /// can never cause a miss, only a confident hit on the wrong file, and the miss log
+    /// is the only feedback this system keeps. So the one honest way to judge a
+    /// candidate is to apply it to a base that is otherwise identical and re-run the
+    /// eval. That needs the alias in memory and not on disk, or the measurement has
+    /// already changed the thing it was measuring.
+    ///
+    /// Consuming, like [`Memory::with_suggester`], and for the same reason: a base whose
+    /// aliases can be mutated after opening is a base where two callers disagree about
+    /// what was expanded.
+    pub fn with_extra_aliases(mut self, extra: Vec<(String, String)>) -> Memory {
+        self.aliases.extend(extra);
+        self
+    }
+
     /// The fleet describing itself: its name, its role, and every agent with theirs.
     ///
     /// **A lookup, not a verb.** It answers nothing; it hands over the roster so

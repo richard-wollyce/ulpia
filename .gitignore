@@ -29,6 +29,20 @@ target/
 # eventually earns, never the miss.
 kb-misses.txt
 
+# The misroute log and the alias refusal log, ignored for exactly the reason above and
+# added in the same change that created them, rather than after a `git status` caught
+# them sitting untracked at the root.
+#
+# kb-misroutes.txt holds the message that was routed wrong, verbatim, plus the reporting
+# agent's own words about why. That is the user's question and a second agent's reading of
+# it, so it is more private base content than the miss log, not less.
+#
+# kb-alias-rejections.txt holds a proposed alias line and the reason the gate refused it.
+# Both sides of an alias are vocabulary lifted from a real question and from a real note,
+# so a refusal quotes the base twice.
+kb-misroutes.txt
+kb-alias-rejections.txt
+
 # The refusal record, ignored for exactly the reason above and noticed only when a hook
 # started producing it unattended. A refusal reason quotes the note it refused and the file
 # it collided with, verbatim and in whatever language they were written in, so this file is
