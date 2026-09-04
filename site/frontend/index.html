@@ -232,13 +232,19 @@
             <p class="cmp-axis-scale"><span>0</span><span>150 ms</span><span>300 ms</span></p>
           </div>
           <figcaption class="cmp-legend">
-            <span class="cmp-key cmp-key-ours"></span> measured in this
-            repository, in process, on one laptop.
-            <span class="cmp-key cmp-key-claim"></span> the vendor's own
-            published claim about itself, linked at its source on the
-            <a href="/benchmarks/#latency">benchmarks page</a>. No vendor bar
-            is our measurement, and none of them was run here. Linear scale,
-            so our bar is drawn at the width the ratio actually gives it.
+            <span class="cmp-key cmp-key-ours"></span> <strong>Gold is
+            ours</strong>, measured in this repository, in process, on the one
+            laptop that built the thing.
+            <span class="cmp-key cmp-key-mid"></span><span class="cmp-key cmp-key-worst"></span>
+            <strong>The redder the bar, the slower the system.</strong> Each of
+            these is that vendor's own published claim about itself, linked at
+            its source on the <a href="/benchmarks/#latency">benchmarks page</a>;
+            the hatching is what says the number is theirs rather than ours, so
+            the two things stay separable if this chart is ever seen without its
+            caption. No vendor bar is our measurement and none was run here.
+            <span class="cmp-key cmp-key-none"></span> A grey rule means the
+            vendor publishes no figure at all. Linear scale, so our bar is drawn
+            at the width the ratio actually gives it.
           </figcaption>
           <figcaption class="cmp-legend">
             <strong>No bar here includes the network.</strong> Every vendor

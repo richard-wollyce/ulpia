@@ -2601,10 +2601,61 @@ body::after {
  * --w must stay exactly --ms / 300, because the motion below derives its
  * duration from --ms and its distance from --w, and the wavefront argument is
  * only true while those two agree. */
-.cmp-row[data-sys="ulpia"]       { --w: 0.39%;  --ms: 1.16; }
-.cmp-row[data-sys="mem0"]        { --w: 49.33%; --ms: 148; }
-.cmp-row[data-sys="zep"]         { --w: 50%;    --ms: 150; }
-.cmp-row[data-sys="supermemory"] { --w: 100%;   --ms: 300; }
+/* THE HEAT RAMP, and why it is declared per scheme rather than once.
+ *
+ * The encoding Richard asked for is gold for ours and progressively redder for
+ * slower, which is a SEMANTIC scale: the hue carries a value. That is a
+ * different job from the two ground laws, which govern brand identity, and it
+ * collides with them head on. Measured: brand gold is 2.02:1 on paper, which is
+ * exactly why law 1 forbids it there, and in light the page accent IS the
+ * Mastery red, so "red means worst vendor" would collide with "accent means
+ * ours" if our bar simply kept the accent.
+ *
+ * A legend that has to be re-learned when the reader flips the scheme is a
+ * broken legend, so the KEY is scheme invariant, gold for ours and redder for
+ * slower, and the members of each hue family change so the contrast holds. Every
+ * value below was measured against its own ground, not chosen by eye:
+ *
+ *   cover   ours #c9a860 8.37:1   mid #cf8348 6.32:1   worst #d4553c 4.67:1
+ *   paper   ours #a8811f 3.20:1   mid #b0532a 4.53:1   worst #8c1f14 8.04:1
+ *
+ * Every one clears the 3:1 floor WCAG 1.4.11 sets for a graphical mark, and each
+ * stop is separated from its neighbour, so the ramp reads as steps rather than
+ * as a smear. On paper the ramp also gets heavier as it reddens, which is how
+ * print has always encoded severity and which buys the luminance separation a
+ * gold-to-red ramp cannot get on a light ground.
+ *
+ * THIS IS AN AMENDMENT TO THE GROUND LAWS AND IT IS SCOPED TO THIS FIGURE. The
+ * laws still hold for every brand surface. What earns the exception is that a
+ * data mark encoding a measured value is not ornament, and the alternative was
+ * a chart whose key means one thing in dark and another in light.
+ *
+ * The value text is deliberately NOT on this ramp. Text has a 4.5:1 floor and
+ * `ours` on paper is 3.20:1, so the figure beside our bar stays on --accent. */
+:root {
+  --heat-ours: #a8811f;
+  --heat-mid: #b0532a;
+  --heat-worst: #8c1f14;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --heat-ours: #c9a860;
+    --heat-mid: #cf8348;
+    --heat-worst: #d4553c;
+  }
+}
+
+:root[data-theme="dark"] {
+  --heat-ours: #c9a860;
+  --heat-mid: #cf8348;
+  --heat-worst: #d4553c;
+}
+
+.cmp-row[data-sys="ulpia"]       { --w: 0.39%;  --ms: 1.16; --heat: var(--heat-ours); }
+.cmp-row[data-sys="mem0"]        { --w: 49.33%; --ms: 148; --heat: var(--heat-mid); }
+.cmp-row[data-sys="zep"]         { --w: 50%;    --ms: 150; --heat: var(--heat-mid); }
+.cmp-row[data-sys="supermemory"] { --w: 100%;   --ms: 300; --heat: var(--heat-worst); }
 
 .cmp-bar {
   display: block;
@@ -2615,19 +2666,23 @@ body::after {
    * rather than as a small number. The figure beside it is the precise
    * statement; this is the floor that keeps the mark visible at 320px. */
   min-width: 2px;
-  background: var(--accent);
+  background: var(--heat);
 }
 
 /* A vendor's own claim about itself: outlined and hatched, never filled.
  * The hatch is a gradient rather than an image so it costs no request and
  * inherits the scheme's ink automatically. */
+/* Two channels, two encodings, and they must stay independent: the HATCH says
+ * whose number this is, the HUE says how slow it is. Colouring the hatch rather
+ * than replacing it is what keeps provenance readable after the chart has been
+ * screenshotted away from its caption, which is the reason the hatch exists. */
 .cmp-row.is-claim .cmp-bar {
   background: repeating-linear-gradient(
     -45deg,
-    var(--ink-2) 0 1px,
-    transparent 1px 5px
+    var(--heat) 0 1.5px,
+    transparent 1.5px 5px
   );
-  border: 1px solid var(--ink-2);
+  border: 1px solid var(--heat);
   opacity: 0.85;
 }
 
@@ -2697,16 +2752,45 @@ body::after {
 }
 
 .cmp-key-ours {
-  background: var(--accent);
+  background: var(--heat-ours);
 }
 
-.cmp-key-claim {
+.cmp-key-mid,
+.cmp-key-worst {
+  border: 1px solid var(--heat-mid);
   background: repeating-linear-gradient(
     -45deg,
-    var(--ink-2) 0 1px,
-    transparent 1px 5px
+    var(--heat-mid) 0 1.5px,
+    transparent 1.5px 5px
   );
-  border: 1px solid var(--ink-2);
+}
+
+.cmp-key-worst {
+  border-color: var(--heat-worst);
+  background: repeating-linear-gradient(
+    -45deg,
+    var(--heat-worst) 0 1.5px,
+    transparent 1.5px 5px
+  );
+}
+
+/* The absent row's key: a rule rather than a block, because it stands for a bar
+ * that was never drawn. It keeps the full swatch box the other keys have and
+ * centres the rule inside it, so it reads as a key in a row of keys. Drawn as a
+ * zero-height element it sat on the baseline and read as stray hyphens in the
+ * middle of the sentence, which is a typo, not a legend. */
+.cmp-key-none {
+  position: relative;
+  background: none;
+}
+
+.cmp-key-none::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 50%;
+  border-top: 2px dashed var(--ink-2);
 }
 
 /* Below 34rem the three-column row cannot hold: the name column alone eats
@@ -3191,16 +3275,6 @@ body::after {
     37.5%, 100% { transform: translateX(115%); }
   }
 
-  /* Byte identical under a second name, and not duplication for its own sake: a
-   * CSS animation restarts only when its computed animation-name changes, so a
-   * name swap is the only way to make the reader's press start a fresh sweep
-   * rather than drop them into the middle of iteration 17. This sheet already
-   * carries the trick for the lamp, as chain-tug-a and chain-tug-b. */
-  @keyframes cmp-sweep-loop {
-    0%          { transform: translateX(-115%); }
-    37.5%, 100% { transform: translateX(115%); }
-  }
-
   /* ==== the clock ======================================================= */
 
   /* When the bars start, measured from the frame .is-shown lands. 300ms is the
@@ -3211,6 +3285,21 @@ body::after {
    * rise, so the load has to follow. .instant is set by the focus guard and the
    * 6s failsafe, which kill the transition, so waiting 300ms would be a stall.
    * Source order matters: .instant is last so it wins over .delay-1. */
+  /* THE ONE NUMBER THAT SETS EVERY DURATION. 13.333 = 4000 / 300, so
+   * Supermemory's 300ms fills in four seconds, mem0 and Zep land at just under
+   * two, and ours at 1.16ms x 13.333 is 15.5ms, still inside one frame at 60Hz
+   * and therefore still instant. Those are durations a person can actually
+   * watch, which is the whole reason it is not 1.
+   *
+   * IT COSTS THE CHART NOTHING, and that is not luck. A UNIFORM multiplier
+   * leaves every ratio intact, so the wavefront survives exactly: all four bars
+   * still grow at one velocity, every still-filling leading edge still sits at
+   * the same x, and that x is still the axis tick for elapsed time times k.
+   * What would break it is a FLOOR. max(90ms, k x latency) would make our bar
+   * crawl 64x slower than mem0's, and the fastest system on the page would look
+   * like the slowest thing on it. One multiplier, no floor, no exceptions. */
+  .cmp         { --cmp-k: 13.333ms; }
+
   .cmp         { --cmp-load: 420ms; }
   .cmp.delay-1 { --cmp-load: 490ms; }
   .cmp.delay-2 { --cmp-load: 560ms; }
@@ -3224,7 +3313,8 @@ body::after {
    * a row that loses its timing must fail visibly to a reviewer, not quietly
    * inherit somebody else's number. */
   html[data-js] .cmp.is-shown .cmp-row .cmp-bar {
-    animation: cmp-fill calc(var(--ms) * 1ms) linear var(--cmp-load) backwards;
+    animation: cmp-fill calc(var(--ms) * var(--cmp-k)) linear var(--cmp-load)
+      backwards;
   }
 
   /* 0,5,0 beats the 0,4,0 above, which is how the breath is added without
@@ -3232,8 +3322,9 @@ body::after {
    * because a breath is symmetric and has no arrival to ease into. */
   html[data-js] .cmp.is-shown .cmp-row.is-claim .cmp-bar {
     animation:
-      cmp-fill calc(var(--ms) * 1ms) linear var(--cmp-load) backwards,
-      cmp-work calc(var(--ms) * 1ms) ease-in-out var(--cmp-load) backwards;
+      cmp-fill calc(var(--ms) * var(--cmp-k)) linear var(--cmp-load) backwards,
+      cmp-work calc(var(--ms) * var(--cmp-k)) ease-in-out var(--cmp-load)
+        backwards;
   }
 
   /* The spark sits on the track, not on the bar: the bar carries the fill's
@@ -3281,9 +3372,15 @@ body::after {
     opacity: 0;
   }
 
+  /* Back on the clock with the fills, and the earlier objection has dissolved
+   * rather than been overruled. It used to wait for the race to finish, because
+   * under a 1:1 scale its 1120ms would have made the vendor with no published
+   * number the longest thing on the chart. At 13.333x the longest fill is
+   * 4000ms, so Supermemory owns that title, which is the truth. Letta simply
+   * pulses while the field fills, which is what a row that never entered the
+   * race should do. */
   html[data-js] .cmp.is-shown .cmp-row.is-none .cmp-track::before {
-    animation: cmp-absent 560ms ease-in-out
-      calc(var(--cmp-load) + 300ms) 2 backwards;
+    animation: cmp-absent 560ms ease-in-out var(--cmp-load) 2 backwards;
   }
 
   /* ==== the glint ======================================================= */
@@ -3324,31 +3421,48 @@ body::after {
    * argument fails, so this number is load-bearing for WCAG 1.4.3.
    *
    * The delay is the whole thesis as arithmetic: 300ms of fills, 1120ms of
-   * Letta, 240ms of silence, so the stage is empty before the ornament starts.
-   * Three passes, then it is over. DO NOT LENGTHEN WITHOUT REDOING THE SUM in
-   * the header: the last frame is --cmp-load + 1660 + 2400, which is 4620ms at
-   * worst, 380ms inside WCAG 2.2.2's five second line. */
+   * The delay waits for the last bar: 4000ms of fills plus 240ms of silence, so
+   * the stage is empty before the ornament begins. Three passes, then it is
+   * over. The whole sequence is 560 + 4000 + 240 + 2400 = 7200ms at worst,
+   * which is past WCAG 2.2.2's five second line, and the pause control below is
+   * what answers for that. Lengthen this and you lengthen the run, not the
+   * compliance: the control is what carries it now. */
   html[data-js] .cmp.is-shown .cmp-row.is-ours::after {
     animation: cmp-sweep 800ms cubic-bezier(0.33, 1, 0.68, 1)
-      calc(var(--cmp-load) + 1660ms) 3 backwards;
+      calc(var(--cmp-load) + 4240ms) 3 backwards;
   }
 
-  /* The owner's loop, on demand. Same specificity as the rule above, so source
-   * order decides and these two must stay below it. A name swap rather than a
-   * count change, because only a name change restarts an animation, and delay 0
-   * so the press is answered on the very next frame. */
-  html[data-js] .cmp.is-shown.is-looping .cmp-row.is-ours::after {
-    animation-name: cmp-sweep-loop;
-    animation-delay: 0ms;
-    animation-iteration-count: infinite;
-  }
-
-  /* The stop half of the same button. `animation: none` returns the element to
-   * its static transform, translateX(-115%), off the left edge and clipped.
-   * Without that static transform this rule would strand a permanent wash
-   * across the row, which is the bug this line exists to prevent. */
-  html[data-js] .cmp.is-shown.is-stopped .cmp-row.is-ours::after {
-    animation: none;
+  /* THE PAUSE, and it is now required rather than a courtesy. At 13.333x the
+   * whole sequence runs 7200ms at worst, well past the five seconds at which
+   * WCAG 2.2.2 demands that automatically starting motion be pausable,
+   * stoppable or hidable. This one declaration is that mechanism, and it reaches
+   * every animation in the figure at once rather than only the ornament.
+   *
+   * `animation-play-state` freezes in place and resumes from the same frame, so
+   * a reader who pauses mid-fill is left with a chart that is still true: every
+   * bar shows latency-so-far at the instant they stopped it. That is a property
+   * of the 1:1-times-k mapping and it is the reason pausing is safe here at all. */
+  /* EACH SELECTOR MIRRORS THE ANIMATION RULE IT HAS TO BEAT, PLUS .is-paused.
+   * That is not defensive verbosity, it is the only thing that works here, and
+   * the first attempt at this rule failed in the browser for a reason worth
+   * writing down: `animation-play-state` is a longhand, and every rule above
+   * sets the `animation` SHORTHAND, which resets play-state to `running`. So a
+   * shorter pause selector loses to the shorthand on specificity and the chart
+   * keeps filling with the button reading pressed. Measured, not reasoned: the
+   * clip-path kept advancing 700ms after the press.
+   *
+   * The arithmetic, since a future edit will need it. The rules to beat are
+   * (0,5,1) for the fill, (0,6,1) for the claim fill, (0,6,2) for the spark and
+   * Letta, and (0,5,2) for the glint. Adding .is-paused to .cmp buys exactly one
+   * class on each, so every selector below outranks its own target and nothing
+   * relies on source order. Add an animation to this figure and you must add its
+   * mirror here, or the pause will silently not cover it. */
+  html[data-js] .cmp.is-shown.is-paused .cmp-row .cmp-bar,
+  html[data-js] .cmp.is-shown.is-paused .cmp-row.is-claim .cmp-bar,
+  html[data-js] .cmp.is-shown.is-paused .cmp-row.is-ours .cmp-track::before,
+  html[data-js] .cmp.is-shown.is-paused .cmp-row.is-none .cmp-track::before,
+  html[data-js] .cmp.is-shown.is-paused .cmp-row.is-ours::after {
+    animation-play-state: paused;
   }
 
   /* ==== the control ===================================================== */
@@ -3361,7 +3475,7 @@ body::after {
    * at 3px offset, the 160ms micro duration. The underline is text-decoration
    * rather than a border so the 24px target minimum (WCAG 2.5.8) can be bought
    * with padding without the rule drifting away from the text. */
-  .cmp .cmp-loop {
+  .cmp .cmp-pause {
     font: inherit;
     font-size: var(--size-small);
     font-style: italic;
@@ -3379,13 +3493,13 @@ body::after {
       text-decoration-color 160ms cubic-bezier(0.33, 1, 0.68, 1);
   }
 
-  .cmp .cmp-loop:hover,
-  .cmp .cmp-loop:focus-visible {
+  .cmp .cmp-pause:hover,
+  .cmp .cmp-pause:focus-visible {
     color: var(--accent);
     text-decoration-color: var(--accent);
   }
 
-  .cmp .cmp-loop:focus-visible {
+  .cmp .cmp-pause:focus-visible {
     outline: 2px solid var(--accent);
     outline-offset: 3px;
   }

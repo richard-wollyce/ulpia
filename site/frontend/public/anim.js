@@ -105,18 +105,20 @@
     });
 
     // ---- the latency chart's one control (motion spec, 2026-09-04).
-    // The glint plays three passes and stops, so nothing in the figure moves
-    // for longer than 4.62s and WCAG 2.2.2 never engages on a plain page load.
-    // This button is the loop the brief asked for, opt in, and it is its own
-    // stop control, which is the mechanism 2.2.2 wants for perpetual motion.
+    // At 13.333x the figure's whole sequence runs about 7.2s, past the five
+    // seconds at which WCAG 2.2.2 requires automatically starting motion to be
+    // pausable, stoppable or hidable. This button is that mechanism, and it is
+    // not optional furniture: without it the chart is non-conforming.
+    //
     // Built here and never in markup, so it cannot exist without JS and cannot
-    // exist under reduced motion: this file returns at line 8. Nothing is
-    // stored, so a loop can never greet a reader who did not ask for one.
+    // exist under reduced motion, where this file returns at line 8 and there
+    // is no motion to pause. Nothing is stored: a reader's pause belongs to
+    // their visit, not to the next one.
     //
     // The label does NOT change with state. A toggle button that swaps its
     // accessible name while also setting aria-pressed announces two opposite
-    // things at once ("Stop the highlight, pressed"), which is worse than
-    // either alone. aria-pressed carries the state; the name stays the action.
+    // things at once ("Play, pressed"), which is worse than either alone.
+    // aria-pressed carries the state and the name stays the action.
     [].slice.call(document.querySelectorAll(".cmp")).forEach(function (fig) {
       var axis = fig.querySelector(".cmp-axis");
       if (!axis) return;
@@ -124,17 +126,12 @@
       var b = document.createElement("button");
       p.className = "cmp-ctl";
       b.type = "button";
-      b.className = "cmp-loop";
+      b.className = "cmp-pause";
       b.setAttribute("aria-pressed", "false");
-      b.textContent = "Loop the highlight";
+      b.textContent = "Pause the animation";
       b.addEventListener("click", function () {
-        var on = fig.classList.toggle("is-looping");
-        // is-stopped kills the animation outright, so it must be present
-        // whenever the loop is off. Without it, turning the loop off would
-        // fall back to the three-pass rule, whose delay has long since
-        // elapsed, and the row would simply sit there looking broken.
-        fig.classList.toggle("is-stopped", !on);
-        b.setAttribute("aria-pressed", on ? "true" : "false");
+        var paused = fig.classList.toggle("is-paused");
+        b.setAttribute("aria-pressed", paused ? "true" : "false");
       });
       p.appendChild(b);
       axis.parentNode.insertBefore(p, axis.nextSibling);
