@@ -5,7 +5,7 @@ stage: derived
 
 # ADR-0038: a meaning tier sits after the verdict, and it ships with nothing in it
 
-**Search for:** `meaning tier`, `camada de significado`, `tier de significado`, `suggester`, `sugeridor`, `Suggester`, `Trigram`, `suggester.rs`, `with_suggester`, `segundo scorer`, `second scorer`, `onde um modelo pode entrar`, `where a model may land`, `modelo depois do veredito`, `model after the verdict`, `traducao`, `translation`, `traduzir pergunta`, `cross language`, `cross lingual`, `idioma diferente`, `paraphrase`, `parafrase`, `pergunta em outra lingua`, `question in another language`, `nunca never`, `cognate`, `cognato`, `typo`, `erro de digitacao`, `trigram`, `trigrama`, `Dice`, `look_alike`, `SUGGEST_FLOOR`, `index::suggest`, `confidence_of`, `Memory::confidence_of`, `recall_loss`, `Verdict::Nothing`, `veredito`, `verdict`, `seam`, `costura`, `emenda`, `inert`, `inerte`, `candidato nomeado`, `empty slot`, `embedding local`, `local embedding`, `privacidade da consulta`, `query privacy`, `consulta sai da maquina`, `query leaves the machine`, `kb-aliases.txt`, `alias`, `alias table`, `tabela de alias`, `expand_query`, `index::expand_query`, `expansao de consulta`, `query expansion`, `kb misses`, `misses.rs`, `kb-misses.txt`, `log de perdas`, `recall loss log`, `the hosted product`, `the vendor`, `estudo comparativo`, `hosted memory layer study`, `revisit trigger`, `gatilho de revisao`, `ADR-0038`
+**Search for:** `meaning tier`, `camada de significado`, `tier de significado`, `suggester`, `sugeridor`, `Suggester`, `Trigram`, `suggester.rs`, `with_suggester`, `segundo scorer`, `second scorer`, `onde um modelo pode entrar`, `where a model may land`, `modelo depois do veredito`, `model after the verdict`, `traducao`, `translation`, `traduzir pergunta`, `cross language`, `cross lingual`, `idioma diferente`, `paraphrase`, `parafrase`, `pergunta em outra lingua`, `question in another language`, `nunca never`, `cognate`, `cognato`, `typo`, `erro de digitacao`, `trigram`, `trigrama`, `Dice`, `look_alike`, `SUGGEST_FLOOR`, `index::suggest`, `confidence_of`, `Memory::confidence_of`, `recall_loss`, `Verdict::Nothing`, `veredito`, `verdict`, `seam`, `costura`, `emenda`, `inert`, `inerte`, `candidato nomeado`, `empty slot`, `embedding local`, `local embedding`, `privacidade da consulta`, `query privacy`, `consulta sai da maquina`, `query leaves the machine`, `kb-aliases.txt`, `alias`, `alias table`, `tabela de alias`, `expand_query`, `index::expand_query`, `expansao de consulta`, `query expansion`, `kb misses`, `misses.rs`, `kb-misses.txt`, `log de perdas`, `recall loss log`, `estudo comparativo`, `comparative study`, `camada hospedada`, `hosted memory layer study`, `revisit trigger`, `gatilho de revisao`, `ADR-0038`
 
 **Exists to:** Record that the slot where a meaning scorer would go already exists, that the ordering which makes it safe is a property of the call graph and not of a type, and that no model fills it until ADR-0018's bar is cleared by a named candidate with a measurement.
 
@@ -25,7 +25,7 @@ stage: derived
 
 ## Context
 
-The hosted memory layer study of 2026-09-02 (`reports/2026-09-02-salve-and-ulpia.md`) compared two memory layers
+The hosted memory layer study of 2026-09-02 (`reports/2026-09-02-a-hosted-memory-layer-read-against-ours.md`) compared two memory layers
 of the same shape and opposite bets, and found exactly one query shape their product is aimed at
 and ours structurally cannot reach: **a paraphrase, or a question asked in one language against a
 note whose keys were written in another.** Our own limit is ours to state, and the study states it
@@ -254,7 +254,7 @@ Nothing was measured for this record. No model was downloaded, no candidate was 
 command run was `cargo test` in `tools/kb`. Everything above about the code was read at this commit
 and quoted from it: `memory.rs` `confidence_of`, `recall_loss`, `suggest` and `with_suggester`,
 `suggester.rs` in full, `index.rs` `suggest`, `look_alike`, `SUGGEST_FLOOR` and `expand`,
-`misses.rs`, and `cmd_misses` in `main.rs`. Everything about the hosted product is second hand, from a study
+`misses.rs`, and `cmd_misses` in `main.rs`. Everything about the subject is second hand, from a study
 whose own method section says nobody installed the app.
 
 The precedent this leans on hardest is ADR-0032, and the parallel is worth naming rather than

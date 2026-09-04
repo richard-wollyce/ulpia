@@ -461,7 +461,7 @@
 
 - **[[0037-what-survives-a-lost-machine]]** 🟢 accepted 2026-09-02.
   **We do not build sync. We name the set that must survive and prove the copy still answers.**
-  ADR-0034 took git out of the runtime and with it the only backup story there was, and the the hosted product
+  ADR-0034 took git out of the runtime and with it the only backup story there was, and the hosted memory layer
   study found the one row a hosted archive wins outright: theirs survives a lost laptop and ours
   does not, while the README named an operation with no destination. Sync is conflict resolution
   and we would ship a worse Syncthing, so the transport and the destination stay somebody else's;
@@ -480,7 +480,7 @@
   `cloud`, `criptografia`, `encryption`, `custodia`, `custody`, `camada privada`, `private layer`.
 
 - **[[0038-a-meaning-tier-sits-after-the-verdict]]** 🟢 accepted 2026-09-02.
-  **The slot where a meaning scorer would go exists, is empty, and stays empty.** The the hosted product
+  **The slot where a meaning scorer would go exists, is empty, and stays empty.** The hosted memory layer
   study named the one query shape ours structurally cannot reach: a paraphrase or a
   cross-language question against a note whose keys do not carry those words. What makes the
   slot safe is ordering, not a type: `Memory::confidence_of` computes the verdict from the
@@ -496,4 +496,4 @@
   Search for: `meaning tier`, `camada de significado`, `suggester`, `sugeridor`, `traducao`,
   `translation`, `cross language`, `idioma diferente`, `modelo depois do veredito`,
   `model after the verdict`, `trigram`, `SUGGEST_FLOOR`, `kb-aliases.txt`, `kb misses`,
-  `privacidade da consulta`, `query privacy`, `the hosted product`.
+  `privacidade da consulta`, `query privacy`, `comparative study`.

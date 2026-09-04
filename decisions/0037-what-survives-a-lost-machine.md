@@ -5,7 +5,7 @@ stage: derived
 
 # ADR-0037: we do not build sync, we name what must survive and prove the copy still answers
 
-**Search for:** `backup`, `backups`, `copia de seguranca`, `restaurar`, `restore`, `restauracao`, `sobreviver`, `survive`, `sync`, `sincronizacao`, `sincronizar`, `Syncthing`, `rsync`, `restic`, `robocopy`, `tar`, `perdi o notebook`, `lost laptop`, `notebook roubado`, `stolen laptop`, `disco morreu`, `dead disk`, `maquina`, `machine`, `migrar de maquina`, `trocar de computador`, `kb backup`, `backup --list`, `backup --verify`, `kb-misses.txt`, `kb-rejections.txt`, `.kb`, `indice derivado`, `derived index`, `descartavel`, `disposable`, `.kb-promote.lock`, `lixo de runtime`, `runtime debris`, `nuvem`, `cloud`, `bucket`, `S3`, `criptografia`, `encryption`, `criptografar antes de enviar`, `client side encryption`, `terceiro`, `third party`, `custodia`, `custody`, `disco em rede`, `disco externo`, `LAN`, `another disk`, `fora do predio`, `predio`, `gitignore`, `camada privada`, `private layer`, `profile`, `projects`, `records`, `ADR-0003`, `ADR-0034`, `ADR-0037`, `the hosted product`, `verificacao`, `verification`, `kb check`, `kb eval`, `gold set`, `conjunto ouro`
+**Search for:** `backup`, `backups`, `copia de seguranca`, `restaurar`, `restore`, `restauracao`, `sobreviver`, `survive`, `sync`, `sincronizacao`, `sincronizar`, `Syncthing`, `rsync`, `restic`, `robocopy`, `tar`, `perdi o notebook`, `lost laptop`, `notebook roubado`, `stolen laptop`, `disco morreu`, `dead disk`, `maquina`, `machine`, `migrar de maquina`, `trocar de computador`, `kb backup`, `backup --list`, `backup --verify`, `kb-misses.txt`, `kb-rejections.txt`, `.kb`, `indice derivado`, `derived index`, `descartavel`, `disposable`, `.kb-promote.lock`, `lixo de runtime`, `runtime debris`, `nuvem`, `cloud`, `bucket`, `S3`, `criptografia`, `encryption`, `criptografar antes de enviar`, `client side encryption`, `terceiro`, `third party`, `custodia`, `custody`, `disco em rede`, `disco externo`, `LAN`, `another disk`, `fora do predio`, `predio`, `gitignore`, `camada privada`, `private layer`, `profile`, `projects`, `records`, `ADR-0003`, `ADR-0034`, `ADR-0037`, `estudo comparativo`, `comparative study`, `verificacao`, `verification`, `kb check`, `kb eval`, `gold set`, `conjunto ouro`
 
 **Exists to:** Why `kb` will never copy your files anywhere, what the exact set of files that must survive a lost machine is, how you prove a copy of it is still a working base, and the three destinations with the one that cannot be taken without encryption.
 
@@ -28,7 +28,7 @@ the disk dies.
 
 Two things then arrived on the same day.
 
-The first is the [hosted memory layer study](../reports/2026-09-02-salve-and-ulpia.md). the hosted product is a hosted archive
+The first is the [hosted memory layer study](../reports/2026-09-02-a-hosted-memory-layer-read-against-ours.md). The subject is a hosted archive
 held against an account, so a stolen phone loses nothing. Our row in that table reads, verbatim: "No
 backup story at all. `fleet/` is its own git repository and whether it was ever pushed is the owner's
 business." The study's summary is blunter: "Ours has no backup story at all, and the README's one
@@ -411,7 +411,7 @@ everybody else already solved.**
 - Measurements: the fleet sizes and the index rebuild timing were taken on this machine on 2026-09-02
   with `find` and the release binary. The restore verification used the debug binary built the same
   day, after `cargo test` passed at 327 tests. Nothing in this record is estimated.
-- [The hosted memory layer study](../reports/2026-09-02-salve-and-ulpia.md), section 5.9, asked for this and named
+- [The hosted memory layer study](../reports/2026-09-02-a-hosted-memory-layer-read-against-ours.md), section 5.9, asked for this and named
   its shape: "The honest section has to say that a private remote puts the private layer on somebody
   else's server, which is the custody position the product refuses, so the section cannot end in a
   recommendation. It ends in a named trade."
