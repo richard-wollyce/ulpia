@@ -129,3 +129,20 @@ could disagree.
 The hook is registered in `.claude/settings.json`, which is tracked, so it travels with the
 repository. The private repository needs no registration of its own: the workspace is the
 public root and the router reaches every base under it.
+
+**That sentence was half the story until 2026-09-04, and the missing half was a defect in
+every clone.** The registration travelled and the thing it pointed at did not: the command
+named `tools/kb/target/release/kb.exe`, and `target/` is gitignored, with zero files under
+`tools/kb/target` in the repository. So a cold clone ran a `UserPromptSubmit` hook whose
+command did not exist, on every prompt, from the first message. The same line ended in
+`.exe`, which is wrong on every Linux and macOS clone even after a successful build, since
+cargo writes that suffix only on Windows.
+
+Found by a `kb panel` round on this very record, in Cicero's objection, and verified with
+`git check-ignore` and `git ls-files` before anything was changed. The fix is
+`.claude/hooks/boot.sh`: it resolves the binary per platform, honours `KB_BIN`, and exits 0
+with no output when there is no build or no fleet. Silence is the correct failure here and
+the repository already knew it, in `promote-on-idle.sh`, which has guarded exactly this way
+since it was written. That guard had simply never been applied to the hook that runs most
+often. What a clone gets now is what this document already promised it would get when the
+hook is absent: no injection, and a session that says the question has no clear owner.

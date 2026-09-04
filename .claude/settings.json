@@ -5,7 +5,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "\"$CLAUDE_PROJECT_DIR/tools/kb/target/release/kb.exe\" boot \"$CLAUDE_PROJECT_DIR\" --top 5 --all",
+            "command": "bash \"$CLAUDE_PROJECT_DIR/.claude/hooks/boot.sh\"",
             "timeout": 30
           }
         ]
