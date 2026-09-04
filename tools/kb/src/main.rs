@@ -674,7 +674,7 @@ fn cmd_index(paths: &[&str], all: bool, json: bool) -> ExitCode {
 
     if json {
         // **The shape stays a bare array on purpose.** Wrapping it in an object to carry
-        // the unreachable count would break every consumer named in `site/SPEC.md`, and the
+        // the unreachable count would break every consumer that parses this, and the
         // count has two other places to be printed.
         let entries: Vec<index::Entry> =
             bases.iter().flat_map(|(_, b)| index::build(b).entries).collect();
