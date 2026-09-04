@@ -2,24 +2,56 @@
 
 [![ci](https://github.com/richard-wollyce/ulpia/actions/workflows/ci.yml/badge.svg)](https://github.com/richard-wollyce/ulpia/actions/workflows/ci.yml)
 
-Your coding agent answered out of the wrong document and sounded certain. That happens
-for two different reasons, and they need two different fixes.
+Your coding agent answered out of the wrong file and sounded certain. It could not tell
+you which file it used, could not give the same answer twice, and had no way to know the
+difference between remembering and guessing.
 
-A notes app organises your markdown for a person to read. The agent working inside that
-repository cannot use a graph view or a backlink, so it greps the folder and answers out
-of whichever file came closest. A vector memory layer fixes the matching and not the
-certainty: it returns a ranking, and a ranking always has a top entry whether or not the
-answer is in there.
+**Ulpia is the memory it asks instead.** It indexes the markdown you already have, where
+it already sits, and answers with the files to open and the words that matched under
+each. Retrieval is plain software: no embedding model, no network, nothing in the path
+that improvises. Same question, same answer, today and in a year, and when the answer is
+wrong you can read why in words you can act on.
 
-**Ulpia indexes the same markdown where it already sits and answers the agent**: the
-files to open, the words that matched, and a verdict. The verdict can be `nothing`, which
-says the library does not cover the question. On [LongMemEval](benchmarks/longmemeval/RESULTS.md),
-a public benchmark of 500 instances, it declined 29 of 30 unanswerable questions
-(2026-08-24).
+Because that confidence is measured rather than implied, Ulpia also knows when your
+library does not hold the answer, and says so instead of handing over the closest file.
+On [LongMemEval](benchmarks/longmemeval/RESULTS.md), a public benchmark of 500 instances,
+it got that call right 29 times out of 30 (2026-08-24).
 
 **The price is writing, and it is paid per note.** Each one carries a hand written
-`Search for:` line, roughly thirty terms. Nothing infers it for you, and that refusal is
-the whole design rather than a missing feature.
+`Search for:` line, roughly thirty terms, naming the words a real question would use.
+Nothing infers it for you. That is the trade: you spend a minute per note, and every
+answer afterwards is one you can audit.
+
+---
+
+## What you would use it for
+
+One binary, no daemon, no account, no service to sign up for. The verbs that earn their
+place in an ordinary day:
+
+- **Ask your own notes from the terminal.** `kb route "<question>" .` returns the files
+  to open and the words that matched under each, in about a millisecond, with no model
+  involved anywhere.
+- **Let your coding agent ask instead of grepping.** `kb serve .` speaks MCP over stdio,
+  so Claude Code, Claude Desktop or anything else that speaks the protocol queries the
+  library directly rather than reading whichever file its own search surfaced.
+- **Ask in the language you are thinking in.** The router matches the keys each note
+  declares, in whatever language they were written, so a Portuguese question reaches an
+  English note when its keys say it should.
+- **Keep several specialists and get the right one.** `kb boot` scores a message across
+  every base and hands the conversation to the one that owns the subject, so the
+  architect does not end up answering a security question.
+- **Get prose when a file list is not what you wanted.** `kb answer` puts a reader after
+  the verdict, and the retrieval underneath it stays deterministic.
+- **Write in a tree several sessions are editing at once.** `kb commit <paths>` builds the
+  commit from your paths alone, then reads it back off git and prints what it left dirty.
+- **Keep part of the library private by layout rather than by promise.** Each base
+  declares its own private layer, and nothing inside it is served, indexed or suggested
+  unless you ask for it with `--all`.
+- **Grade your own retrieval.** `kb eval` runs your own answer key and refuses to run
+  against a stale one; `kb check` names the notes nothing can reach.
+- **Do all of it on a plane.** Nothing in the retrieval path touches a network, so the
+  library works the same in a tunnel as it does at your desk.
 
 ---
 
@@ -96,8 +128,9 @@ is grep it, and grep has no opinion about which file is the right one.
 
 Ulpia organises the same files for the query instead of for the eye. The trade is exact:
 you give up the graph, the canvas, the plugins and the sync, and you write a `Search for:`
-line on every note you want found. What you get is a folder an agent can ask, that
-answers with the words that matched, and that can say the answer is not in there.
+line on every note you want found. What you get is a folder an agent can ask, in any
+language its notes were written in, that answers with the files and the words that
+matched, and that is honest about the edge of what it holds.
 
 *Obsidian's feature list is read from its own documentation and is not something this
 repository measured. The mechanism claim is narrower and checkable in an afternoon: point
@@ -123,10 +156,13 @@ explain a bad result, you cannot reproduce yesterday's answer, and your notes ha
 somewhere you did not choose. Ulpia takes the other side of that trade, and the
 `Search for:` line is the bill.
 
-The honest column note: the neighbours automate ingestion at scales Ulpia refuses on
-purpose, and each of them is a good tool for the job it names. The row that is ours
-alone is the refusal: a librarian who can say "no one here owns this" instead of
-handing you the least wrong book.
+The honest column note: the neighbours automate ingestion at scales Ulpia does not
+attempt, and each of them is a good tool for the job it names. What is ours is the middle
+of that table rather than the end of it. No model in the retrieval path is what makes one
+answer explainable, reproducible and offline at the same time, and those three are the
+rows you feel every day. The last row follows from them: a score you can trust is also a
+score that can come up short, and Ulpia says so rather than handing you the least wrong
+book.
 
 ---
 
@@ -155,17 +191,15 @@ gh release download -R richard-wollyce/ulpia -p "kb-linux-x64*"
 sha256sum -c kb-linux-x64.sha256
 ```
 
-**No tag in that command, deliberately.** Without one `gh` resolves to the latest
-release, so this line cannot rot into pointing at an old binary while the prose around it
-describes a newer one. That is not hypothetical: it happened here between `kb-v0.1.0` and
-`kb-v0.2.0`, and the paragraph above went on promising behaviour the pinned download did
-not have. Name a tag only when you want a specific version and are willing to check what
-it does: `gh release download kb-v0.2.0 -R ...`.
+**No tag in that command, deliberately**, so it resolves to the latest release and cannot
+rot into pointing at an old binary while the prose describes a newer one. It already did
+that once, between `kb-v0.1.0` and `kb-v0.2.0`. Name a tag only when you want a specific
+version: `gh release download kb-v0.2.0 -R ...`.
 
-The Linux one is `x86_64-unknown-linux-musl`, statically linked, so it depends on nothing
-outside the file and runs on Alpine, Debian and the Amazon Linux images serverless
-functions use. That claim is not taken on trust: the release workflow executes the
-artifact inside `amazonlinux:2023` and `alpine:3` before publishing anything.
+The Linux artifact is `x86_64-unknown-linux-musl` and statically linked, so it runs on
+Alpine, Debian and the Amazon Linux images serverless functions use. The release workflow
+executes it inside `amazonlinux:2023` and `alpine:3` before publishing, so that is a test
+rather than a claim.
 
 Route your first question against the demo fleet that ships in the repository,
 three tiny agents with an answer key, so the first run works before you have
@@ -184,24 +218,18 @@ Claude CLI). The answer must ground every claim in the served passages and cite 
 and when the library does not hold the answer it says so instead of inventing one; the
 model sits after retrieval's verdict, never inside retrieval.
 
-`kb answer` reads five files by default, a table sized for a personal question. Two
-more modes exist and are the caller's choice, never an automatic switch: `--expanded`
-reads up to twelve files, and `--complete` reads every keyed file in the base in batches of
-ten and composes the answer from what each batch extracted. Complete mode prints a
-time estimate before the first model call and restates it after the first batch
-lands, because a whole-base read costs minutes, and a caller on any surface deserves
-that number before paying it.
+`kb answer` reads five files by default. Two wider modes are the caller's choice and never
+an automatic switch: `--expanded` reads up to twelve, and `--complete` reads every keyed
+file in batches of ten. Complete mode prints a time estimate before the first model call
+and restates it after the first batch, because a whole-base read costs minutes and nobody
+should pay that without the number first.
 
 That eval is the reproducible half of every number on this page: 13 questions, 10 it
-should answer and 3 it should refuse, graded in front of you. Run on 2026-09-02 on the
-demo: file 10/10, agent fold 10/10, routes 10/10, all 3 refusals refused, and no correct
-answer demoted to a guess. An earlier version of this paragraph told you to expect
-`routes 8/10` and two demotions, and it was right at the time: the confidence floor was
-one number, measured on a fleet of 226 entries, and on eleven entries it was too high by
-the arithmetic of idf. The floor now scales with the corpus
-([ADR-0036](decisions/0036-the-floor-scales-with-the-corpus.md)), and the private-fleet
-numbers further up are unchanged to the decimal, because that is the fleet it was
-calibrated on.
+should answer and 3 it should decline, graded in front of you. Run 2026-09-02 on the demo:
+file 10/10, agent fold 10/10, routes 10/10, all 3 declines correct, and no right answer
+demoted to a guess. It used to read `routes 8/10`, correctly at the time, until the
+confidence floor stopped being one number and started scaling with the corpus
+([ADR-0036](decisions/0036-the-floor-scales-with-the-corpus.md)).
 
 Then create your own first agent:
 
@@ -227,13 +255,6 @@ second scorer: the full text index holds the chunks, and a note written after th
 no passage attached. Re-run `kb index` and both scorers agree again. That is the only
 silent failure left in this flow, and it is the quiet kind: the answer is not wrong, it is
 thinner than it should be.
-
-An earlier version of this page had a fourth step between writing and indexing, `kb commit`,
-and a demonstration of what skipping it looked like: the index reporting success, the miss
-blaming your keywords, and the real cause being that the file was not yet tracked by git,
-because the router asked git what it may serve. That rule is gone
-([ADR-0034](decisions/0034-git-leaves-the-runtime.md)). `kb commit` is still here for
-anyone who versions a fleet, and it is not in the path between a note and an answer.
 
 `--all` on any command includes the private layer, `profile/`, `projects/` and `records/`
 unless the base declares otherwise. It is the right flag for your own agents and the wrong
@@ -299,36 +320,30 @@ measured it.
 
 ### What this fleet's own eval says today
 
-The demo above shows one scorer, the keyword index built from your own map, which is what
-`kb route` prints by default. There is a second, SQLite full text search over the content, and
-`kb route --hybrid` runs both and fuses the two rankings with Reciprocal Rank Fusion.
+Two scorers rank your files: the keyword index built from the `Search for:` lines, and
+SQLite full text search over the content. `kb route --hybrid` fuses them with Reciprocal
+Rank Fusion. They are not interchangeable, and
+[the how-it-works page](https://ulpia.io/docs/how-it-works/) has the mechanics. The short
+form: fusion rewards agreement, which is right when you are assembling passages for a
+person to read and wrong when you are naming one winner, because a file each scorer ranks
+fourth beats a file one scorer ranks first. Measured 2026-09-04 over the 40 answerable
+questions of this fleet's 49 question key, keyword alone names the right file 26 times and
+the fusion it feeds names it 14.
 
-**Each scorer does the job it was measured to be better at, and they are not
-interchangeable.** Fusion rewards agreement, which is what you want when assembling
-passages for a person to read: a file both scorers noticed belongs in front of them. It
-is the wrong rule for picking a single winner, because a file each scorer ranks fourth
-beats a file one scorer ranks first. Measured 2026-09-04 over the 40 answerable questions
-of this fleet's 49 question answer key: the keyword scorer alone picks the right file 26
-times, the fusion it feeds picks it 14 times.
+**Read that as a comparison, not as a score.** The key's own header records that these
+keyword lines were tuned against these questions, so 26/40 is flattered and is not a clean
+benchmark of anything. What survives the bias is the direction.
 
-**Read that as a comparison, not as a score.** The answer key's own header records that
-the keyword lines in the maps were tuned against these same questions on the day they
-were graded, so the keyword column is flattered and 26/40 is not a clean benchmark of
-anything. What survives the bias is the direction: the fusion, fed by that same
-flattered scorer, still lands behind it when the job is to name one file.
+Routing is the number that actually ships. On the same 40 questions the deterministic fold
+names the right agent 36 times, and `kb boot` with its classifier hands over 35. The best a
+fixed choice could do is 24, so routing is worth eleven questions over picking one agent
+and never moving.
 
-So **the reading comes from agreement and the verdict comes from intent.** Vesta ranks
-who should answer using the keywords each file declares in its own `Search for:`
-header (a `MAP.md`, when you keep one, is a reading list for people; the router does
-not consult it), and on the same 40
-questions that deterministic fold names the right agent 36 times. What `kb boot`
-actually hands over, with the classifier that sits in front of it, is the number that
-counts and it is 35. The best a fixed choice could do on this set is 24, so routing is
-worth eleven questions over picking one agent and never moving. These figures
-are re-measured before anything quotes them, because they have gone stale on this very
-page three times, this one included, and the key grew from 33 questions to 49 between
-the second and the third. The eval takes seconds and there is no excuse. It also grades
-its own confidence, and on this set it fails that grade:
+**These figures go stale, and this page is the proof.** They have now been wrong here three
+times, this one included, and the key grew from 33 questions to 49 between the second and
+the third. Re-measuring takes seconds, so nothing quotes them without re-running first.
+
+The same command grades its own confidence, and on this set it fails:
 
 ```
 $ kb eval fleet/zed/fleet/eval/gold.tsv .   # the doubled fleet/ is real: Zed keeps his eval set in a nested fleet
@@ -344,27 +359,19 @@ $ kb eval fleet/zed/fleet/eval/gold.tsv .   # the doubled fleet/ is real: Zed ke
 *Run 2026-09-04 against the release binary built from this commit.*
 
 **`OVERLAPS` is the tool failing its own test in public, and that is why the block is
-still here.** A miss reaches 95.78 while a hit starts at 26.61, so no single confidence
-floor separates the two, and the gate flags only 1 of its 14 misses as a guess. What it
-does not do is demote a correct answer. It refuses 3 of the 9 questions the key says to
-decline and answers 6 of them confidently, which is the worst of the three columns and
-is the open problem on this set rather than a footnote to it. An earlier version of this
-page quoted a run that separated cleanly; that run was a 19 question set that no longer
-exists.
+here.** A miss reaches 95.78 while a hit starts at 26.61, so no single floor separates
+them. The gate never demotes a right answer, which is the column that protects your daily
+use, and it gets only 3 of 9 declines right on this set, which is the open problem rather
+than a footnote to one.
 
-**Do not read that against the 29 of 30 quoted at the top of this page.** They are
-different gates over different corpora: this one is the deterministic score threshold
-over a private fleet of prose, that one is the abstention layer over LongMemEval's chat
-sessions. The layer that scores 29 of 30 sits above the gate that overlaps here, which
-is the reason it exists.
+**That is a different gate from the 29 of 30 at the top of this page**, over a different
+corpus: this one is the deterministic score threshold over a private fleet of prose, that
+one is the abstention layer sitting above it, over LongMemEval's chat sessions. The layer
+exists because the floor alone overlaps.
 
-That is `kb eval`, and it ships in the tool rather than in a benchmark harness, so these
-are numbers re-run rather than numbers a harness produced once. **You cannot reproduce
-these exact figures**, because the answer key lives in a private fleet this repository
-gitignores; you point the same command at your own. The key behind the numbers above is
-49 questions, 40 answerable and 9 the fleet is supposed to decline. `kb eval` grades
-against it and **refuses to run if it points at files that have moved**, which is how
-the last stale measurement was caught.
+**You cannot reproduce these exact figures**, because the key lives in a private fleet this
+repository gitignores. You point the same command at your own. `kb eval` refuses to run
+against a key whose files have moved, which is how the last stale measurement was caught.
 
 ---
 
@@ -421,20 +428,13 @@ message. The damage there is not lost work, it is an audit trail that lies.
 The mechanism: `git commit -- <paths>` builds the commit from only those paths and ignores
 the rest of the index, so whatever another session staged a second ago cannot land in
 yours. `kb commit` does that, then **reads the commit back off git and prints what it left
-alone**, which is the step a person skips by hand. This output is a real commit,
-made the day this page was last reviewed, and the hash is in this repository's
-history:
+alone**, which is the step a person skips by hand:
 
 ```
 committed 88622d0
   benchmarks/README.md
-  benchmarks/abstention/RESULTS.md
-  benchmarks/latency/RESULTS.md
-  benchmarks/longmemeval/RESULTS.md
   decisions/0033-the-text-scorer-prunes-what-cannot-rank.md
-  site/frontend/privacy/index.html
-  site/frontend/terms/index.html
-  site/frontend/tools/build-posts.mjs
+  ... 6 more
 
 left untouched, still dirty (2):
   README.md
@@ -455,99 +455,40 @@ anything.
 
 ---
 
-## Privacy is a property of the layout, not a promise
+## Privacy, agents, and the person
 
-Each base declares its own private layer, and nothing outside the base is asked. The
-declaration is one line in `agent.txt`:
+Three things shape a fleet, and the reference for all three is
+[the concepts page](https://ulpia.io/docs/concepts/). The short version:
 
-```
-private = profile/, projects/, records/
-```
+**Privacy is a property of the layout, not a promise.** Each base declares its own private
+layer as one line in `agent.txt`, defaulting to `profile/`, `projects/` and `records/`.
+What that line covers is served, indexed and suggested only when the caller passes
+`--all`. Git is not consulted and used to be; it left the runtime in
+[ADR-0034](decisions/0034-git-leaves-the-runtime.md), because a folder should not have to
+be committed before a memory layer will answer from it.
 
-That value is the default, so a base that says nothing behaves exactly as the folder map
-says: those three folders describe a real person and real work, and **they are served only
-with `--all`**. `.` declares the whole base private, and the person's base is whole by
-name. A folder with a note in it is a base. No `git init`, no manifest, no marker.
+**An agent is a folder with a shape.** Run `kb init`, or browse
+[`agent-skeleton/`](agent-skeleton/) for the exact one; a test fails if the two ever
+differ. `knowledge/` holds the distillations, `MAP.md` names what exists and the words a
+question would use, and `agent.txt` carries the name and role the orchestrator reads. A
+`[[wikilink]]` stops at the edge of its base, because a base is a privacy boundary and a
+link that silently crossed one is how private material lands in a file you meant to
+publish. To point at another base, write the path out, so that crossing is deliberate.
 
-**Git is not consulted, and it used to be.** An earlier version read `git ls-files` to
-decide what it may serve, on the argument that the thing deciding what is served should be
-the thing deciding what is published. The argument was right and the cost was not: a
-folder was refused until somebody ran `git init`, a note was invisible until it was
-tracked, a deployment bundle without `.git` served nothing, a fleet of a hundred agents
-shelled out to git a hundred times per question, and every surface the owner actually
-uses passed `--all` and bypassed the gate anyway. A memory layer is used as a database,
-and nobody asks a database to commit itself before it will answer.
-[ADR-0034](decisions/0034-git-leaves-the-runtime.md).
+**A fleet has exactly one person, and the person is not an agent.** `kb init --person`
+writes `fleet/person/` with no `agent.txt`, the shape of which is in
+[`person-skeleton/`](person-skeleton/), and that absence is the whole trick: the
+router reads the base but can never elect it as the one who answers, because a question
+about you belongs to the librarian rather than to a specialist impersonating you. Every
+agent `kb init` creates carries a `[user]` block pointing at that core, so an agent cannot
+be born not knowing who it works for. This fleet once ran two agents without it, and the
+marketing one answered a question about its owner's CV without knowing his name. The shape
+ships here; what you write into it lives in your own fleet repository, which this one
+gitignores.
 
-**What git is still for**: versioning a fleet, if you want that, with `kb commit` to keep
-two sessions from sweeping each other's work into one message. `kb init` writes a
-`.gitignore` that mirrors the declared private layer, so a fleet you choose to version
-starts with the right ignores, and `kb check` warns when the two disagree. This repository
-gitignores `fleet/` entirely, so `git add -A` here cannot descend into it.
-
----
-
-## What an agent is
-
-Browse [`agent-skeleton/`](agent-skeleton/) to see the exact shape, or run `kb init`.
-They cannot disagree: the skeleton in this repository is generated by `kb init` and a
-test fails if the two ever differ.
-
-```
-fleet/<name>/
-  CLAUDE.md         who the agent is
-  index.md          its operating instructions
-  MAP.md            what exists in its base, and the words a question would use
-  agent.txt         name and role, read by the orchestrator
-  blocks.txt        the constitution, ordered by how often each block changes
-  kb-aliases.txt    a record of real questions that missed
-  knowledge/        the distillations. The brain
-  inbox/            raw material awaiting distillation
-  decisions/  protocols/  templates/
-```
-
-**A `[[wikilink]]` stops at the edge of its base.** It resolves inside that base and
-nowhere else, and both the linter and the reading room enforce the same rule. To point at
-another agent's file, write the path. The reason is privacy rather than tidiness: a base is
-a privacy boundary, and a link that silently crossed one is how a reference to private
-material lands in a file you meant to publish. Writing the path out means you knew.
-
-`MAP.md` is doing more work than it looks. Every entry carries a `Search for:` line with
-the words a real question would use, and that line is what the keyword scorer matches.
-An entry without one is an entry nothing can reach.
-
-## And it must know who it works for
-
-A fleet has agents, and it has exactly one person, and **the person is not an agent**:
-
-```
-kb init --person
-```
-
-That writes `fleet/person/` with no `agent.txt`, which is the whole trick. The router
-reads the base and **can never elect it as the one who answers**, because a question about
-you belongs to the librarian, not to a specialist impersonating you. Browse
-[`person-skeleton/`](person-skeleton/) for the exact shape.
-
-Every agent `kb init` creates carries a `[user]` block pointing at `../person/core.md`,
-so **an agent cannot be born not knowing who it works for.** That is not hypothetical: this
-fleet ran with two agents that had no such block, and the marketing one answered a question
-about its owner's CV without knowing his name.
-
-One file is the truth, and residency is selective: the small core is resident everywhere,
-the domain files are retrieved when a question calls for them. Fill them. An empty profile
-is not a neutral state, it is an agent giving generic answers confidently.
-
-**The shape is public and the content is not.** `person-skeleton/` and the generator ship
-here; what you write into your own `fleet/person/` lives in your fleet repository, which
-this one gitignores. That is the same split the agents already make, applied to you.
-
----
-
-`kb-aliases.txt` is a record of misses, not a dictionary. Add a line **only after a real
-question failed to find something.** Expansion is additive, so a wrong line can add
-noise and can never remove signal. It is also how a fleet answers questions in one
-language over a base written in another.
+`kb-aliases.txt` is a record of misses rather than a dictionary. Add a line **only after a
+real question failed to find something.** Expansion is additive, so a wrong line can add
+noise and can never remove signal.
 
 ---
 

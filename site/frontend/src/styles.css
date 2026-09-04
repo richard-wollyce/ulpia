@@ -683,25 +683,76 @@ h2 {
 }
 
 /* The one classical device: a versal three lines deep. Rubricated in light,
- * illuminated in dark; the color follows the accent token. */
-@supports (initial-letter: 3) or (-webkit-initial-letter: 3) {
-  .opening::first-letter {
-    -webkit-initial-letter: 3;
-    initial-letter: 3;
-    color: var(--accent);
-    font-weight: 400;
-    margin-right: 0.15em;
-  }
-}
-
-@supports not ((initial-letter: 3) or (-webkit-initial-letter: 3)) {
-  .opening::first-letter {
-    float: left;
-    font-size: 5.2rem;
-    line-height: 0.83;
-    padding: 0.04em 0.12em 0 0;
-    color: var(--accent);
-  }
+ * illuminated in dark; the color follows the accent token.
+ *
+ * Drawn with a float and an explicit type size, NOT with `initial-letter`.
+ * `initial-letter: 3` is the property built for this and it reads better in
+ * source. It was removed because on Richard's Android Chrome the versal
+ * climbed a full line out of the paragraph and printed over the h2 above it,
+ * and because the specification says that is allowed to happen.
+ *
+ * The mechanism, read out of css-inline-3 and the Chromium source rather than
+ * guessed. It is NOT a bad sink: 7.3 says an omitted sink computes to the size
+ * floored to a whole number, so `3` is `3 3`, and Blink's
+ * StyleInitialLetter does exactly that. It is the size, and where the ink
+ * that exceeds it is allowed to go. 7.5.3 derives the type size from the
+ * font's cap height in the OS/2 table, and 7.5.5 then says that with zero
+ * block-start padding and border the box's top edge sits exactly on the cap
+ * alignment point and "any content overflowing above that point is ignored
+ * for the purpose of layout", with a note that ascenders "might collide with
+ * preceding content" unless the author reserves the space by hand. So a
+ * versal sized against one font's metrics and painted in another's overflows
+ * upward, and nothing in the layout pushes back.
+ *
+ * That mismatch had a real cause with a date on it: crbug.com/431030816,
+ * "Make initial-letter depend on font metrics", shipped in Chrome 141. Before
+ * it, the ::first-letter was sized from whatever font was resolved at first
+ * layout and was never restyled when the webfont finished loading. This page
+ * loads EB Garamond, so on any Chrome older than 141 the versal is sized on
+ * the fallback's cap height and drawn in Garamond's. Chrome for Android is
+ * not a separate code path here, it ships at the same milestones as desktop
+ * (chromestatus 5167442033115136: desktop 110, android 110), which is why
+ * this reproduces on his phone and not on a current desktop Chromium.
+ *
+ * The property is therefore not used at all, rather than used behind an
+ * @supports that only proves it PARSES. Adding margin, which is what the
+ * specification tells authors to do, would also work, but it would work only
+ * if the browser puts the box where we hope, and we cannot test Android Chrome
+ * from here. The float's geometry we can measure.
+ *
+ * The float's geometry is arithmetic instead, and it is the same in every
+ * engine:
+ *
+ *   line-height is 1.5, so a versal whose cap top sits on line 1's cap top
+ *   and whose baseline sits on line 3's baseline needs a cap height of
+ *   2 x 1.5em + 1 body cap = 3.65em of the paragraph.
+ *   EB Garamond's cap is 0.65 of its em (measured in the browser with the
+ *   `cap` unit: 65px at font-size 100px), so the type size that produces a
+ *   3.65em cap is 3.65 / 0.65 = 5.6em.
+ *
+ * em, never rem: the body type is fluid from 320 to 960px, and a rem versal
+ * would be three lines deep at exactly one viewport width. The old fallback
+ * used 5.2rem and was measured at 55px of cap against the 74px the reference
+ * render wanted at 1280.
+ *
+ * Verified by measuring painted ink, not by eye: against the `initial-letter`
+ * render in Chromium 151 at 390, 540 and 1280, this matches the glyph's ink
+ * height exactly and its top and baseline within 1px, and indents the same
+ * three lines. With the webfont blocked it runs 4px taller, which is Times'
+ * larger cap ratio (0.662) and still three lines. */
+.opening::first-letter {
+  float: left;
+  font-size: 5.6em;
+  /* Load-bearing, not decoration. Without it the glyph falls 33px and the
+   * float grows tall enough to indent six lines instead of three: the box
+   * would take the font's normal line height, 1.3em of a 5.6em type. */
+  line-height: 0.65;
+  /* A float aligns to the top of the line BOX; the versal must align to the
+   * top of the first line's CAP. This is that difference, measured. */
+  padding-top: 0.054em;
+  margin-right: 0.03em;
+  font-weight: 400;
+  color: var(--accent);
 }
 
 /* The four properties: claims in a list, not headings. Lead words stay ink;
@@ -908,6 +959,29 @@ details p {
 
 .address-line {
   margin-top: 2rem;
+}
+
+/* The GitHub mark, in the hero CTA and in the footer address line. Sized in
+ * `em` so it tracks whatever type it sits in rather than being pinned to one
+ * of the two places it appears. `currentColor` is set as an SVG presentation
+ * attribute on the element, so the mark follows the link through hover and
+ * both schemes with no rule here repeating a colour.
+ *
+ * The two values below are the whole point of the rule. `vertical-align` is
+ * measured against Garamond's lowercase, not guessed: the mark is a solid
+ * circle and reads as sitting high when its box is aligned to the baseline,
+ * because a circle's optical centre is above the x-height's. The margin is
+ * word-space width, so the mark reads as a word in the phrase and not as a
+ * button stuck to the front of one. */
+.gh-link {
+  white-space: nowrap;
+}
+
+.gh-mark {
+  width: 1em;
+  height: 1em;
+  vertical-align: -0.13em;
+  margin-right: 0.4em;
 }
 
 footer a,
@@ -2658,9 +2732,14 @@ body::after {
  * JavaScript at all, which is the floor this page is built to honour. The
  * script adds only what the element lacks, Escape and outside-click.
  *
- * NO OPEN ANIMATION. Navigation is furniture and must perform less than the
- * lamp, which is the band's one performer at 360ms. A panel that eases open
- * would be the second, and the band would have two performers and no focus.
+ * IT OPENS BY UNROLLING, and that replaces the "no open animation" rule this
+ * comment used to carry. The old rule was right about the constraint and wrong
+ * about the conclusion: the lamp is the band's one PERFORMER at 360ms, and a
+ * panel that travelled would be a second one. So the panel does not travel.
+ * It is revealed, in 200ms, by a clip that runs down from the door. Nothing
+ * moves across the band, no glyph moves at all, and the lamp is still the only
+ * thing in the band that acts. The motion is at the bottom of this section,
+ * with the reduced-motion gate it answers to.
  */
 /* Four bare-element rules from the footer's disclosure boxes reach in here,
  * because this is the second <details> on the page and they were written when
@@ -2871,6 +2950,87 @@ body::after {
   }
 }
 
+/* The panel unrolls. `<details>` snaps: the browser drops the content the
+ * instant `open` goes away, so the closing half is the one that is usually
+ * skipped. Both halves work here, with no JavaScript, and this is the
+ * mechanism, because the rule is useless without it.
+ *
+ * ::details-content is the wrapper the browser puts around the part that
+ * opens. The footer's disclosure boxes animate its block-size; this menu
+ * cannot, and it is worth writing down why so nobody tries: the panel is
+ * absolutely positioned, so it contributes no height to that wrapper and its
+ * block-size measures 0px in BOTH states. Animating it would move nothing.
+ *
+ * What the wrapper is used for instead is the one thing `<details>` otherwise
+ * refuses to give: a window in which the closing panel is still painted.
+ * content-visibility is a discrete property, and `allow-discrete` makes a
+ * discrete property flip at the START of an opening transition and hold until
+ * the END of a closing one. So one declaration buys an instant open and a
+ * 160ms stay of execution on close, and the panel's own 140ms fade finishes
+ * inside it.
+ *
+ * @starting-style is required for the opening half and is not decoration. The
+ * panel sits inside a content-visibility: hidden subtree while the menu is
+ * shut, and a skipped subtree is not rendered, so it has no before-change
+ * style for a transition to start from. @starting-style supplies one.
+ *
+ * The reveal is a clip and a fade, and deliberately not a slide. A menu is a
+ * target: the reader is aiming at "Benchmarks" while it arrives, and a target
+ * that travels is a harder target. This is the same law the typed standfirst
+ * is built on, that no glyph may sit anywhere during the animation except
+ * where it sits at the end. The clip also says where the panel came from,
+ * running down from the door that opened it.
+ *
+ * Durations are ones already in this file, not new ones: 200ms in and 140ms
+ * out, on the site's own ease-out curve. Under the lamp's 360ms, above the
+ * 120ms that means plain feedback, and the exit beats the entrance.
+ *
+ * The combinator is descendant, not child. `>` matches in Chromium and was
+ * measured doing so, but the panel's parent is a pseudo-element wrapper in
+ * every engine's rendering tree, and if some engine ever declines that match
+ * the failure mode is a menu that opens invisible. There is one panel per
+ * menu, so the loose combinator costs nothing and cannot fail that way. */
+@media screen and (prefers-reduced-motion: no-preference) {
+  @supports selector(details::details-content) and
+    (transition-behavior: allow-discrete) {
+    .nav-menu::details-content {
+      /* Both undo the footer's bare `details::details-content` rule, which
+       * reaches in here and would otherwise state a height mechanism this
+       * menu does not use. */
+      block-size: auto;
+      overflow: visible;
+      transition: content-visibility 160ms allow-discrete;
+    }
+
+    .nav-panel {
+      opacity: 0;
+      clip-path: inset(0 0 100% 0);
+      /* The panel is still painted while it closes, so it must stop taking
+       * clicks the moment it stops being the menu. Not transitioned: this one
+       * has to be instant. */
+      pointer-events: none;
+      transition: opacity 140ms cubic-bezier(0.33, 1, 0.68, 1),
+        clip-path 140ms cubic-bezier(0.33, 1, 0.68, 1);
+    }
+
+    .nav-menu[open] .nav-panel {
+      opacity: 1;
+      clip-path: inset(0 0 0 0);
+      pointer-events: auto;
+      transition-duration: 200ms;
+    }
+
+    @starting-style {
+      .nav-menu[open] .nav-panel {
+        opacity: 0;
+        clip-path: inset(0 0 100% 0);
+      }
+    }
+  }
+}
+
+/* Reduced motion never reaches the block above, so the panel carries no
+ * opacity and no clip and the door opens instantly, which is the floor. */
 @media (prefers-reduced-motion: reduce) {
   .nav-door,
   .nav-door::after,

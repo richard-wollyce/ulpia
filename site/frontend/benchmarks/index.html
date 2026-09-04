@@ -67,15 +67,25 @@
       <h1>Benchmarks</h1>
       <p class="doc-date">Last measured: 23 August to 2 September 2026</p>
 
+      <p class="result-figure">
+        A memory layer is easy to demo and hard to trust.
+      </p>
       <p>
-        Every Ulpia number on this page comes from a file in the
-        <a href="https://github.com/richard-wollyce/ulpia/tree/main/benchmarks">open repository</a>,
-        with the command, machine and date beside it and the commit where
-        the file records one, because a number that cannot say where it came
-        from is marketing. The source is public under
-        <a href="https://github.com/richard-wollyce/ulpia/blob/main/LICENSE">Apache 2.0</a>, and every
-        command on this page runs from a clone. Every competitor number is
-        that vendor's own published claim, linked at its source.
+        The demo is the question that works. Trust is the question that does
+        not, on a day you did not pick, measured by somebody who had
+        something to lose by measuring it. So this page carries the runs that
+        went badly under their own headings, the figure that got worse when
+        it was checked, and the one benchmark where the score is somebody
+        else's to award.
+      </p>
+      <p>
+        Four instruments. Every Ulpia number comes from a file in the
+        <a href="https://github.com/richard-wollyce/ulpia/tree/main/benchmarks">open repository</a>
+        with the command, the machine and the date beside it, and every one of
+        them runs from a clone on an ordinary laptop. Every competitor number
+        is that vendor's own published claim, linked at its source, because we
+        did not run their systems and will not pretend otherwise. The source is
+        <a href="https://github.com/richard-wollyce/ulpia/blob/main/LICENSE">Apache 2.0</a>.
       </p>
 
       <h2 id="latency">Latency</h2>
@@ -83,6 +93,12 @@
         <p class="result-figure">Warm route p50 1.16 ms, p95 2.16 ms. Cold open 11.8 ms.</p>
         <p class="result-gloss">One laptop, 1000 samples over 50 questions, in process. Re-measured 2 September 2026.</p>
       </div>
+      <p>
+        You will ask this thing fifty times in a working day. It should not be
+        something you wait for, and it is not: a question costs about what a
+        function call costs, because that is what it is. Nothing is embedded,
+        nothing crosses a network, and there is no cache to warm.
+      </p>
       <p>
         The warm figure is the whole deterministic pipeline per question:
         both scorers, the fusion, the species fold and the confidence gate.
@@ -297,6 +313,13 @@
         <p class="result-gloss">Silence, not a least-wrong document. The deterministic layer alone, no model and no network.</p>
       </div>
       <p>
+        The expensive failure is not a slow answer. It is a confident wrong one,
+        because you act on it. This is the instrument for the edge of the
+        library: given a question the notes genuinely do not cover, does the
+        system know that, or does it hand over the nearest file and let the
+        model improvise a citation from it.
+      </p>
+      <p>
         Every retrieval system returns a rank one, because ranking cannot
         express absence. A librarian who can say she does not have that book
         is the differentiating claim, so it is the first thing measured. 50
@@ -383,6 +406,12 @@
         <p class="result-figure">305 of 500, 61 percent.</p>
         <p class="result-gloss">A floor and labelled one: the weakest honest ingestion, and a local judge that is not the official protocol.</p>
       </div>
+      <p>
+        Somebody else's corpus, somebody else's questions, published before we
+        existed. This is the one place on the page where the questions were not
+        written by the people being graded, which is the only reason it is worth
+        more than everything above it.
+      </p>
       <p>
         500 questions against long chat histories, the
         <code>longmemeval_s_cleaned.json</code> dataset, each instance's
@@ -508,6 +537,12 @@
         <p class="result-figure">Full gold evidence served for 88 percent of enterprise and 81 percent of web questions.</p>
         <p class="result-gloss">A ceiling, not a score. There is no official Ulpia number here, because the protocol fixes a reader and a judge whose keys are not in the repository.</p>
       </div>
+      <p>
+        The honest thing to report here is not a result but a limit. What
+        follows is how much of the evidence the retrieval actually put in front
+        of a reader, which is the half we can measure, and it is written as a
+        ceiling so nobody mistakes it for a score.
+      </p>
       <p>
         The successor benchmark scores an accuracy-times-latency frontier
         over haystacks of web-agent trajectories, and 128 of its

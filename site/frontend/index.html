@@ -68,10 +68,10 @@
     <main id="main" tabindex="-1">
       <section class="hero" aria-label="Ulpia">
         <h1>The memory is yours. The&nbsp;model is a guest.</h1>
-        <p class="subhead" data-anim="type"><span class="type-real">Your coding agent answered out of the wrong file and sounded certain. Ulpia is the memory it asks instead: your own markdown, indexed where it already sits, answering with the files to open, the words that matched, and a verdict that can be&nbsp;nothing.</span></p>
+        <p class="subhead" data-anim="type"><span class="type-real">Your coding agent answered out of the wrong file and sounded certain. Ulpia is the memory it asks instead: your own markdown, indexed where it already sits, answering with the files to open, the words that matched, and a confidence you can&nbsp;check.</span></p>
         <p class="cta-row" data-anim="hero">
           <a class="cta-primary" href="/benchmarks/">See the benchmarks</a>
-          <a class="back" href="https://github.com/richard-wollyce/ulpia">Read the source</a>
+          <a class="back gh-link" href="https://github.com/richard-wollyce/ulpia"><svg class="gh-mark" viewBox="0 0 24 24" width="16" height="16" fill="currentColor" aria-hidden="true" focusable="false"><path d="M12 .297c-6.63 0-12 5.373-12 12 0 5.303 3.438 9.8 8.205 11.385.6.113.82-.258.82-.577 0-.285-.01-1.04-.015-2.04-3.338.724-4.042-1.61-4.042-1.61C4.422 18.07 3.633 17.7 3.633 17.7c-1.087-.744.084-.729.084-.729 1.205.084 1.838 1.236 1.838 1.236 1.07 1.835 2.809 1.305 3.495.998.108-.776.417-1.305.76-1.605-2.665-.3-5.466-1.332-5.466-5.93 0-1.31.465-2.38 1.235-3.22-.135-.303-.54-1.523.105-3.176 0 0 1.005-.322 3.3 1.23.96-.267 1.98-.399 3-.405 1.02.006 2.04.138 3 .405 2.28-1.552 3.285-1.23 3.285-1.23.645 1.653.24 2.873.12 3.176.765.84 1.23 1.91 1.23 3.22 0 4.61-2.805 5.625-5.475 5.92.42.36.81 1.096.81 2.22 0 1.606-.015 2.896-.015 3.286 0 .315.21.69.825.57C20.565 22.092 24 17.592 24 12.297c0-6.627-5.373-12-12-12"/></svg>Read the source</a>
         </p>
         <p class="status-line" data-anim="hero">Pre-launch. Used daily.</p>
       </section>
@@ -101,46 +101,6 @@
           holds.
         </p>
       </section>
-
-      <section aria-labelledby="work">
-        <h2 id="work">Watch her&nbsp;work.</h2>
-        <figure class="terminal" data-anim="rise">
-          <pre class="term"><span class="line cmd-line"><span class="prompt">$ </span><span class="cmd">kb route "why is there no embedding model in the retrieval path" decisions <span class="flag">--hybrid</span></span></span><span class="blank"></span><span class="line meta">question: why is there no embedding model in the retrieval path</span><span class="line meta">indexed:  36 entries across 1 agents, 0 aliases</span><span class="blank"></span><span class="line hit"><span class="pad">  </span><span class="score">0.033</span><span class="pad">  </span><span class="base">decisions</span><span class="pad"> </span><span class="file">0018-no-model-in-the-retrieval-path.md</span><span class="pad">       </span><span class="agree">keywords #1 + text #2</span></span><span class="line hit"><span class="pad">  </span><span class="score">0.032</span><span class="pad">  </span><span class="base">decisions</span><span class="pad"> </span><span class="file">0027-a-model-decides-who-answers.md</span><span class="pad">          </span><span class="agree">keywords #4 + text #1</span></span><span class="line hit"><span class="pad">  </span><span class="score">0.029</span><span class="pad">  </span><span class="base">decisions</span><span class="pad"> </span><span class="file">0017-no-dense-scorer-yet.md</span><span class="pad">                  </span><span class="agree">keywords #6 + text #11</span></span></pre>
-          <figcaption>
-            Real output, 2 September 2026, commit ea43d1d, on Windows: the
-            first three of the five files it listed, with the passage preview
-            under each left out and nothing else touched.
-          </figcaption>
-        </figure>
-        <p data-anim="rise">
-          Two independent scorers read every question. One is a keyword scorer
-          over the Search for line each note carries under its title, the label
-          on the book. The other is full text search over the content. The
-          verdict is hit, guess or nothing, and it comes from one number: the
-          top file's keyword score, measured against a floor that scales with
-          the size of the library. Whether the second scorer found the same
-          file is reported beside it, as in the last column above, and never as
-          the verdict. The number printed above is the fused score of both
-          rankings; the keyword score behind the verdict, and the floor it was
-          measured against, are printed by kb route --json.
-        </p>
-        <p data-anim="rise">
-          When nothing matches, the library answers with its own vocabulary, so
-          a miss teaches you what it covers instead of teaching you to stop
-          asking. That comparison is spelling and not meaning: it reaches a
-          typo or a cognate and never a translation, and the reply says which
-          kind of help it is.
-        </p>
-        <p data-anim="rise">
-          And when a subject belongs to nobody in your fleet, Vesta says
-          exactly that: nothing in this fleet covers it, which is a gap in the
-          fleet rather than a gap in your question. No score can produce that
-          sentence. It is a judgement about a subject, and the section on the
-          guest says who makes it.
-        </p>
-      </section>
-
-
 
       <section aria-labelledby="instead">
         <h2 id="instead">What you would use it&nbsp;instead of.</h2>
@@ -173,44 +133,59 @@
           not, and that is a genuine advantage rather than a concession.
         </p>
         <p data-anim="rise">
-          The row that is ours alone is the refusal. On
+          What is ours is the middle of that comparison rather than the end of
+          it. Nothing in the retrieval path guesses, which is what lets one
+          answer be explainable, reproducible and offline at the same time, and
+          those three are what you feel on an ordinary Tuesday. The last one
+          follows from them: a score you can trust is also a score that can come
+          up short, and on
           <a href="/benchmarks/#longmemeval-s">LongMemEval</a>, a public
-          benchmark of 500 instances, the fleet declined 29 of 30 unanswerable
-          questions on 24 August 2026. The same run answered 51 of 56 on
-          single-session-assistant and 40 of 64 on single-session-user, and
-          those travel with it so the first figure cannot read as a number
-          picked out of a table.
+          benchmark of 500 instances, the fleet got that call right 29 times out
+          of 30 on 24 August 2026. The same run answered 51 of 56 on
+          single-session-assistant, and the two figures travel together so
+          neither reads as one picked out of a table.
         </p>
       </section>
-      <section aria-labelledby="trade">
-        <h2 id="trade">The other&nbsp;trade.</h2>
+      <section aria-labelledby="work">
+        <h2 id="work">Watch her&nbsp;work.</h2>
+        <figure class="terminal" data-anim="rise">
+          <pre class="term"><span class="line cmd-line"><span class="prompt">$ </span><span class="cmd">kb route "why is there no embedding model in the retrieval path" decisions <span class="flag">--hybrid</span></span></span><span class="blank"></span><span class="line meta">question: why is there no embedding model in the retrieval path</span><span class="line meta">indexed:  40 entries across 1 agents, 0 aliases</span><span class="blank"></span><span class="line hit"><span class="pad">  </span><span class="score">0.033</span><span class="pad">  </span><span class="base">decisions</span><span class="pad"> </span><span class="file">0018-no-model-in-the-retrieval-path.md</span><span class="pad">       </span><span class="agree">keywords #1 + text #2</span></span><span class="line hit"><span class="pad">  </span><span class="score">0.032</span><span class="pad">  </span><span class="base">decisions</span><span class="pad"> </span><span class="file">0027-a-model-decides-who-answers.md</span><span class="pad">          </span><span class="agree">keywords #4 + text #1</span></span><span class="line hit"><span class="pad">  </span><span class="score">0.029</span><span class="pad">  </span><span class="base">decisions</span><span class="pad"> </span><span class="file">0017-no-dense-scorer-yet.md</span><span class="pad">                  </span><span class="agree">keywords #6 + text #13</span></span></pre>
+          <figcaption>
+            Real output, re-run 4 September 2026 at commit 9ffe0df, on Windows: the
+            first three of the five files it listed, with the passage preview
+            under each left out and nothing else touched.
+          </figcaption>
+        </figure>
         <p data-anim="rise">
-          Most memory layers put an embedding model between you and your own
-          notes. That buys semantic matching, and it costs four things: you
-          cannot run it offline, you cannot explain a bad result, you cannot
-          reproduce yesterday's answer, and your notes have been somewhere you
-          did not choose.
+          Two independent scorers read every question. One is a keyword scorer
+          over the Search for line each note carries under its title, the label
+          on the book. The other is full text search over the content. The
+          verdict is hit, guess or nothing, and it comes from one number: the
+          top file's keyword score, measured against a floor that scales with
+          the size of the library. Whether the second scorer found the same
+          file is reported beside it, as in the last column above, and never as
+          the verdict. The number printed above is the fused score of both
+          rankings; the keyword score behind the verdict, and the floor it was
+          measured against, are printed by kb route --json.
         </p>
-        <p data-anim="rise">Ulpia takes the other trade.</p>
-        <ul class="properties" data-anim="rise">
-          <li><strong>Offline</strong>, because your files are read on your machine and nowhere else.</li>
-          <li><strong>Explainable</strong>, because the answer names the words that matched under each file, and says when a file was found by its text alone.</li>
-          <li>
-            <strong>Reproducible</strong>, because the same question finds the
-            same files, today and in a year.
-          </li>
-          <li>
-            <strong>Private</strong>, because each base declares its own
-            private layer, and Vesta serves nothing inside it unless the owner
-            asks for it with --all.
-          </li>
-        </ul>
         <p data-anim="rise">
-          Those four are properties of how your notes are read. The one step
-          that may call a model is about your fleet and not your notes, and it
-          is next.
+          A miss is answered too. Rather than returning an empty screen, the
+          library offers the keys it does hold that look like the words you
+          used, so you learn what it covers instead of learning to stop asking.
+          That comparison is spelling and not meaning: it reaches a typo or a
+          cognate and never a translation, and the reply says which kind of help
+          it is.
+        </p>
+        <p data-anim="rise">
+          And when a subject belongs to nobody in your fleet, Vesta says
+          exactly that: nothing in this fleet covers it, which is a gap in the
+          fleet rather than a gap in your question. No score can produce that
+          sentence. It is a judgement about a subject, and the section on the
+          guest says who makes it.
         </p>
       </section>
+
+
 
       <section aria-labelledby="speed">
         <h2 id="speed">How long one question&nbsp;takes.</h2>
@@ -280,8 +255,47 @@
           </figcaption>
         </figure>
       </section>
+      <section aria-labelledby="trade">
+        <h2 id="trade">The other&nbsp;trade.</h2>
+        <p data-anim="rise">
+          Nothing is free. Putting an embedding model between you and your own
+          notes buys semantic matching, and the bill is four things: you cannot
+          run it offline, you cannot explain a bad result, you cannot reproduce
+          yesterday's answer, and your notes have been somewhere you did not
+          choose.
+        </p>
+        <p data-anim="rise">
+          Writing a line of keys on each note is a smaller bill, paid earlier,
+          and this is what it buys back.
+        </p>
+        <ul class="properties" data-anim="rise">
+          <li><strong>Offline</strong>, because your files are read on your machine and nowhere else.</li>
+          <li><strong>Explainable</strong>, because the answer names the words that matched under each file, and says when a file was found by its text alone.</li>
+          <li>
+            <strong>Reproducible</strong>, because the same question finds the
+            same files, today and in a year.
+          </li>
+          <li>
+            <strong>Private</strong>, because each base declares its own
+            private layer, and Vesta serves nothing inside it unless the owner
+            asks for it with --all.
+          </li>
+        </ul>
+        <p data-anim="rise">
+          Those four are properties of how your notes are read. The one step
+          that may call a model is about your fleet and not your notes, and it
+          is next.
+        </p>
+      </section>
+
       <section aria-labelledby="guest">
         <h2 id="guest">The model is a&nbsp;guest.</h2>
+        <p data-anim="rise">
+          Every memory product offers the same bargain: useful context, in
+          exchange for your notes living somewhere you do not control. Ulpia
+          gives you the context and leaves the ownership where it already was.
+          What follows is the mechanism that makes both true at once.
+        </p>
         <p data-anim="rise">
           Which file holds the answer and which of your agents should give it
           are different questions. Finding the file is a lookup, and code does
@@ -392,7 +406,7 @@
         </p>
       </details>
       <p class="address-line">
-        <a href="/docs/">Docs</a> · <a href="/benchmarks/">Benchmarks</a> · <a href="mailto:hello@ulpia.io">hello@ulpia.io</a>
+        <a href="/docs/">Docs</a> · <a href="/benchmarks/">Benchmarks</a> · <a class="gh-link" href="https://github.com/richard-wollyce/ulpia"><svg class="gh-mark" viewBox="0 0 24 24" width="16" height="16" fill="currentColor" aria-hidden="true" focusable="false"><path d="M12 .297c-6.63 0-12 5.373-12 12 0 5.303 3.438 9.8 8.205 11.385.6.113.82-.258.82-.577 0-.285-.01-1.04-.015-2.04-3.338.724-4.042-1.61-4.042-1.61C4.422 18.07 3.633 17.7 3.633 17.7c-1.087-.744.084-.729.084-.729 1.205.084 1.838 1.236 1.838 1.236 1.07 1.835 2.809 1.305 3.495.998.108-.776.417-1.305.76-1.605-2.665-.3-5.466-1.332-5.466-5.93 0-1.31.465-2.38 1.235-3.22-.135-.303-.54-1.523.105-3.176 0 0 1.005-.322 3.3 1.23.96-.267 1.98-.399 3-.405 1.02.006 2.04.138 3 .405 2.28-1.552 3.285-1.23 3.285-1.23.645 1.653.24 2.873.12 3.176.765.84 1.23 1.91 1.23 3.22 0 4.61-2.805 5.625-5.475 5.92.42.36.81 1.096.81 2.22 0 1.606-.015 2.896-.015 3.286 0 .315.21.69.825.57C20.565 22.092 24 17.592 24 12.297c0-6.627-5.373-12-12-12"/></svg>GitHub</a> · <a href="mailto:hello@ulpia.io">hello@ulpia.io</a>
       </p>
       <p class="copyright">&copy; 2026 Richard Wollyce</p>
     </footer>
