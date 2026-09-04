@@ -2,26 +2,20 @@
 
 [![ci](https://github.com/richard-wollyce/ulpia/actions/workflows/ci.yml/badge.svg)](https://github.com/richard-wollyce/ulpia/actions/workflows/ci.yml)
 
-**A fleet of agents, each with its own knowledge base, and one memory layer under all
-of them. Everything on your machine.**
+Your project's documentation is a folder of markdown. You read it through a graph
+view; the agent working in that repository cannot, so it greps the folder and answers
+out of whichever file came closest.
 
-Ulpia is the library. **Vesta is its librarian**: the orchestrator that knows who is
-in the fleet and routes what arrives. The name is the Bibliotheca Ulpia, Trajan's
-library, which was Rome's public reading room and its official record office in one
-building, and that pair is exactly what this software is.
+**Ulpia indexes the same markdown where it already sits, and answers the agent
+instead**: the files to open, the words that matched, and a verdict. The verdict is
+the part worth arriving for. It can come back `nothing`, meaning the library does not
+cover the question, rather than a ranked list that always has a top entry.
 
-Vesta answers *which of your files a question should open*, across every agent you
-have, in a few tens of milliseconds, without sending anything anywhere and without a
-model in the loop. Five runs of `kb eval` on an
-otherwise idle machine, over a base of 113 entries (the fleet had grown to the 120
-the transcripts below print by the time they were captured), put both scorers together between 22
-and 33 ms per question, and the keyword scorer alone between 16 and 24. Runs taken while a
-build shared the machine roughly doubled that, which is the whole reason this gives a
-range and no headline figure: a single number here measures how busy the laptop was, and
-so does an average taken across runs that were not competing for the same cores.
+Then you hand those files to whatever model you like. The memory outlives the model.
 
-Then you hand those files to whatever model you like. Yours, locally. Claude, through
-MCP. Something else next year. The memory outlives the model.
+**The cost is writing, and it is not small.** Every note carries a hand written
+`Search for:` line, roughly thirty terms, and nothing infers them for you. Tools that
+ingest automatically exist and this is not one of them.
 
 ---
 
