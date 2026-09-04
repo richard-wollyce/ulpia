@@ -511,6 +511,15 @@
   `model after the verdict`, `trigram`, `SUGGEST_FLOOR`, `kb-aliases.txt`, `kb misses`,
   `privacidade da consulta`, `query privacy`, `comparative study`.
 
+- **[[0040-a-hosted-service-beside-the-binary]]** 🟢 accepted as a direction 2026-09-04, unbuilt.
+  **A hosted service will exist beside the binary and not in place of it.** ADR-0008 already
+  kept it possible; this collects the clause and binds it. The local track stays whole: a
+  release, run by the user, sending nothing. The service is bound by the three clauses the
+  front page already published, that it is the same folder, run for you, and you leave by
+  copying it out, which makes export the exit rather than a feature. Names the public
+  sentences that become false on the day it ships, the privacy notice first.
+  Search for: `fase 2`, `hosted service`, `assinatura`, `subscription`, `duas trilhas`, `two tracks`, `saida por copia`, `leave by copying it out`, `ADR-0040`.
+
 - **[[0039-the-routing-layer-may-write-to-itself]]** The rule that only a person may write an
   alias line, reversed, and what replaced it. The old reason was weak: the evidence is a
   question a real person asked, not something the machine produced. The reason that holds is
