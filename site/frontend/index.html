@@ -6,7 +6,7 @@
     <title>Ulpia</title>
     <meta
       name="description"
-      content="A fleet of AI agents, each with its own knowledge base, and one memory layer under all of them. On your machine, in plain files, with no model in the retrieval path."
+      content="A memory layer your coding agent can query. Your markdown, indexed where it sits, answering with the files to open, the words that matched, and a verdict that can be nothing. No model in the retrieval path."
     />
     <meta name="color-scheme" content="light dark" />
     <meta name="theme-color" media="(prefers-color-scheme: light)" content="#F6F1E7" />
@@ -16,7 +16,7 @@
     <meta property="og:title" content="Ulpia" />
     <meta
       property="og:description"
-      content="The memory is yours. The model is a guest."
+      content="Your coding agent answered out of the wrong file and sounded certain. Ulpia is the memory it asks instead: your own markdown, indexed where it sits, with a verdict that can be nothing."
     />
     <meta property="og:url" content="https://ulpia.io/" />
     <meta property="og:type" content="website" />
@@ -68,7 +68,7 @@
     <main id="main" tabindex="-1">
       <section class="hero" aria-label="Ulpia">
         <h1>The memory is yours. The&nbsp;model is a guest.</h1>
-        <p class="subhead" data-anim="type"><span class="type-real">A notes app organises your project documentation for you to read. The agent working in that repository cannot use any of it, so it greps the folder and answers out of whichever file came closest. Ulpia organises the same markdown for the agent to query, and lets it answer&nbsp;nothing.</span></p>
+        <p class="subhead" data-anim="type"><span class="type-real">Your coding agent answered out of the wrong file and sounded certain. Ulpia is the memory it asks instead: your own markdown, indexed where it already sits, answering with the files to open, the words that matched, and a verdict that can be&nbsp;nothing.</span></p>
         <p class="cta-row" data-anim="hero">
           <a class="cta-primary" href="/benchmarks/">See the benchmarks</a>
           <a class="back" href="https://github.com/richard-wollyce/ulpia">Read the source</a>
@@ -140,6 +140,78 @@
         </p>
       </section>
 
+
+
+      <section aria-labelledby="instead">
+        <h2 id="instead">What you would use it&nbsp;instead of.</h2>
+        <p data-anim="rise">
+          Two kinds of tool get used as a project's memory, and they lose for
+          two different reasons. One is worth swapping and the other is worth
+          keeping, so it is worth being exact about which is which.
+        </p>
+        <p data-anim="rise">
+          <strong>A notes app, and Obsidian is the one people name.</strong> It
+          keeps markdown on your disk and it is good at what it is built for:
+          graph view, backlinks, canvas, sync, a plugin ecosystem years deep.
+          Ulpia has none of those. If your job is reading your own notes with
+          your own eyes, keep it.
+        </p>
+        <p data-anim="rise">
+          The mechanism is who the organising is aimed at. Every one of those
+          features is drawn for a person to look at, and none of them is a call
+          an agent can make. The agent working in your repository opens a
+          shell, not a vault, so what it does with a folder of markdown is grep
+          it, and grep has no opinion about which file is the right one. Ulpia
+          organises the same files for the query instead of for the eye.
+        </p>
+        <p data-anim="rise">
+          <strong>A vector memory layer.</strong> It fixes the matching, which
+          is real, and it leaves the certainty alone. Retrieval comes back as a
+          ranking, and a ranking has a top entry whether or not the corpus holds
+          the answer, so the confident wrong citation survives the upgrade. It
+          also ingests without asking you to write anything, which Ulpia does
+          not, and that is a genuine advantage rather than a concession.
+        </p>
+        <p data-anim="rise">
+          The row that is ours alone is the refusal. On
+          <a href="/benchmarks/#longmemeval-s">LongMemEval</a>, a public
+          benchmark of 500 instances, the fleet declined 29 of 30 unanswerable
+          questions on 24 August 2026. The same run answered 51 of 56 on
+          single-session-assistant and 40 of 64 on single-session-user, and
+          those travel with it so the first figure cannot read as a number
+          picked out of a table.
+        </p>
+      </section>
+      <section aria-labelledby="trade">
+        <h2 id="trade">The other&nbsp;trade.</h2>
+        <p data-anim="rise">
+          Most memory layers put an embedding model between you and your own
+          notes. That buys semantic matching, and it costs four things: you
+          cannot run it offline, you cannot explain a bad result, you cannot
+          reproduce yesterday's answer, and your notes have been somewhere you
+          did not choose.
+        </p>
+        <p data-anim="rise">Ulpia takes the other trade.</p>
+        <ul class="properties" data-anim="rise">
+          <li><strong>Offline</strong>, because your files are read on your machine and nowhere else.</li>
+          <li><strong>Explainable</strong>, because the answer names the words that matched under each file, and says when a file was found by its text alone.</li>
+          <li>
+            <strong>Reproducible</strong>, because the same question finds the
+            same files, today and in a year.
+          </li>
+          <li>
+            <strong>Private</strong>, because each base declares its own
+            private layer, and Vesta serves nothing inside it unless the owner
+            asks for it with --all.
+          </li>
+        </ul>
+        <p data-anim="rise">
+          Those four are properties of how your notes are read. The one step
+          that may call a model is about your fleet and not your notes, and it
+          is next.
+        </p>
+      </section>
+
       <section aria-labelledby="speed">
         <h2 id="speed">How long one question&nbsp;takes.</h2>
         <p data-anim="rise">
@@ -208,37 +280,6 @@
           </figcaption>
         </figure>
       </section>
-
-      <section aria-labelledby="trade">
-        <h2 id="trade">The other&nbsp;trade.</h2>
-        <p data-anim="rise">
-          Most memory layers put an embedding model between you and your own
-          notes. That buys semantic matching, and it costs four things: you
-          cannot run it offline, you cannot explain a bad result, you cannot
-          reproduce yesterday's answer, and your notes have been somewhere you
-          did not choose.
-        </p>
-        <p data-anim="rise">Ulpia takes the other trade.</p>
-        <ul class="properties" data-anim="rise">
-          <li><strong>Offline</strong>, because your files are read on your machine and nowhere else.</li>
-          <li><strong>Explainable</strong>, because the answer names the words that matched under each file, and says when a file was found by its text alone.</li>
-          <li>
-            <strong>Reproducible</strong>, because the same question finds the
-            same files, today and in a year.
-          </li>
-          <li>
-            <strong>Private</strong>, because each base declares its own
-            private layer, and Vesta serves nothing inside it unless the owner
-            asks for it with --all.
-          </li>
-        </ul>
-        <p data-anim="rise">
-          Those four are properties of how your notes are read. The one step
-          that may call a model is about your fleet and not your notes, and it
-          is next.
-        </p>
-      </section>
-
       <section aria-labelledby="guest">
         <h2 id="guest">The model is a&nbsp;guest.</h2>
         <p data-anim="rise">

@@ -2,127 +2,131 @@
 
 [![ci](https://github.com/richard-wollyce/ulpia/actions/workflows/ci.yml/badge.svg)](https://github.com/richard-wollyce/ulpia/actions/workflows/ci.yml)
 
-Your project's documentation is a folder of markdown. You read it through a graph
-view; the agent working in that repository cannot, so it greps the folder and answers
-out of whichever file came closest.
+Your coding agent answered out of the wrong document and sounded certain. That happens
+for two different reasons, and they need two different fixes.
 
-**Ulpia indexes the same markdown where it already sits, and answers the agent
-instead**: the files to open, the words that matched, and a verdict. The verdict is
-the part worth arriving for. It can come back `nothing`, meaning the library does not
-cover the question, rather than a ranked list that always has a top entry.
+A notes app organises your markdown for a person to read. The agent working inside that
+repository cannot use a graph view or a backlink, so it greps the folder and answers out
+of whichever file came closest. A vector memory layer fixes the matching and not the
+certainty: it returns a ranking, and a ranking always has a top entry whether or not the
+answer is in there.
 
-Then you hand those files to whatever model you like. The memory outlives the model.
+**Ulpia indexes the same markdown where it already sits and answers the agent**: the
+files to open, the words that matched, and a verdict. The verdict can be `nothing`, which
+says the library does not cover the question. On [LongMemEval](benchmarks/longmemeval/RESULTS.md),
+a public benchmark of 500 instances, it declined 29 of 30 unanswerable questions
+(2026-08-24).
 
-**The cost is writing, and it is not small.** Every note carries a hand written
-`Search for:` line, roughly thirty terms, and nothing infers them for you. Tools that
-ingest automatically exist and this is not one of them.
+**The price is writing, and it is paid per note.** Each one carries a hand written
+`Search for:` line, roughly thirty terms. Nothing infers it for you, and that refusal is
+the whole design rather than a missing feature.
 
 ---
 
-## Why this exists
-
-Most memory layers for agents put an embedding model in the retrieval path. That buys
-semantic matching and costs you four things: you cannot run it offline, you cannot
-explain a bad result, you cannot reproduce yesterday's answer, and your notes have been
-somewhere you did not choose.
-
-Vesta takes the other trade. **Retrieval is plain software.** Same question, same
-answer, forever, and when it is wrong it tells you why in words you can act on.
+## How it answers
 
 ```
 $ kb route "posso dar git push sozinho ou preciso perguntar" .
 
 question: posso dar git push sozinho ou preciso perguntar
-indexed:  120 entries across 10 agents, 216 aliases
+indexed:  250 entries across 15 agents, 220 aliases
 
-   1.  72.62  zed/protocols/limits-and-autonomy.md
+   1.  84.27  zed/protocols/limits-and-autonomy.md
       matched: git push, sozinho
-   2.  47.96  tullius/index.md
+   2.  55.25  tullius/index.md
       matched: git push
 ```
 
 The question is Portuguese over an English README on purpose: the router matches
 the keys each file declares, in whatever languages they were written, so a fleet
-answers in every language its authors used. The Italian miss further down is the
-same demonstration from the failing side.
-
-That is one scorer, the keyword index built from your own map, which is what `kb route`
-prints by default. There is a second, SQLite full text search over the content, and
-`kb route --hybrid` runs both and fuses the two rankings with Reciprocal Rank Fusion.
-
-**Each scorer does the job it was measured to be better at, and they are not
-interchangeable.** Fusion rewards agreement, which is what you want when assembling
-passages for a person to read: a file both scorers noticed belongs in front of them. It
-is the wrong rule for picking a single winner, because a file each scorer ranks fourth
-beats a file one scorer ranks first. Measured over the 24 answerable questions of this
-fleet's 33 question answer key: the keyword scorer alone picks the right file 11 times,
-the fusion it feeds picks it 8 times.
-
-**Read that as a comparison, not as a score.** The answer key's own header records that
-the keyword lines in the maps were tuned against these same questions on the day they
-were graded, so the keyword column is flattered and 11/24 is not a clean benchmark of
-anything. What survives the bias is the direction: the fusion, fed by that same
-flattered scorer, still lands behind it when the job is to name one file.
-
-So **the reading comes from agreement and the verdict comes from intent.** Vesta ranks
-who should answer using the keywords each file declares in its own `Search for:`
-header (a `MAP.md`, when you keep one, is a reading list for people; the router does
-not consult it), and on the same 24
-questions that deterministic fold names the right agent 22 times. What `kb boot`
-actually hands over, with the classifier that sits in front of it, is the number that
-counts and it is 21. The best a fixed choice could do on this set is 13. These figures
-are re-measured before anything quotes them, because they have gone stale on this very
-page twice; the eval takes seconds and there is no excuse. It also grades its own
-confidence, and on this set it fails that grade:
-
-```
-$ kb eval fleet/zed/fleet/eval/gold.tsv .   # the doubled fleet/ is real: Zed keeps his eval set in a nested fleet
-
-  GATE   flagged 1/13 of its own misses as a guess
-         demoted 0/11 correct answers to a guess
-         abstained on 4/9 question(s) the set says to decline
-         hit scores  29.43 to 129.87
-         miss scores 7.45 to 91.86
-         OVERLAPS: no floor tells a hit from a miss on this set.
-```
-
-**`OVERLAPS` is the tool failing its own test in public, and that is why the block is
-still here.** A miss reaches 91.86 while a hit starts at 29.43, so no single confidence floor
-separates the two, and the gate flags only 1 of its 13 misses as a guess. What it does
-not do is demote a correct answer, and it declines 4 of the 9 questions the key says to
-decline. An earlier version of this page quoted a run that separated cleanly; that run
-was a 19 question set that no longer exists.
-
-That is `kb eval`, and it ships in the tool rather than in a benchmark harness, so these
-are numbers re-run rather than numbers a harness produced once. **You cannot reproduce
-these exact figures**, because the answer key lives in a private fleet this repository
-gitignores; you point the same command at your own. The key behind the numbers above is
-33 questions, 24 answerable and 9 the fleet is supposed to decline. `kb eval` grades
-against it and **refuses to run if it points at files that have moved**, which is how
-the last stale measurement was caught.
+answers in every language its authors used. The miss below is the same demonstration
+from the failing side. Both transcripts were re-run on 2026-09-04, because a pasted
+transcript rots and this one already had.
 
 **And when nothing matches, the base answers with its own vocabulary.**
 
 ```
-$ kb route "come funziona il registro delle decisioni" .
+$ kb route "qual e o padrao de qualidadi aqui" .   # qualidadi, misspelt on purpose
 
-question: come funziona il registro delle decisioni
-indexed:  120 entries across 10 agents, 216 aliases
+question: qual e o padrao de qualidadi aqui
+indexed:  250 entries across 15 agents, 220 aliases
 
   nothing matched. Either the base does not cover it, or the
   Search for lines do not carry the words a real question uses.
 
+  2 markdown files across the open bases carry no `Search for:` line, so
+  the index holds no entry for them and they score zero on every question.
+  `kb check` names them.
+  No term in the question matched any key here, so nothing was ranked at
+  all: this is a vocabulary miss and not a near miss, and asking again
+  with the words the notes declare is what changes it.
+
   the base does know these, and they look like words you used:
-    apagar registro, registro de decisao, registro de marca, registro de release, registro de sessao, registro de treino, registro imutavel, registro longitudinal
+    anti padrao de teste, capa padrao, desvio padrao, dia padrao, eixo do padrao, interrupcao de padrao, padrao de qualidade, padrao documentado do repositorio
   that is spelling and not meaning, so it finds a typo or a cognate
   and never finds a translation.
 ```
 
-A miss that offers nothing back teaches you to stop asking. That comparison is
-character trigram overlap, so it reaches a typo and a cognate across languages and
-it **never** reaches a translation, which is why the reply says which kind of help
-it is. The other half of the problem belongs to whatever model is reading, and this
-is the candidate space it works from instead of guessing.
+A miss that offers nothing back teaches you to stop asking. This one names the key it
+should have found, `padrao de qualidade`, and says why it did not: the comparison is
+character trigram overlap, so it reaches a typo and it reaches a cognate across
+languages, and it **never** reaches a translation. That is why the reply says which kind
+of help it is rather than just failing. The other half of the problem belongs to
+whatever model is reading, and this is the candidate space it works from instead of
+guessing.
+
+---
+
+## Beside the neighbours
+
+Two different kinds of tool get used as a project's memory, and they lose to Ulpia for
+two different reasons. Worth separating, because the swap is worth making in one case
+and not in the other.
+
+### A notes app, and Obsidian is the one people name
+
+Obsidian keeps markdown on your disk and is good at what it is built for: graph view,
+backlinks, canvas, sync, and a plugin ecosystem years deep. Ulpia has none of those, and
+if your job is reading your own notes with your own eyes, keep Obsidian and stop here.
+
+**The mechanism is who the organising is aimed at.** Every one of those features is drawn
+for a person to look at, and none of them is a call an agent can make. The agent working
+in your repository opens a shell, not a vault, so what it does with a folder of markdown
+is grep it, and grep has no opinion about which file is the right one.
+
+Ulpia organises the same files for the query instead of for the eye. The trade is exact:
+you give up the graph, the canvas, the plugins and the sync, and you write a `Search for:`
+line on every note you want found. What you get is a folder an agent can ask, that
+answers with the words that matched, and that can say the answer is not in there.
+
+*Obsidian's feature list is read from its own documentation and is not something this
+repository measured. The mechanism claim is narrower and checkable in an afternoon: point
+an agent at a vault and watch what it does with the graph.*
+
+### A vector memory layer
+
+Read from each project's own repository and documentation on 2026-08-23; stars move,
+mechanisms rarely do.
+
+| | Ulpia | mem0 | Letta | Zep / Graphiti |
+|---|---|---|---|---|
+| Memory lives in | markdown files you edit | vector store + history DB | database rows | temporal knowledge graph |
+| Who writes memory | you, or a gated two-model promotion that may refuse | an LLM, automatically | the agent, through tools | async extraction |
+| Model in the retrieval path | none | embedder required | embedder for archival | embedder + graph |
+| Can answer "nobody covers this" | yes, as a first-class verdict | no, ranking always returns a top hit | no | no |
+| Runs fully offline | yes, retrieval has no network | possible with local stack | self-host possible | self-host of core |
+| Licence | Apache-2.0 | Apache-2.0 | Apache-2.0 | Apache-2.0 |
+
+**The trade underneath the table.** An embedding model in the retrieval path buys
+semantic matching, and it costs four things: you cannot run it offline, you cannot
+explain a bad result, you cannot reproduce yesterday's answer, and your notes have been
+somewhere you did not choose. Ulpia takes the other side of that trade, and the
+`Search for:` line is the bill.
+
+The honest column note: the neighbours automate ingestion at scales Ulpia refuses on
+purpose, and each of them is a good tool for the job it names. The row that is ours
+alone is the refusal: a librarian who can say "no one here owns this" instead of
+handing you the least wrong book.
 
 ---
 
@@ -287,28 +291,84 @@ does not.
 
 ---
 
-## Beside the neighbours
+## The numbers, and the date on each one
 
-Read from each project's own repository and documentation on 2026-08-23; stars move,
-mechanisms rarely do.
+Numbers here are secondary to the point of the tool, and they are load bearing
+only with a date attached. Every figure below says when it was measured and what
+measured it.
 
-| | Ulpia | mem0 | Letta | Zep / Graphiti |
-|---|---|---|---|---|
-| Memory lives in | markdown files you edit | vector store + history DB | database rows | temporal knowledge graph |
-| Who writes memory | you, or a gated two-model promotion that may refuse | an LLM, automatically | the agent, through tools | async extraction |
-| Model in the retrieval path | none | embedder required | embedder for archival | embedder + graph |
-| Can answer "nobody covers this" | yes, as a first-class verdict | no, ranking always returns a top hit | no | no |
-| Runs fully offline | yes, retrieval has no network | possible with local stack | self-host possible | self-host of core |
-| Licence | Apache-2.0 | Apache-2.0 | Apache-2.0 | Apache-2.0 |
+### What this fleet's own eval says today
 
-The honest column note: the neighbours automate ingestion at scales Ulpia refuses on
-purpose, and each of them is a good tool for the job it names. The row that is ours
-alone is the refusal: a librarian who can say "no one here owns this" instead of
-handing you the least wrong book.
+The demo above shows one scorer, the keyword index built from your own map, which is what
+`kb route` prints by default. There is a second, SQLite full text search over the content, and
+`kb route --hybrid` runs both and fuses the two rankings with Reciprocal Rank Fusion.
+
+**Each scorer does the job it was measured to be better at, and they are not
+interchangeable.** Fusion rewards agreement, which is what you want when assembling
+passages for a person to read: a file both scorers noticed belongs in front of them. It
+is the wrong rule for picking a single winner, because a file each scorer ranks fourth
+beats a file one scorer ranks first. Measured 2026-09-04 over the 40 answerable questions
+of this fleet's 49 question answer key: the keyword scorer alone picks the right file 26
+times, the fusion it feeds picks it 14 times.
+
+**Read that as a comparison, not as a score.** The answer key's own header records that
+the keyword lines in the maps were tuned against these same questions on the day they
+were graded, so the keyword column is flattered and 26/40 is not a clean benchmark of
+anything. What survives the bias is the direction: the fusion, fed by that same
+flattered scorer, still lands behind it when the job is to name one file.
+
+So **the reading comes from agreement and the verdict comes from intent.** Vesta ranks
+who should answer using the keywords each file declares in its own `Search for:`
+header (a `MAP.md`, when you keep one, is a reading list for people; the router does
+not consult it), and on the same 40
+questions that deterministic fold names the right agent 36 times. What `kb boot`
+actually hands over, with the classifier that sits in front of it, is the number that
+counts and it is 35. The best a fixed choice could do on this set is 24, so routing is
+worth eleven questions over picking one agent and never moving. These figures
+are re-measured before anything quotes them, because they have gone stale on this very
+page three times, this one included, and the key grew from 33 questions to 49 between
+the second and the third. The eval takes seconds and there is no excuse. It also grades
+its own confidence, and on this set it fails that grade:
+
+```
+$ kb eval fleet/zed/fleet/eval/gold.tsv .   # the doubled fleet/ is real: Zed keeps his eval set in a nested fleet
+
+  GATE   flagged 1/14 of its own misses as a guess
+         demoted 0/26 correct answers to a guess
+         of 9 question(s) the set says to decline: refused 3, hedged 0, answered 6
+         hit scores  26.61 to 144.20
+         miss scores 7.31 to 95.78
+         OVERLAPS: no floor tells a hit from a miss on this set.
+```
+
+*Run 2026-09-04 against the release binary built from this commit.*
+
+**`OVERLAPS` is the tool failing its own test in public, and that is why the block is
+still here.** A miss reaches 95.78 while a hit starts at 26.61, so no single confidence
+floor separates the two, and the gate flags only 1 of its 14 misses as a guess. What it
+does not do is demote a correct answer. It refuses 3 of the 9 questions the key says to
+decline and answers 6 of them confidently, which is the worst of the three columns and
+is the open problem on this set rather than a footnote to it. An earlier version of this
+page quoted a run that separated cleanly; that run was a 19 question set that no longer
+exists.
+
+**Do not read that against the 29 of 30 quoted at the top of this page.** They are
+different gates over different corpora: this one is the deterministic score threshold
+over a private fleet of prose, that one is the abstention layer over LongMemEval's chat
+sessions. The layer that scores 29 of 30 sits above the gate that overlaps here, which
+is the reason it exists.
+
+That is `kb eval`, and it ships in the tool rather than in a benchmark harness, so these
+are numbers re-run rather than numbers a harness produced once. **You cannot reproduce
+these exact figures**, because the answer key lives in a private fleet this repository
+gitignores; you point the same command at your own. The key behind the numbers above is
+49 questions, 40 answerable and 9 the fleet is supposed to decline. `kb eval` grades
+against it and **refuses to run if it points at files that have moved**, which is how
+the last stale measurement was caught.
 
 ---
 
-## Benchmarks a clone can re-run
+### Benchmarks a clone can re-run
 
 Four instruments live in [`benchmarks/`](benchmarks/), each results file carrying
 the exact command, commit, machine and date, because a number that cannot say where
@@ -316,20 +376,21 @@ it came from is marketing. The harness is `tools/bench`, a second crate in this
 repository; its `--trace` flag writes every intermediate of a complete-mode run to
 disk, which is what made the autopsy below possible at all.
 
-| instrument | headline | the footnote that keeps it honest |
+| instrument | best result, and when | the footnote that keeps it honest |
 |---|---|---|
-| [abstention](benchmarks/abstention/RESULTS.md) | 28 of 30 out-of-scope questions not answered confidently, deterministic layer alone | the 50 questions were authored blind and adversarially checked; the two misses are named medical baits, and the answer layer above caught both |
+| [abstention](benchmarks/abstention/RESULTS.md) | 28 of 30 out-of-scope questions not answered confidently, deterministic layer alone, 2026-08-23 | the 50 questions were authored blind and adversarially checked; the two misses are named medical baits, and the answer layer above caught both |
 | [latency](benchmarks/latency/RESULTS.md) | warm route p50 1.16 ms, p95 2.16 ms, the whole deterministic pipeline in process, re-measured 2026-09-02 against the August code on the same quiet machine; cold open fell from 184.6 ms to 11.8 ms when git left the runtime | the vendors' own published figures (0.148 to 0.3 s) measure their servers under their harnesses; the table quotes each claim with its URL and compares mechanisms, not machines |
-| [LongMemEval-S](benchmarks/longmemeval/RESULTS.md) | 500 questions: 61 percent with the reading mode declared per question nature, 28 of 30 abstentions correct, under the weakest honest ingestion; 49 percent under the all-default first run, kept published |
-| [LongMemEval-V2](benchmarks/longmemeval-v2/README.md) | pre-reader so far: the served context holds the full gold evidence for 88 percent (enterprise) and 81 percent (web) of deterministic questions at under a second per query | not a score: the official run needs the protocol's fixed reader and judge, and neither key lives in the repository | judged locally by claude-haiku, which is not the official protocol; the hypotheses file ships for official GPT-4o re-judging, and every number is a floor and labelled as one |
+| [LongMemEval-S](benchmarks/longmemeval/RESULTS.md) | 500 questions, 2026-08-24: 29 of 30 abstentions correct and 51 of 56 on single-session-assistant in the first all-fast run; 61 percent overall when the reading mode is declared per question, which costs one abstention and lifts multi-session from 18 to 67 percent | both runs stay published because they trade against each other rather than one superseding the other; the ingestion is the weakest honest one, no retrieval tuned per question |
+| [LongMemEval-V2](benchmarks/longmemeval-v2/README.md) | pre-reader so far: the served context holds the full gold evidence for 88 percent (enterprise) and 81 percent (web) of deterministic questions at under a second per query | not a score. The official run needs the protocol's fixed reader and judge and neither key lives here, so it was judged locally by claude-haiku; every number is a floor and labelled as one, and the hypotheses file ships for official re-judging |
 
-The multi-session story inside the third file is the method on display: 18 percent
+The multi-session story inside the third file is the method on display, and it is the
+reason the two runs both stay published: 18 percent
 under the five-file default, a traced autopsy that overturned the working theory
 (91 percent of the failures were extraction, not composition), three fixes shipped
 as product decisions in ADR-0032, a re-measure on the identical questions from
-8/30 to 17/30, and the full 121 confirming it at 81/121 (67 percent). Changing the product to chase a benchmark is the tuning these
-instruments exist to refuse, so every change lands as a product decision first and
-gets measured after.
+8/30 to 17/30, and the full 121 confirming it at 81/121 (67 percent). Changing the
+product to chase a benchmark is the tuning these instruments exist to refuse, so every
+change lands as a product decision first and gets measured after.
 
 ---
 
