@@ -648,6 +648,44 @@ impl Memory {
         })
     }
 
+    /// Reads the bases again, in place, so a caller that has just written can see it.
+    ///
+    /// **This exists because a `Memory` is a snapshot, and one caller writes into the
+    /// thing it is asking questions of.** `promote::run` receives a memory opened once
+    /// and judges every proposal against it, including the duplication lens, whose whole
+    /// question is "does the base already say this". A note written at proposal three is
+    /// invisible at proposal twenty of the same run, so twenty is measured against a base
+    /// that no longer exists.
+    ///
+    /// That is not hypothetical. On 2026-09-05 Cosimo's base held seven separate notes
+    /// about one Apache 2.0 decision, in four folders, every one `stage: captured`, all
+    /// from a single deposit file. Each was individually judged non-duplicate against a
+    /// base that did not yet contain the other six. The `already exists` refusals in the
+    /// log stopped only exact slug collisions; a different slug in a different folder
+    /// went straight through.
+    ///
+    /// The cost is one `Store::sync` per base, which is incremental by content hash, so a
+    /// call after one write re-reads one file. `Base::discover` runs again too, and that
+    /// is the part that costs, so this is called after a write and never per proposal.
+    ///
+    /// **The suggester is deliberately not touched.** [`Memory::with_suggester`] consumes
+    /// the memory rather than taking `&mut self` precisely so a surface cannot swap it
+    /// between a gate and a reply; this method takes `&mut self` and must not become the
+    /// hole in that rule.
+    pub fn reread(&mut self) -> Result<(), OpenError> {
+        let paths: Vec<&Path> = self.opened.iter().map(|p| p.as_path()).collect();
+        let fresh = Memory::open(&paths, self.scope == Scope::All)?;
+        self.entries = fresh.entries;
+        self.aliases = fresh.aliases;
+        self.agents = fresh.agents;
+        self.skipped = fresh.skipped;
+        // Sticky rather than overwritten. A rebuild that happened on the first open is
+        // still a thing the caller has to report, and a later re-read finding a healthy
+        // index would otherwise erase the only evidence it occurred.
+        self.index_was_rebuilt |= fresh.index_was_rebuilt;
+        Ok(())
+    }
+
     /// Swaps in another way of measuring what a question looks like. Nothing but the
     /// suggestion path changes: see [`crate::suggester`] for why that is the only place
     /// a second scorer is allowed to land, and for the bar
@@ -2657,6 +2695,41 @@ something nobody has judged yet
         let settled = rows.iter().find(|r| r.path == "knowledge/settled.md").expect("present");
         assert_eq!(fresh.layer, crate::retrieve::Layer::Short);
         assert_eq!(settled.layer, crate::retrieve::Layer::Long);
+    }
+
+    /// A memory re-read sees a note written after it was opened.
+    ///
+    /// This is the property `kb promote` needs and did not have. It opened once and judged
+    /// every proposal against that snapshot, including the duplication lens, whose only
+    /// question is whether the base already holds the claim. On 2026-09-05 Cosimo's base
+    /// carried seven notes about one Apache 2.0 decision, in four folders, all from a
+    /// single deposit, each judged non-duplicate against a base that did not yet hold the
+    /// other six.
+    #[test]
+    fn a_re_read_sees_what_was_written_after_the_open() {
+        let root = synced_base("reread", &[("knowledge/first.md", "**Search for:** `alpha`\n\n# First\n\nthe alpha fact\n")]);
+        let mut m = Memory::open(&[root.as_path()], true).expect("opens");
+
+        let before = m.ask("beta", 5);
+        assert!(
+            !before.found.iter().any(|f| f.path.contains("second.md")),
+            "the note does not exist yet, so nothing may name it"
+        );
+
+        std::fs::write(
+            root.join("knowledge/second.md"),
+            "**Search for:** `beta`\n\n# Second\n\nthe beta fact\n",
+        )
+        .expect("note");
+
+        m.reread().expect("re-reads");
+
+        let after = m.ask("beta", 5);
+        assert!(
+            after.found.iter().any(|f| f.path.contains("second.md")),
+            "a note written after the open has to be visible once the memory is re-read, \
+             or the duplication lens is judging against a base that no longer exists"
+        );
     }
 
     /// A one agent base on disk with its index synced, the way `kb index` leaves it.

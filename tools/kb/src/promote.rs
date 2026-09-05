@@ -823,7 +823,7 @@ pub fn deposit_files(agent_root: &Path) -> Vec<PathBuf> {
 /// It is **not** the self-limiting rule ADR-0030 leaves unbuilt, which is a junk-rate
 /// threshold measured from what was written, and which cannot be chosen from zero runs.
 pub fn run(
-    memory: &Memory,
+    memory: &mut Memory,
     fleet_root: &Path,
     promoter: &Classifier,
     reviewer: &Classifier,
@@ -834,8 +834,20 @@ pub fn run(
 ) -> Outcome {
     let mut outcome = Outcome::default();
 
-    'agents: for agent in memory.agents.iter().filter(|a| a.routable) {
-        for file in deposit_files(&agent.root) {
+    // The roster is taken once, by value, and the loop walks that rather than the memory.
+    // **This is what lets the memory be re-read mid run**, which the duplication lens needs
+    // and could not have while an iterator over `memory.agents` held it borrowed. Taking a
+    // snapshot of the roster is safe in a way that taking one of the index is not: a run
+    // writes notes, and writing a note never adds or removes an agent.
+    let roster: Vec<(String, PathBuf)> = memory
+        .agents
+        .iter()
+        .filter(|a| a.routable)
+        .map(|a| (a.name.clone(), a.root.clone()))
+        .collect();
+
+    'agents: for (agent_name, agent_root) in &roster {
+        for file in deposit_files(agent_root) {
             // Checked before the deposit file is read rather than after it is decided, so
             // the cap costs nothing once it has bitten. A run that keeps calling models
             // after it stopped writing is paying for output it already refused to use.
@@ -852,20 +864,20 @@ pub fn run(
             // string is what `captured_from` records, a note would name a path that does
             // not exist and a later deletion would be reasoning about the wrong file.
             let relative = file
-                .strip_prefix(&agent.root)
+                .strip_prefix(agent_root)
                 .unwrap_or(&file)
                 .to_string_lossy()
                 .replace('\\', "/");
-            let source = format!("{}/{}", agent.name, relative);
+            let source = format!("{}/{}", agent_name, relative);
             let Ok(text) = std::fs::read_to_string(&file) else { continue };
 
-            let prompt = proposal_prompt(&agent.name, ends_of(&agent.root).as_deref(), &source, &text);
+            let prompt = proposal_prompt(agent_name, ends_of(agent_root).as_deref(), &source, &text);
             let Some(reply) = ask_model(promoter, fleet_root, &prompt) else {
                 outcome.unreachable.push(format!("promoter, on {source}"));
                 continue;
             };
 
-            let proposals = parse_proposals(&reply, &agent.name, &source);
+            let proposals = parse_proposals(&reply, agent_name, &source);
             if proposals.is_empty() {
                 outcome.barren.push(source);
                 continue;
@@ -951,7 +963,27 @@ pub fn run(
                         body: decided.proposal.body.clone(),
                     };
                     match crate::write::note(fleet_root, &decided.proposal.agent, &decided.proposal.slug, &spec) {
-                        Ok(w) => decided.written = Some(w.note),
+                        Ok(w) => {
+                            decided.written = Some(w.note);
+                            // **The base just changed, and the next proposal is about to be
+                            // judged against it.** Without this the duplication lens reads a
+                            // snapshot taken before the run began, so a note written a moment
+                            // ago is invisible to the reader whose entire question is whether
+                            // the base already holds this. Cosimo's seven notes about one
+                            // Apache 2.0 decision are what that looks like after two weeks;
+                            // inside a single document yielding eleven notes it would happen
+                            // in one command.
+                            //
+                            // A failure here is reported and does not stop the run. The write
+                            // succeeded and the note is on disk; what is lost is the lens's
+                            // sight of it, which degrades to the old behaviour rather than to
+                            // something worse, and saying so beats pretending.
+                            if let Err(e) = memory.reread() {
+                                outcome
+                                    .unreachable
+                                    .push(format!("re-reading the base after {}: {e}", decided.proposal.slug));
+                            }
+                        }
                         Err(e) => outcome.unreachable.push(format!("write {}: {e}", decided.proposal.slug)),
                     }
                 } else if !decided.accepted() && !dry_run {

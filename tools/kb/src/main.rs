@@ -2851,7 +2851,7 @@ fn cmd_promote(
     lock: bool,
 ) -> ExitCode {
     let given: Vec<&Path> = paths.iter().map(Path::new).collect();
-    let memory = match memory::Memory::open(&given, all) {
+    let mut memory = match memory::Memory::open(&given, all) {
         Ok(m) => m,
         Err(e) => {
             eprintln!("kb: {e}");
@@ -2905,7 +2905,7 @@ fn cmd_promote(
     };
 
     let today = today();
-    let outcome = promote::run(&memory, root, &promoter, &reviewer, top, dry_run, &today, max);
+    let outcome = promote::run(&mut memory, root, &promoter, &reviewer, top, dry_run, &today, max);
 
     if dry_run {
         println!("dry run: nothing was written and no refusal was recorded.\n");
