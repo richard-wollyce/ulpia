@@ -172,6 +172,7 @@ mod tests {
             text: text.into(),
             provenance: None,
             stage: None,
+            captured_from: None,
         }
     }
 

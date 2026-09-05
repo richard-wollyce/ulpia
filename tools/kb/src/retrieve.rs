@@ -37,6 +37,12 @@ pub struct Passage {
     pub excerpt: String,
     pub provenance: Option<String>,
     pub stage: Option<String>,
+    /// The deposit the note holding this passage was distilled from, when it was.
+    ///
+    /// It rides on the passage rather than on the file because every surface here reads
+    /// passages, and a reader deciding how much weight to give a claim wants to know
+    /// where it came from at the moment they read it, not after a second lookup.
+    pub captured_from: Option<String>,
 }
 
 /// Which memory a file belongs to, which decides how much a reader should lean on it.
@@ -186,6 +192,7 @@ pub fn fuse(keyword: &[index::Hit], text: &[store::Hit], top: usize) -> Vec<Retr
             excerpt: hit.excerpt.clone(),
             provenance: hit.provenance.clone(),
             stage: hit.stage.clone(),
+            captured_from: hit.captured_from.clone(),
         });
     }
 
@@ -241,6 +248,7 @@ mod tests {
             text: text.into(),
             provenance: Some("agent".into()),
             stage: Some("distilled".into()),
+            captured_from: None,
         }
     }
 

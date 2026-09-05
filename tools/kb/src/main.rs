@@ -29,6 +29,7 @@ usage:
     kb init <name> [fleet-root]
     kb init --person [fleet-root]
     kb write <agent> <slug> [fleet-root] --keys <a, b> --summary <one line> [--folder F]
+                [--captured-from PATH]
     kb fleet [path]... [--all]
     kb blocks [path] [--emit]
     kb eval <gold.tsv> [path]... [--top N] [--all] [--classify]
@@ -67,6 +68,13 @@ usage:
                 list: narrow to one of them
     --stage     write: raw, distilled or derived. Default derived.
                 list: narrow to raw, captured, distilled or derived
+    --captured-from write: the deposit this note was distilled from. Optional, and
+                written into the note's front matter rather than its prose, so it
+                travels as a column on the index and reaches every passage without
+                competing with them. `kb promote` always sets it. It is deliberately
+                not called `source`: that word makes `kb check` demand an
+                evidence_tier and a valid_for beside it, and those are gradings, which
+                a writer must not be able to award itself
     --base      list: one agent, by its directory name
     --kind      list: the species read from the folder: memory, skills or tools
     -m          commit: the message. Required, and so is at least one path
@@ -294,6 +302,7 @@ const LINES_SHOWN: usize = 3;
 /// Flags that consume the argument after them.
 const VALUE_FLAGS: &[&str] = &[
     "--top", "--keys", "--summary", "--folder", "--provenance", "--stage", "--base", "--kind",
+    "--captured-from",
     "-m", "--port", "--max", "--gold", "--chose", "--owner", "--why",
     "--reviewer", "--out", "--from", "--objection", "--resolve",
 ];
@@ -583,6 +592,10 @@ fn cmd_write(agent: &str, slug: &str, fleet: &Path, args: &[String]) -> ExitCode
         folder: flag_value(args, "--folder").unwrap_or_else(|| "knowledge".to_string()),
         provenance: flag_value(args, "--provenance").unwrap_or_else(|| "agent".to_string()),
         stage: flag_value(args, "--stage").unwrap_or_else(|| "derived".to_string()),
+        // Optional here and mandatory in nothing: a note typed by a person is not
+        // captured from anywhere, and demanding a source would only teach the caller to
+        // invent one. `kb promote` always passes it, because it always knows.
+        captured_from: flag_value(args, "--captured-from"),
         body,
     };
 
@@ -3650,6 +3663,7 @@ with a body"];
             why: vec!["keywords #1".into(), "text #1".into()],
             matched: vec!["rollback".into()],
             passages: vec![kb::retrieve::Passage {
+                captured_from: None,
                 heading_path: "Deploys > Rollback".into(),
                 text: "write the rollback down first".into(),
                 excerpt: " ... rollback ... ".into(),

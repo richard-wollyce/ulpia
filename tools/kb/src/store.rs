@@ -243,6 +243,19 @@ pub struct Hit {
     /// because `search` never joined the table that holds it.
     pub provenance: Option<String>,
     pub stage: Option<String>,
+    /// The deposit the note was distilled from, from the `files` row.
+    ///
+    /// **This column exists because front matter is not indexed and a test pins that.**
+    /// `chunk` skips everything between the opening and closing `---`, deliberately, so a
+    /// provenance line written there is invisible to the text scorer no matter how well
+    /// it is worded. Measured on 2026-09-05: a base whose fifteen notes all carried the
+    /// author on line 6 answered "de qual documento vem, quem escreveu" with "a
+    /// biblioteca nao registra essa proveniencia", and `kb route` on the author's name
+    /// matched nothing at all. The field was linted, and unreachable.
+    ///
+    /// So it travels as a column, the same way `provenance` and `stage` do, and arrives
+    /// beside every passage rather than competing with them for a seat.
+    pub captured_from: Option<String>,
     // No score field on purpose. BM25 still decides the SQL ordering, but the fusion
     // in main.rs is Reciprocal Rank Fusion, which uses position and deliberately
     // ignores the raw value, so carrying it out of here would be a field nothing
@@ -289,6 +302,9 @@ impl Store {
                 hash        TEXT NOT NULL,
                 provenance  TEXT,
                 stage       TEXT,
+                -- The deposit a promoted note was distilled from. NULL for anything a
+                -- person wrote by hand, which is the ordinary case and not a defect.
+                captured_from TEXT,
                 -- 1 in the base's declared private layer, 0 otherwise. Two states,
                 -- because the declaration is read off disk and cannot be absent.
                 -- The column this replaced, `tracked`, had a third: NULL for git
@@ -317,10 +333,27 @@ impl Store {
             .conn
             .execute("ALTER TABLE files ADD COLUMN private INTEGER NOT NULL DEFAULT 0", [])
             .is_ok();
-        if added {
+
+        // `captured_from` arrived later and takes the same treatment for the same reason,
+        // which is worth stating because adding a nullable column looks harmless. `sync`
+        // skips any file whose hash it already knows, so a column added to an existing
+        // index would stay NULL for every note already on disk, forever, and the one
+        // thing that reads it would quietly conclude those notes came from nowhere. A
+        // wipe costs seconds and the index is derived by ADR-0003, so the honest answer
+        // is the cheap one.
+        let origin_added = self
+            .conn
+            .execute("ALTER TABLE files ADD COLUMN captured_from TEXT", [])
+            .is_ok();
+
+        if added || origin_added {
             self.conn
                 .execute_batch("DELETE FROM chunks; DELETE FROM files;")?;
         }
+        // Only the privacy migration is reported. The caller prints that one because a
+        // pre-ADR-0034 index cannot say which rows were private and serving it would be a
+        // correctness failure; an index missing an origin column serves correct results
+        // that carry one less field, which is a rebuild and not a warning.
         Ok(added)
     }
 
@@ -369,14 +402,16 @@ impl Store {
             };
 
             tx.execute(
-                "INSERT OR REPLACE INTO files (base, path, hash, provenance, stage, private)
-                 VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+                "INSERT OR REPLACE INTO files
+                     (base, path, hash, provenance, stage, captured_from, private)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
                 params![
                     base_name,
                     file.rel,
                     hash,
                     field("provenance"),
                     field("stage"),
+                    field("captured_from"),
                     file.private as i64
                 ],
             )?;
@@ -447,7 +482,7 @@ impl Store {
             "SELECT chunks.base, chunks.path, chunks.heading_path,
                     snippet(chunks, 3, '', '', ' ... ', 14),
                     chunks.text,
-                    f.provenance, f.stage,
+                    f.provenance, f.stage, f.captured_from,
                     bm25(chunks, 0.0, 0.0, 2.0, 1.0) AS score
              FROM chunks
              LEFT JOIN files f
@@ -468,6 +503,7 @@ impl Store {
                 text: row.get(4)?,
                 provenance: row.get(5)?,
                 stage: row.get(6)?,
+                captured_from: row.get(7)?,
             })
         })?;
 

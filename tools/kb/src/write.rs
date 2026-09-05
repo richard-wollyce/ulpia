@@ -51,6 +51,26 @@ pub struct Note {
     pub folder: String,
     pub provenance: String,
     pub stage: String,
+    /// The deposit this note was distilled from, as the path promotion read it at.
+    ///
+    /// **Nothing recorded this until 2026-09-05, and the pipeline knew it the whole way.**
+    /// `promote::Proposal` carries `source` through promoter one, through the router
+    /// evidence, through all three review lenses and into `kb-rejections.txt`, and then
+    /// the accept branch built this struct, which had nowhere to put it. The one step
+    /// that persists was the one step that forgot, so a note on disk could not say which
+    /// document it came from, and neither could a reader six months later.
+    ///
+    /// **It is not called `source`, and the name is the decision.** [`crate::checks`] W04
+    /// fires on front matter declaring `source`, and demands `evidence_tier` and
+    /// `valid_for` beside it. Those are gradings. A model that assigns its own evidence
+    /// tier produces tier D output wearing an A, so the writer must not be able to claim
+    /// one. This field is a fact about where text came from rather than a judgement about
+    /// how good it is, so it carries a different word and leaves the grading to whoever is
+    /// entitled to make it.
+    ///
+    /// It is also the proof a deletion stands on: the only evidence that a given source
+    /// was absorbed is a note on disk naming it here.
+    pub captured_from: Option<String>,
     pub body: String,
 }
 
@@ -232,8 +252,21 @@ fn render_note(spec: &Note) -> String {
         .map(|k| format!("`{k}`"))
         .collect::<Vec<_>>()
         .join(", ");
+    // The origin goes in the front matter rather than in the prose, because the front
+    // matter is what `store::sync` lifts into columns on `files` and the body is what the
+    // chunker indexes. As a line of prose it would be one more passage competing for a
+    // seat at the answer table; as a column every hit can carry it for free.
+    //
+    // It is omitted entirely rather than written empty. A note with no origin is the
+    // ordinary case for anything a person wrote by hand, and `captured_from:` with
+    // nothing after it would be a claim that the field was considered and came back
+    // blank, which is not the same statement.
+    let origin = match spec.captured_from.as_deref().map(str::trim) {
+        Some(src) if !src.is_empty() => format!("captured_from: {src}\n"),
+        _ => String::new(),
+    };
     format!(
-        "---\nprovenance: {}\nstage: {}\n---\n\n**Search for:** {keys}\n\n**Exists to:** \
+        "---\nprovenance: {}\nstage: {}\n{origin}---\n\n**Search for:** {keys}\n\n**Exists to:** \
          {}\n\n{}\n",
         spec.provenance,
         spec.stage,
@@ -309,6 +342,7 @@ mod tests {
             folder: "knowledge".into(),
             provenance: "agent".into(),
             stage: "derived".into(),
+            captured_from: None,
             body: "# A thing\n\nThe body.".into(),
         }
     }
@@ -357,6 +391,35 @@ mod tests {
         let map = std::fs::read_to_string(&out.map).expect("map");
         assert!(map.contains("- **[[new-thing]]**"), "{map}");
         assert!(map.contains("Search for: `prefill`, `kv cache`."), "{map}");
+    }
+
+    /// The origin reaches disk, and the note that has none does not claim to have looked.
+    ///
+    /// Both halves are the point. `kb promote` knew the deposit behind every proposal and
+    /// dropped it at this exact step for as long as the command has existed, so a
+    /// promoted note could not say what it was distilled from. And a note a person typed
+    /// has no deposit at all, which is the ordinary case: writing `captured_from:` with
+    /// nothing after it would assert that the question was asked and came back empty,
+    /// which is a different statement from never having had a source.
+    #[test]
+    fn the_deposit_a_note_came_from_reaches_the_front_matter_and_is_omitted_when_absent() {
+        let dir = base("origin");
+
+        let mut from_a_deposit = spec();
+        from_a_deposit.captured_from = Some("cosimo/inbox/2026-09-05-gestao-ti.txt".into());
+        let out = note(&dir, "zed", "distilled-note", &from_a_deposit).expect("written");
+        let text = std::fs::read_to_string(&out.note).expect("note");
+        assert!(
+            text.starts_with(
+                "---\nprovenance: agent\nstage: derived\n\
+                 captured_from: cosimo/inbox/2026-09-05-gestao-ti.txt\n---"
+            ),
+            "the origin is front matter, above the keys, so store::sync lifts it: {text}"
+        );
+
+        let out = note(&dir, "zed", "hand-written-note", &spec()).expect("written");
+        let text = std::fs::read_to_string(&out.note).expect("note");
+        assert!(!text.contains("captured_from"), "no source means no line at all: {text}");
     }
 
     /// The entry has to join its own section, not whichever one happens to be last.

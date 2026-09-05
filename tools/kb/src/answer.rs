@@ -116,6 +116,9 @@ pub fn prompt(question: &str, answer: &Answer, mode: Mode) -> String {
          - A passage marked SHORT MEMORY is recent and nobody has judged or distilled \
            it yet. You may use it. If you do, say that the claim comes from short \
            memory, so the reader knows it is fresh rather than settled.\n\
+         - A passage marked \"captured from\" names the document the note was distilled \
+           from. When the question asks where something comes from, that is the answer, \
+           and it is a fact the library does hold.\n\
          - Answer in the language the question was asked in. Be brief: the reader \
            asked a question, not for a report.\n\n",
     );
@@ -142,12 +145,22 @@ pub fn prompt(question: &str, answer: &Answer, mode: Mode) -> String {
             crate::retrieve::Layer::Long => "",
         };
         for p in f.passages.iter().take(mode.passages()) {
+            // The document the note was distilled from, when the note records one. Asked
+            // "which document does this come from, who wrote it, what year", a base whose
+            // notes all carried that in front matter answered that it did not record such
+            // a thing, because front matter is not chunked and nothing else carried it.
+            // The passage header is where the reader is already looking.
+            let origin = match &p.captured_from {
+                Some(src) if !src.is_empty() => format!(" [captured from {src}]"),
+                _ => String::new(),
+            };
             out.push_str(&format!(
-                "\n--- {}/{} ({}){}\n{}\n",
+                "\n--- {}/{} ({}){}{}\n{}\n",
                 f.base,
                 f.path,
                 if p.heading_path.is_empty() { "top" } else { &p.heading_path },
                 layer,
+                origin,
                 p.text.trim()
             ));
         }
@@ -300,6 +313,7 @@ mod tests {
             why: vec!["keywords #1".into()],
             matched: vec![],
             passages: vec![crate::retrieve::Passage {
+                captured_from: None,
                 heading_path: "H".into(),
                 text: text.into(),
                 excerpt: String::new(),
@@ -347,6 +361,7 @@ mod tests {
         let mut f = hit("zed", "knowledge/inovacao.md", "first");
         f.passages = (1..=40)
             .map(|i| crate::retrieve::Passage {
+                captured_from: None,
                 heading_path: format!("section {i}"),
                 text: format!("passage number {i}"),
                 excerpt: String::new(),

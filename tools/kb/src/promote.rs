@@ -894,6 +894,13 @@ pub fn run(
                         folder: decided.proposal.folder.clone(),
                         provenance: "agent".into(),
                         stage: CAPTURED.into(),
+                        // The deposit finally reaches disk. `source` has ridden this
+                        // struct's neighbour since the first version, through both
+                        // promoters and into every rejection record, and stopped here
+                        // because `write::Note` had no field for it. So promotion could
+                        // tell you why it refused a note and not where an accepted one
+                        // came from.
+                        captured_from: Some(decided.proposal.source.clone()),
                         body: decided.proposal.body.clone(),
                     };
                     match crate::write::note(fleet_root, &decided.proposal.agent, &decided.proposal.slug, &spec) {

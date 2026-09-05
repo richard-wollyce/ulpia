@@ -471,7 +471,21 @@ impl Server {
                     (Some(pr), None) => format!("  [{pr}]"),
                     _ => String::new(),
                 };
-                out.push_str(&format!("\n### {}{}\n{}\n", p.heading_path, provenance, p.text.trim()));
+                // The deposit the note was distilled from, when there is one. A model
+                // weighing a claim gets to see the document behind it in the same line
+                // as the claim, which is the whole reason the field is carried as a
+                // column rather than written into the prose.
+                let origin = match &p.captured_from {
+                    Some(src) if !src.is_empty() => format!("  [from {src}]"),
+                    _ => String::new(),
+                };
+                out.push_str(&format!(
+                    "\n### {}{}{}\n{}\n",
+                    p.heading_path,
+                    provenance,
+                    origin,
+                    p.text.trim()
+                ));
             }
             out.push('\n');
         }
