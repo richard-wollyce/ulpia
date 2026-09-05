@@ -36,7 +36,7 @@ plainly when nothing matched rather than returning a confident guess.
 
 ## What is in the box, and the pain each piece answers
 
-Twenty-two verbs. Each exists because something went wrong without it, and the table says what.
+Twenty-three verbs. Each exists because something went wrong without it, and the table says what.
 A verb whose pain you do not have is a verb you do not need to learn.
 
 | Verb | The pain | What it does | What it never does |
@@ -45,6 +45,7 @@ A verb whose pain you do not have is a verb you do not need to learn.
 | `answer` | Retrieval hands you passages; you still have to read them | Runs `route`, then hands only what was served to the model named in `fleet.txt`, which must cite it or say the passages do not hold the answer | Reaches the model on a `nothing` verdict. Lets the model see anything retrieval did not serve |
 | `remember` | "Is this worth writing down, or do I already have it?" | Measures a claim against the base and proposes ADD, UPDATE or NOOP, with the overlapping passage as evidence | Writes. Decides. Proposes DELETE, because absence and falsehood look the same to a word count |
 | `write` | A note without its keyword line is a note nothing can find, and people forget the line | Writes the note with its `Search for:` header and its map entry in one step, and refuses without keys | Writes half: a failed map entry deletes the note again |
+| `ingest` | A document on somebody's disk is not knowledge, and turning it into knowledge was seven prose steps that eleven of thirteen agents did not have | Moves the document into the owning agent's deposit, extracts its text through `tools/extract/<ext>.cmd`, distils it through the same `promote` the sweep uses, and then destroys the source | Deletes a document that produced no note. Deletes a path the caller typed: it only ever removes what it moved. Grows its own promoter, so ingestion and the nightly sweep cannot drift |
 | `promote` | Raw material piles up in an inbox and nobody distils it | Two promoters, three questions, unanimity: the first proposes notes without seeing the base, the second decides without seeing the first's reasoning. Writes at stage `captured` | Writes on a split decision. Starts over another run's lock when `--lock` is given |
 | `check` | A broken link, a missing keyword line, an em dash: each one is invisible until it costs an hour | Lints every base: E01 broken link, E02 not indexed, W06 thin keywords, and the house rules | Fixes anything. Touches a file |
 | `index` | Full text search needs an index, and an index that drifts from the files lies | Builds one SQLite file per base from the markdown, content hashed so unchanged files cost nothing, and counts what it could build no entry for: the files no question can reach, and the ones exempt by name | Holds anything that cannot be rebuilt from the files. Runs in the background |
