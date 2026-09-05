@@ -35,7 +35,7 @@ use crate::retrieve::Retrieved;
 /// wants the whole base read. Three modes, chosen by the caller, never guessed.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Mode {
-    /// The default: top files, whole passages, one model call. The librarian's answer.
+    /// The default: top files, one model call. The librarian's answer.
     Fast,
     /// The bigger table: up to twelve files, one call. For questions whose evidence
     /// spreads across several files but still fits one reading.
@@ -52,6 +52,34 @@ impl Mode {
             Mode::Fast => 5,
             Mode::Expanded => 12,
             Mode::Complete => usize::MAX,
+        }
+    }
+
+    /// How many of a file's ranked passages reach the prompt.
+    ///
+    /// **This was the constant 2, and it silently dropped correct answers.** Measured on
+    /// 2026-09-05 against a base built by ingesting one academic PDF: asked "quais os
+    /// tipos de inovacao", the answer surface replied that the library held no taxonomy,
+    /// while the file it had ranked first carried a section headed "The four kinds".
+    /// Retrieval had returned four passages from that file and ranked the right one
+    /// fourth, so the prompt never saw it. `--expanded` failed identically, because
+    /// [`Mode::files`] widens the table sideways and nothing widened it downward.
+    ///
+    /// So the two axes are separate and both belong to the mode. Files decide how many
+    /// documents answer; passages decide how much of each document is read. A cap on the
+    /// second is not an opinion about relevance, it is the only thing bounding prompt
+    /// size once a note is long, and one note in this fleet has a hundred sections.
+    ///
+    /// The numbers come from the section counts of the 145 knowledge notes on disk,
+    /// counted the same day: median 7, p90 15, max 100. `Fast` reads the median note
+    /// whole, `Expanded` reads the p90 note whole, and `Complete` goes deeper again
+    /// while staying bounded, because [`BATCH`] caps files per call and nothing else
+    /// caps sections per file.
+    pub fn passages(self) -> usize {
+        match self {
+            Mode::Fast => 8,
+            Mode::Expanded => 16,
+            Mode::Complete => 32,
         }
     }
     pub fn label(self) -> &'static str {
@@ -113,7 +141,7 @@ pub fn prompt(question: &str, answer: &Answer, mode: Mode) -> String {
             crate::retrieve::Layer::Short => " [SHORT MEMORY: recent, not distilled]",
             crate::retrieve::Layer::Long => "",
         };
-        for p in f.passages.iter().take(2) {
+        for p in f.passages.iter().take(mode.passages()) {
             out.push_str(&format!(
                 "\n--- {}/{} ({}){}\n{}\n",
                 f.base,
@@ -305,6 +333,41 @@ mod tests {
         assert!(p.contains("before any caveat"), "hedging comes after the commitment");
         assert!(p.contains("the library does not"), "refusal stays a legal commitment");
         assert!(p.contains("say if the facts look incomplete"));
+    }
+
+    /// The regression that produced this method. A file whose answer sits in its fourth
+    /// ranked passage used to reach the model with two, and the model then correctly
+    /// reported that the library did not hold what was in fact on disk. Measured on a
+    /// real base on 2026-09-05, on the question "quais os tipos de inovacao".
+    ///
+    /// The second half matters as much: the cap still exists, so a note with a hundred
+    /// sections cannot spend the whole prompt on itself.
+    #[test]
+    fn a_late_ranked_passage_still_reaches_the_model_and_the_cap_still_holds() {
+        let mut f = hit("zed", "knowledge/inovacao.md", "first");
+        f.passages = (1..=40)
+            .map(|i| crate::retrieve::Passage {
+                heading_path: format!("section {i}"),
+                text: format!("passage number {i}"),
+                excerpt: String::new(),
+                provenance: None,
+                stage: None,
+            })
+            .collect();
+        let a = answer_with(vec![f], Verdict::Hit, 30.0);
+
+        let fast = prompt("quais os tipos de inovacao", &a, Mode::Fast);
+        assert!(fast.contains("passage number 4"), "the passage the old constant 2 dropped");
+        assert!(fast.contains("passage number 8"), "fast reads the median note whole");
+        assert!(!fast.contains("passage number 9"), "and stops there");
+
+        let expanded = prompt("quais os tipos de inovacao", &a, Mode::Expanded);
+        assert!(expanded.contains("passage number 16"), "expanded reads the p90 note whole");
+        assert!(!expanded.contains("passage number 17"));
+
+        let complete = prompt("quais os tipos de inovacao", &a, Mode::Complete);
+        assert!(complete.contains("passage number 32"));
+        assert!(!complete.contains("passage number 33"), "even complete is bounded per file");
     }
 
     #[test]
