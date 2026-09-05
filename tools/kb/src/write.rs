@@ -39,6 +39,7 @@ use std::path::{Path, PathBuf};
 use crate::checks::{PROVENANCE, STAGE};
 
 /// What a note needs before it is allowed to exist.
+#[derive(Clone)]
 pub struct Note {
     /// One line for the map, saying what the file is **about**. Not an inventory of
     /// what it mentions: that distinction cost three answers on 2026-08-17, when a
@@ -80,6 +81,12 @@ pub struct Written {
     pub map: PathBuf,
     pub section: String,
     pub section_created: bool,
+    /// Keys the index could not reach, left out of the note that was written.
+    ///
+    /// Reported rather than silently swallowed: a proposer that keeps offering keys no
+    /// question can use is a signal about the proposer, and it is the same argument
+    /// `kb-rejections.txt` makes about proposals that keep being refused.
+    pub dropped_keys: Vec<String>,
 }
 
 // **There is no staging step any more, and there was one for a reason worth keeping.**
@@ -158,8 +165,10 @@ impl std::fmt::Display for WriteError {
             ),
             WriteError::DeadKeys(keys) => write!(
                 f,
-                "unsearchable key(s): {}. They reach neither the keyword index nor the \
-                 phrase index, so no question finds this note by them. Several written \
+                "every key given is unsearchable: {}. Not one of them reaches the keyword \
+                 index or the phrase index, so the note would exist and no question would \
+                 ever find it. A dead key among live ones is dropped and the note is still \
+                 written; this is the case where nothing is left. Several written \
                  words that reduce to one \
                  after stopwords is the usual cause: `o que e ITIL` indexes as `itil` and \
                  is thrown away as a duplicate of the single key beside it. Rewrite so the \
@@ -236,10 +245,25 @@ pub fn note(fleet: &Path, agent: &str, slug: &str, spec: &Note) -> Result<Writte
     // written, so a write-time link check would refuse exactly the cross references a
     // well distilled document produces. Broken links are checked over the whole batch,
     // after it lands, and reported rather than auto-edited.
+    // **Dead keys are dropped, not fatal, and that dosage was measured rather than
+    // guessed.** The first version refused the whole note, and on the first live run over
+    // a real document it threw away five good notes because one key in fifteen was
+    // `best practices` or `IT governance`. That is the wrong trade twice over: W07 is a
+    // warning in the linter, not an error, and an unreachable key reaches nothing whether
+    // it is on the page or not, so removing it costs exactly nothing and keeps the note.
+    //
+    // The property this module exists for survives intact, because it was never "every key
+    // works". It is that a note is reachable. So the refusal moves to the only case where
+    // that fails: no key survives at all, and the note would be invisible.
     let dead = crate::index::unreachable_keys(&spec.keys);
-    if !dead.is_empty() {
+    let live: Vec<String> =
+        spec.keys.iter().filter(|k| !dead.contains(k)).cloned().collect();
+    if live.is_empty() {
         return Err(WriteError::DeadKeys(dead));
     }
+    let mut narrowed = spec.clone();
+    narrowed.keys = live;
+    let spec = &narrowed;
     let rendered = render_note(spec);
     let found = crate::checks::dashes(&rendered);
     if !found.is_empty() {
@@ -275,7 +299,7 @@ pub fn note(fleet: &Path, agent: &str, slug: &str, spec: &Note) -> Result<Writte
         return Err(WriteError::Io(map_path, e));
     }
 
-    Ok(Written { note: note_path, map: map_path, section, section_created })
+    Ok(Written { note: note_path, map: map_path, section, section_created, dropped_keys: dead })
 }
 
 /// The agent's directory, accepting both shapes ADR-0011 and ADR-0008 leave open:
@@ -469,23 +493,37 @@ mod tests {
         assert!(map.contains("Search for: `prefill`, `kv cache`."), "{map}");
     }
 
-    /// A key no question can reach is refused here, not reported later.
+    /// A key no question can reach is dropped, and the note is still written.
     ///
     /// `o que e ITIL` is the commonest shape a Portuguese question takes and it is not a
     /// legal key: it reduces to `itil` after stopwords, which the single key beside it
-    /// already covers, so the index throws it away. The whole purpose of this module is
-    /// that a note and the words reaching it arrive together, and until this gate existed
-    /// the command could hand you a note whose keys were half decorative.
+    /// already covers, so the index throws it away. Refusing the note over it was measured
+    /// as the wrong dosage on the first live run over a real document, where five good
+    /// notes were lost because one key in fifteen was `best practices`.
     #[test]
-    fn a_key_the_index_cannot_reach_is_refused_before_anything_is_written() {
+    fn a_key_the_index_cannot_reach_is_dropped_and_the_note_survives() {
         let dir = base("deadkeys");
-        let mut bad = spec();
-        bad.keys = vec!["ITIL".into(), "o que e ITIL".into()];
+        let mut mixed = spec();
+        mixed.keys = vec!["ITIL".into(), "o que e ITIL".into()];
 
-        let err = note(&dir, "zed", "itil", &bad).expect_err("a dead key is refused");
+        let out = note(&dir, "zed", "itil", &mixed).expect("one live key is enough");
+        assert_eq!(out.dropped_keys, vec!["o que e ITIL".to_string()], "and it is reported");
+
+        let text = std::fs::read_to_string(&out.note).expect("note");
+        assert!(text.contains("`ITIL`"), "the reachable key is on the page: {text}");
+        assert!(!text.contains("o que e ITIL"), "the unreachable one is not: {text}");
+    }
+
+    /// The property is that a note is reachable, so the refusal is when nothing reaches it.
+    #[test]
+    fn a_note_whose_every_key_is_dead_is_refused_because_it_would_be_invisible() {
+        let dir = base("alldead");
+        let mut hopeless = spec();
+        hopeless.keys = vec!["o que e ITIL".into(), "what is ITIL".into()];
+
+        let err = note(&dir, "zed", "itil", &hopeless).expect_err("nothing would reach it");
         let said = err.to_string();
-        assert!(said.contains("o que e ITIL"), "the offending key is named: {said}");
-        assert!(said.contains("W07"), "and tied to the check it enforces: {said}");
+        assert!(said.contains("W07"), "tied to the check it enforces: {said}");
         assert!(!dir.join("fleet/zed/knowledge/itil.md").exists(), "nothing left behind");
     }
 

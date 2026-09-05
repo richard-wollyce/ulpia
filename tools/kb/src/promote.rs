@@ -205,6 +205,13 @@ pub struct Outcome {
     /// Promoters that were configured and did not answer. Degraded and silent is the
     /// combination this repository keeps paying for, so it is carried rather than logged.
     pub unreachable: Vec<String>,
+    /// Keys dropped at the write because the index cannot reach them, per note.
+    ///
+    /// A written note is still a written note; these are the words that would have gone
+    /// on it and reach nothing. Kept because the pattern is about the promoter rather
+    /// than about any one note: on the first live run over a document, `best practices`,
+    /// `IT governance` and `IT challenges` came back proposal after proposal.
+    pub dropped_keys: Vec<(String, Vec<String>)>,
     /// The cap, if a cap ended the run before the deposit was exhausted.
     ///
     /// Carried rather than inferred, because a run that stopped at its cap and a run that
@@ -399,7 +406,14 @@ pub fn proposal_prompt(agent: &str, ends: Option<&str>, source: &str, deposit: &
            side. Avoid multi word keys whose component words are generic: the index splits \
            them and a bare common word steals unrelated questions.\n\
          - `summary` says what the note is ABOUT in one line, not an inventory of what it \
-           mentions.\n\n\
+           mentions.\n\
+         - **No em dashes and no en dashes**, anywhere: not in the body, not in the \
+           summary. Use a comma, a full stop or a colon. House style forbids them, the \
+           linter refuses them, and so does the writer, so a proposal carrying one is \
+           thrown away no matter how good it is.\n\
+         - Every key must survive on its own. A key made only of common words reduces to \
+           nothing once stopwords are removed, so `o que e COBIT` and `IT governance` \
+           reach no question. Write `COBIT` and `governanca de TI`.\n\n\
          FORMAT. Zero or more blocks, exactly like this, nothing else in your output:\n\n\
          PROPOSAL\n\
          slug: short-kebab-case-name\n\
@@ -1006,6 +1020,16 @@ pub fn run(
                     };
                     match crate::write::note(fleet_root, &decided.proposal.agent, &decided.proposal.slug, &spec) {
                         Ok(w) => {
+                            if !w.dropped_keys.is_empty() {
+                                // Carried on the outcome rather than printed here, because
+                                // this function has no terminal. A promoter that keeps
+                                // offering keys no question can use is a signal about the
+                                // promoter, the same argument kb-rejections.txt makes.
+                                outcome.dropped_keys.push((
+                                    decided.proposal.slug.clone(),
+                                    w.dropped_keys.clone(),
+                                ));
+                            }
                             decided.written = Some(w.note);
                             // **The base just changed, and the next proposal is about to be
                             // judged against it.** Without this the duplication lens reads a

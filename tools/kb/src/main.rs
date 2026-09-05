@@ -773,6 +773,9 @@ fn cmd_ingest(
     for u in &outcome.unreachable {
         println!("  could not reach {u}");
     }
+    for (slug, keys) in &outcome.dropped_keys {
+        println!("  {slug}: dropped unreachable key(s) {}", keys.join(", "));
+    }
 
     // The name promotion recorded in `captured_from`, which is what the proof matches on.
     let deposit_name = format!(
@@ -876,6 +879,16 @@ fn cmd_write(agent: &str, slug: &str, fleet: &Path, args: &[String]) -> ExitCode
         Ok(made) => {
             println!("wrote {}", made.note.display());
             println!("  listed in {} under {}", made.map.display(), made.section);
+            if !made.dropped_keys.is_empty() {
+                // Said out loud rather than swallowed. The note is reachable by what is
+                // left, and the caller should know which of the words it chose reach
+                // nothing, because it will choose them again otherwise.
+                println!(
+                    "  dropped {} key(s) the index cannot reach: {}",
+                    made.dropped_keys.len(),
+                    made.dropped_keys.join(", ")
+                );
+            }
             if made.section_created {
                 println!("  that section did not exist and was created");
             }
