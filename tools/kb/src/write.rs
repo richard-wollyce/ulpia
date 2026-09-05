@@ -97,6 +97,10 @@ pub enum WriteError {
     BadSlug(String),
     Exists(PathBuf),
     NoKeys,
+    /// Keys the index cannot reach, from the linter's own `unreachable_keys`.
+    DeadKeys(Vec<String>),
+    /// Em or en dashes in what would have been written, from the linter's own `dashes`.
+    Dashes(Vec<(usize, char)>),
     EmptyBody,
     BadField(&'static str, String, String),
     Io(PathBuf, std::io::Error),
@@ -137,6 +141,29 @@ impl std::fmt::Display for WriteError {
                  question can reach. Give the words a real question would use, not a \
                  description of the file."
             ),
+            WriteError::DeadKeys(keys) => write!(
+                f,
+                "unsearchable key(s): {}. They reach neither the keyword index nor the \
+                 phrase index, so no question finds this note by them. Several written \
+                 words that reduce to one \
+                 after stopwords is the usual cause: `o que e ITIL` indexes as `itil` and \
+                 is thrown away as a duplicate of the single key beside it. Rewrite so the \
+                 word carrying the meaning is the one that survives. This is W07, refused \
+                 at the write instead of found later.",
+                keys.iter().map(|k| format!("`{k}`")).collect::<Vec<_>>().join(", ")
+            ),
+            WriteError::Dashes(found) => write!(
+                f,
+                "an em or en dash on line {} of the note this would have written. House \
+                 style forbids them and this is W03, refused at the write. 28 of the 47 \
+                 notes `kb promote` has written carry one, because nothing checked and \
+                 nobody ran `kb check` afterwards.",
+                found
+                    .iter()
+                    .map(|(line, _)| line.to_string())
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            ),
             WriteError::EmptyBody => write!(
                 f,
                 "the note body was empty. It is read from stdin: pipe the markdown in, \
@@ -169,6 +196,41 @@ pub fn note(fleet: &Path, agent: &str, slug: &str, spec: &Note) -> Result<Writte
     check_field("provenance", &spec.provenance, PROVENANCE)?;
     check_field("stage", &spec.stage, STAGE)?;
 
+    // **The linter's rules, enforced where the file is made rather than found afterwards.**
+    //
+    // Counted on 2026-09-05 over every note `kb promote` has ever written: 28 of 47 carry
+    // an em dash. The house rule has its own linter check, its own line in every
+    // constitution and its own paragraph in CLAUDE.md, and 60 percent of the machine's
+    // unattended output violates it, because `kb write` ran no check and nobody runs
+    // `kb check` after a promotion. The same pass found 27 dead keys fleet wide, which is
+    // worse than untidy: a key the index cannot reach is a note that question cannot find,
+    // which is the exact failure this module exists to prevent.
+    //
+    // These call the linter's own functions rather than restating the rules. That is not
+    // tidiness either. `checks.rs` and `write.rs` kept separate copies of the STAGE list
+    // and the linter accepted a word the writer refused, so promotion could admit a
+    // proposal unanimously and then fail at the write with nobody watching. Two
+    // implementations of one rule drift, and here they would drift unattended.
+    //
+    // A refusal costs one note. A defective note costs every question it later wins, and
+    // promotion already has somewhere to put a refusal: it lands in `kb-rejections.txt`
+    // with its reason, exactly like a lens saying no.
+    //
+    // **E01 is deliberately not here.** The promoter emits `[[links]]` to sibling notes
+    // proposed in the same batch, which do not exist yet at the moment the first one is
+    // written, so a write-time link check would refuse exactly the cross references a
+    // well distilled document produces. Broken links are checked over the whole batch,
+    // after it lands, and reported rather than auto-edited.
+    let dead = crate::index::unreachable_keys(&spec.keys);
+    if !dead.is_empty() {
+        return Err(WriteError::DeadKeys(dead));
+    }
+    let rendered = render_note(spec);
+    let found = crate::checks::dashes(&rendered);
+    if !found.is_empty() {
+        return Err(WriteError::Dashes(found));
+    }
+
     let root = agent_root(fleet, agent);
     if !root.is_dir() {
         return Err(WriteError::NoAgent(root));
@@ -191,8 +253,7 @@ pub fn note(fleet: &Path, agent: &str, slug: &str, spec: &Note) -> Result<Writte
     if let Some(parent) = note_path.parent() {
         std::fs::create_dir_all(parent).map_err(|e| WriteError::Io(parent.to_path_buf(), e))?;
     }
-    std::fs::write(&note_path, render_note(spec))
-        .map_err(|e| WriteError::Io(note_path.clone(), e))?;
+    std::fs::write(&note_path, &rendered).map_err(|e| WriteError::Io(note_path.clone(), e))?;
 
     if let Err(e) = std::fs::write(&map_path, map_after) {
         let _ = std::fs::remove_file(&note_path);
@@ -391,6 +452,51 @@ mod tests {
         let map = std::fs::read_to_string(&out.map).expect("map");
         assert!(map.contains("- **[[new-thing]]**"), "{map}");
         assert!(map.contains("Search for: `prefill`, `kv cache`."), "{map}");
+    }
+
+    /// A key no question can reach is refused here, not reported later.
+    ///
+    /// `o que e ITIL` is the commonest shape a Portuguese question takes and it is not a
+    /// legal key: it reduces to `itil` after stopwords, which the single key beside it
+    /// already covers, so the index throws it away. The whole purpose of this module is
+    /// that a note and the words reaching it arrive together, and until this gate existed
+    /// the command could hand you a note whose keys were half decorative.
+    #[test]
+    fn a_key_the_index_cannot_reach_is_refused_before_anything_is_written() {
+        let dir = base("deadkeys");
+        let mut bad = spec();
+        bad.keys = vec!["ITIL".into(), "o que e ITIL".into()];
+
+        let err = note(&dir, "zed", "itil", &bad).expect_err("a dead key is refused");
+        let said = err.to_string();
+        assert!(said.contains("o que e ITIL"), "the offending key is named: {said}");
+        assert!(said.contains("W07"), "and tied to the check it enforces: {said}");
+        assert!(!dir.join("fleet/zed/knowledge/itil.md").exists(), "nothing left behind");
+    }
+
+    /// The house rule, enforced where the file is made.
+    ///
+    /// Counted on 2026-09-05: 28 of the 47 notes `kb promote` has ever written carry an em
+    /// dash, because nothing checked at the write and nobody ran `kb check` afterwards.
+    #[test]
+    fn an_em_dash_is_refused_before_anything_is_written() {
+        let dir = base("dashes");
+        let mut bad = spec();
+        bad.body = "# A thing\n\nThe body \u{2014} with a dash in it.".into();
+
+        let err = note(&dir, "zed", "dashed", &bad).expect_err("an em dash is refused");
+        let said = err.to_string();
+        assert!(said.contains("W03"), "tied to the check it enforces: {said}");
+        assert!(!dir.join("fleet/zed/knowledge/dashed.md").exists(), "nothing left behind");
+
+        // The summary reaches disk too, in the `Exists to:` line, so the gate reads the
+        // rendered note rather than the body alone.
+        let mut in_summary = spec();
+        in_summary.summary = "What a thing does \u{2014} and why".into();
+        assert!(
+            note(&dir, "zed", "dashed-summary", &in_summary).is_err(),
+            "a dash in the summary lands in the file just the same"
+        );
     }
 
     /// The origin reaches disk, and the note that has none does not claim to have looked.
