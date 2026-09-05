@@ -12,6 +12,7 @@
 //! below means rebuilding the pipeline, which is how the two scorers came to see
 //! different terms once already.
 
+pub mod abstain;
 pub mod base;
 pub mod blocks;
 pub mod boot;

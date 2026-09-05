@@ -43,6 +43,19 @@ kb-misses.txt
 kb-misroutes.txt
 kb-alias-rejections.txt
 
+# The coverage gap log, ignored for the same reason and in the same change that created it.
+#
+# It holds three things at once, and each of them is private on its own. The message that
+# found no owner, verbatim, which is the user's own words. The classifier's one sentence
+# about that message, which is a model's reading of it. And the agents that scored, by name
+# and by score, which is a list of somebody's private bases ranked against a private
+# question. That makes it the most revealing of the three routing logs, not the least.
+#
+# It is also written unattended: `kb boot` records it on the hook, with nobody watching, so
+# it appears at the repository root on its own. The two files above it are here because
+# exactly that happened to them first.
+kb-abstentions.txt
+
 # The refusal record, ignored for exactly the reason above and noticed only when a hook
 # started producing it unattended. A refusal reason quotes the note it refused and the file
 # it collided with, verbatim and in whatever language they were written in, so this file is

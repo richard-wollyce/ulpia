@@ -36,7 +36,7 @@ plainly when nothing matched rather than returning a confident guess.
 
 ## What is in the box, and the pain each piece answers
 
-Nineteen verbs. Each exists because something went wrong without it, and the table says what.
+Twenty-two verbs. Each exists because something went wrong without it, and the table says what.
 A verb whose pain you do not have is a verb you do not need to learn.
 
 | Verb | The pain | What it does | What it never does |
@@ -60,6 +60,9 @@ A verb whose pain you do not have is a verb you do not need to learn.
 | `capture` | A session ends and everything it could not answer ends with it | Turns the session's record, appended by `boot` on every message, into one raw file in the last routed agent's `inbox/`: the refused questions with the vocabulary offered back, and where the conversation went. Then `promote` reads it | Runs a model. Writes a `Search for:` line, so the router never names a raw session as an answer. Captures a session no agent was routed in |
 | `panel` | A piece gets reviewed by whoever is in the room, and the objection that killed it is remembered by nobody | Boots a named panel from each agent's own `blocks.txt`, prices the round before it is spent, and keeps a ledger where every objection is taken, refused with a reason, or escalated | Call a model. Choose the panel for you. Let a blocking objection be refused, or a reviewer's silence be recorded as agreement |
 | `misses` | The log records what was asked and could not be answered, and stops there. The file that nearly held the answer, and the key it was missing, is the half nobody can look up | Reads `kb-misses.txt` back, most asked first, and beside each question names the files today's index nearly caught it with, the keys each of those files declares, and the path it read | Write anything. It proposes the alias line and a person adds it |
+| `misroute` | The router hands a message to the wrong agent, the agent answers anyway or says so in chat, and the evidence dies with the conversation | Records that a named agent was handed a message a different agent owns, in the owner's own words, so a routing fault becomes a countable fact instead of an anecdote | Edit a base. Decide who was right. It is evidence, and `kb misses --apply` is the only thing that proposes a fix from it |
+| `misroutes` | One misroute is an anecdote and thirty are a map, but only if something reads them back | Reads `kb-misroutes.txt`, most reported first, so a pair of bases that keep being confused for each other is visible as a pattern rather than remembered as a grievance | Write anything. Rank by anything but how often the same fault was filed |
+| `abstentions` | The router finding that nobody owns a subject is the fleet's most useful failure, and it was the only one that left no trace: the miss log fires on retrieval, and a misroute needs an agent to file it, and an abstention has neither | Records every coverage abstention keyed on the classifier's subject rather than the message, with its reason and the bases that scored anyway, then reads them back with what each would score today | Record a refusal that is not a coverage judgement. Key on the message, which would leave every gap at count one forever |
 
 ### How the pieces make two memories
 
@@ -672,7 +675,7 @@ subtract exactly three patterns:
 | `.kb-promote.lock`, at the fleet root | The running-now marker. It survives a crash on purpose so the next run can see that one died, which is a fact about that machine and a lie on any other |
 | `kb-misses.txt.lock`, beside the log | The same thing one file over: the marker held while the recall loss log merges |
 
-**Everything else is in**, and these four are the ones people leave out:
+**Everything else is in**, and these five are the ones people leave out:
 
 - **`profile/`, `projects/`, `records/`**, plus anything a base names in its own `private =` line,
   plus the whole of `person/`. The private layer. It is gitignored by design, and **nothing anywhere
@@ -681,6 +684,10 @@ subtract exactly three patterns:
   could not answer, counted. No rebuild produces it and no reindex recovers it.
 - **`kb-rejections.txt`**. The same species: what the promoter refused, and why. A repeated refusal
   is a gap in the base, and nothing else records it.
+- **`kb-misroutes.txt` and `kb-abstentions.txt`**, the two routing logs. One holds a message an
+  agent said was not its own, the other a subject the router found no owner for at all. Both were
+  missing from this list, which is the failure the list is about: a file nobody thinks of as data
+  is exactly the file a restore drops.
 - **`kb-aliases.txt`** at each base root. Small enough to skip for being small. Every line in it was
   paid for by a real question that missed.
 

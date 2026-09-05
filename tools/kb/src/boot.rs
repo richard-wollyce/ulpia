@@ -236,6 +236,23 @@ pub fn brief(memory: &Memory, root: &Path, req: &Request, top: usize) -> Briefin
     // this kind of work".
     if let Some(v) = &verdict {
         if let Some(note) = crate::classify::coverage_note(v) {
+            // **And it is reported to a log as well as to the conversation, which it was
+            // not.** The briefing below is text injected into one session's context and it
+            // dies with that session: on 2026-09-04 an abstention on landing page copy
+            // produced a wrong report about the fleet's own roster and left no trace
+            // anywhere, surfacing only because Richard remembered the agent existed.
+            // `kb-misses.txt` could not hold it, because that log only records a question
+            // the library answered nothing for and this one scored; `kb-misroutes.txt`
+            // could not either, because that log is filed by the agent that was handed the
+            // message and the whole state here is that no agent was. See `crate::abstain`.
+            //
+            // Ignored on failure, deliberately. `brief` runs on `UserPromptSubmit`, so a
+            // log that cannot be written costs the evidence and never the conversation.
+            let today = crate::misses::today();
+            if let Some(gap) = crate::abstain::Abstention::of(v, answer.agent.as_ref(), &today) {
+                let _ = crate::abstain::record(root, &gap.about(&asked), &today);
+            }
+
             let nearest = v
                 .owner
                 .as_ref()
@@ -817,6 +834,51 @@ mod tests {
             !brief.text.contains("floor"),
             "nothing scored, so nothing lost to the floor: {}",
             brief.text
+        );
+    }
+
+    /// **The abstention log must count gaps, not traffic.**
+    ///
+    /// The record sits inside the coverage branch, so a message that was routed, and a
+    /// message refused for any reason other than a classifier judging coverage, must leave
+    /// it empty. This fixture is the found-no-owner branch with no classifier configured,
+    /// which is the population `crate::abstain` names as the miss log's and not this one's:
+    /// on a fleet without a classifier it fires on every message under the floor, and a row
+    /// per message would make the count measure the missing classifier.
+    ///
+    /// What this cannot reach is the branch that does record, because producing a verdict
+    /// needs a live classifier subprocess. Same limit `panel_instruction` documents, and the
+    /// same answer: the decision itself is a pure function with its own tests in
+    /// `crate::abstain`, and the call site was verified by running the real hook.
+    #[test]
+    fn a_refusal_that_is_not_a_coverage_judgement_writes_no_gap() {
+        let root = std::env::temp_dir().join(format!("kb-boot-abstain-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&root);
+        let agent = root.join("fleet").join("probe");
+        std::fs::create_dir_all(agent.join("knowledge")).expect("scratch");
+        std::fs::write(agent.join("agent.txt"), "name = Probe\nrole = testing\n").expect("agent");
+        std::fs::write(
+            agent.join("knowledge").join("zebra.md"),
+            "# Zebra\n\n**Search for:** `zebra`, `quagga`\n\n**Exists to:** hold one animal\n",
+        )
+        .expect("note");
+        let memory = Memory::open(&[root.as_path()], true).expect("opens");
+
+        let req = Request {
+            prompt: "qual a taxa de juros do trimestre".into(),
+            session: "s-abstain".into(),
+            cwd: None,
+        };
+        let brief = brief(&memory, &root, &req, 5);
+
+        assert!(brief.agent.is_none(), "the fixture is the found-no-owner branch");
+        assert!(
+            crate::abstain::load(&crate::abstain::path_in(&root)).is_empty(),
+            "no classifier judged coverage here, so there is no coverage gap to record"
+        );
+        assert!(
+            !crate::abstain::path_in(&root).exists(),
+            "and the file is not created empty, which would read as a fleet that has abstained"
         );
     }
 

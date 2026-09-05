@@ -7,7 +7,8 @@
 
 use kb::checks::{Finding, Level};
 use kb::{
-    answer, base, blocks, boot, capture, checks, classify, commit, eval, gate, index, init, json,
+    abstain, answer, base, blocks, boot, capture, checks, classify, commit, eval, gate, index,
+    init, json,
     list,
     mcp, memory, misroute, misses, panel, promote, remember, store, ui, write,
 };
@@ -23,6 +24,7 @@ usage:
     kb index [path]... [--json] [--all]
     kb list [path]... [--base B] [--folder F] [--kind K] [--stage S] [--provenance P] [--json] [--all]
     kb route <question> [path]... [--top N] [--hybrid] [--json] [--all]
+    kb answer <question> [path]... [--top N] [--all] [--expanded | --complete]
     kb remember <claim> [path]... [--all] [--json]
     kb init <name> [fleet-root]
     kb init --person [fleet-root]
@@ -39,6 +41,7 @@ usage:
     kb misses [path]... [--all] [--top N] [--json] [--apply --gold <tsv>]
     kb misroute <message> --chose <agent> --owner <agent|none> [--why <text>] [path]
     kb misroutes [path] [--top N]
+    kb abstentions [path] [--top N] [--all]
     kb panel <artifact> [path] --owner <agent> [--reviewer <agent>]... [--out D] [--json]
     kb panel <artifact> [path] --from <agent> (--objection <text> [--blocking]
                                               | --nothing | --not-returned) [--why <text>]
@@ -121,6 +124,31 @@ the loop that can tell `this is not mine` while it is still true.
 
 Evidence, never action. Nothing reads this log and edits a base. It widens what the
 proposer can see, and every proposal still has to survive the gate.
+
+abstentions is the third failure and the only one nobody could report. kb-misses.txt
+holds a question the library answered nothing for; kb-misroutes.txt holds a confident
+wrong choice, filed by the agent that was handed it. When the classifier answers that
+no agent owns a subject, there is no miss, because the message often scores well, and
+there is no agent to file anything, because none was booted. It left no trace at all.
+On 2026-09-04 an abstention on landing page copy produced a report that this fleet had
+no copywriter. It has one, and only Richard's own memory caught it.
+
+So the router writes kb-abstentions.txt itself, at the moment it abstains, keyed on the
+subject the classifier named rather than on the message: the question a log like this
+has to answer is whether the fleet keeps failing to own a kind of work, and keyed on the
+message every gap is a count of one forever. Each row carries the classifier's own
+reason and the agents that scored, both already produced and both previously discarded.
+That second field is what separates a gap that is really missing from an agent that was
+passed over, and those two have opposite fixes.
+
+Nothing is recorded when there is no verdict: on a fleet with no classifier configured
+that branch fires on every message under the floor, and the count would measure a
+missing classifier instead of a missing agent. That population is the miss log's.
+
+The reader re-scores each stored message against the fleet as it stands now, which is
+the half the file cannot hold, and the same thing kb misses does with today's index.
+It is the keyword fold and it says so: which agents have the vocabulary today, never
+which one owns the subject. Delete a row once the fleet covers it.
 
 panel is the objection round, and the router usually opens it rather than you. `kb boot`
 already asks a model who owns a message, with every agent's role and edge in front of it;
@@ -379,6 +407,7 @@ fn main() -> ExitCode {
             flag_value(&args, "--why").as_deref(),
         ),
         "misroutes" => cmd_misroutes(paths_or_default(&positional)[0], top),
+        "abstentions" => cmd_abstentions(paths_or_default(&positional)[0], all, top),
         "panel" => cmd_panel(&args, &positional, all, top, json),
         "capture" => {
             let paths = paths_or_default(&positional);
@@ -1664,6 +1693,88 @@ fn cmd_misroutes(path: &str, top: usize) -> ExitCode {
     println!();
     println!("  A count above one is a standing defect in the keys or the aliases, not an");
     println!("  unusual message. Delete the line once the routing it describes is fixed.");
+    ExitCode::SUCCESS
+}
+
+/// Reads the abstention log back, and re-scores each gap against the fleet as it stands now.
+///
+/// **The recomputed line is the whole reason this is a verb and not `cat`.** The stored
+/// contenders describe the fleet on the day it abstained, and the fleet changes: an agent is
+/// created, a card gains an edge, a note lands. A row whose contenders today name somebody
+/// they did not name then is a gap that may already be closed, and nobody can see that by
+/// reading the file. Same mechanism `kb misses` uses when it names the files today's index
+/// nearly caught a logged question with: the log holds what was true then, the reader holds
+/// what is true now, and only the pair is actionable.
+///
+/// It is the keyword fold and it says so on the line. Re-running the classifier would be the
+/// literal re-judgement and costs a model call of 13 to 16 seconds per row, on a fleet where
+/// the operator asked to read a log. What the fold answers is narrower and enough: which
+/// agents have vocabulary for this message today.
+fn cmd_abstentions(path: &str, all: bool, top: usize) -> ExitCode {
+    let root = Path::new(path);
+    let log = abstain::path_in(root);
+    let rows = abstain::load(&log);
+
+    println!("log:      {}", log.display());
+    if rows.is_empty() {
+        println!();
+        println!("  no coverage gap recorded. Either the router has not abstained on this fleet,");
+        println!("  or it could not write the log, which it says on stderr at the time and");
+        println!("  nowhere afterwards. A fleet with no classifier configured records nothing");
+        println!("  here on purpose: with no model reading the roster there is no judgement");
+        println!("  that nobody owns a subject, only a score under the floor, and questions");
+        println!("  that score nothing are counted in kb-misses.txt already.");
+        return ExitCode::SUCCESS;
+    }
+
+    let memory = match memory::Memory::open(&[root], all) {
+        Ok(m) => m,
+        Err(e) => {
+            eprintln!("kb: {e}");
+            return ExitCode::from(1);
+        }
+    };
+
+    let total: u32 = rows.iter().map(|r| r.count).sum();
+    println!("recorded: {} distinct subject(s), {total} abstention(s) in total", rows.len());
+    for r in rows.iter().take(top.max(1) * 4) {
+        let nearest = match r.nearest.as_str() {
+            "-" | "" => "no agent near enough to name".to_string(),
+            name => format!("nearest {name}"),
+        };
+        println!();
+        println!("   {}x  {}, {nearest}  ({} to {})", r.count, r.coverage, r.first, r.last);
+        println!("        subject: {}", if r.subject.is_empty() { "(unnamed)" } else { &r.subject });
+        println!("        message: {}", r.message);
+        if !r.reason.is_empty() {
+            println!("        reason:  {}", r.reason);
+        }
+        println!(
+            "        scored then: {}",
+            if r.contenders.is_empty() { "nothing at all" } else { &r.contenders }
+        );
+
+        // The half the file cannot hold, computed against the fleet as it stands now.
+        let now = memory.ask(&r.message, top);
+        let today: Vec<String> = now
+            .agent
+            .iter()
+            .flat_map(|c| c.totals.iter())
+            .take(3)
+            .map(|(name, weight)| format!("{name} {weight:.1}"))
+            .collect();
+        println!(
+            "        scored now:  {}",
+            if today.is_empty() { "nothing at all".to_string() } else { today.join(", ") }
+        );
+    }
+    println!();
+    println!("  `scored now` is the keyword fold against today's fleet, not a re-judgement:");
+    println!("  it says which agents have the vocabulary, never which one owns the subject.");
+    println!("  A name there that is not in `scored then` is an agent created or a card");
+    println!("  widened since, and the gap may already be closed. An agent that scored well");
+    println!("  and was still not chosen is that agent's card to fix, not a new agent to");
+    println!("  create. Delete the row once the fleet covers the subject.");
     ExitCode::SUCCESS
 }
 

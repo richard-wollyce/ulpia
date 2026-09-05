@@ -118,10 +118,15 @@ const LOCK_STALE: std::time::Duration = std::time::Duration::from_secs(30);
 /// Unix and `CREATE_NEW` on Windows: the file system decides the race, so two processes
 /// cannot both believe they made the marker. Same shape as `promote::Lock`, smaller,
 /// because a record is milliseconds and a promotion is minutes.
-struct Guard(PathBuf);
+///
+/// **Shared with [`crate::abstain`] rather than copied.** That log is written from the same
+/// hook, on the same message, and loses rows to the same race. The mechanism is "hold a
+/// marker beside this file while merging" and is not specific to which file, so a second
+/// copy of it would be a second place for the stale-marker rule to drift.
+pub(crate) struct Guard(PathBuf);
 
 impl Guard {
-    fn take(log: &Path) -> Result<Guard, String> {
+    pub(crate) fn take(log: &Path) -> Result<Guard, String> {
         let path = lock_path(log);
         let started = std::time::Instant::now();
         loop {
