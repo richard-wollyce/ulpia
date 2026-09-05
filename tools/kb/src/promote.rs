@@ -774,10 +774,35 @@ fn walk(dir: &Path, out: &mut Vec<PathBuf>) {
     for entry in entries.flatten() {
         let path = entry.path();
         if path.is_dir() {
+            // The one exemption, and it is not the `processed/` skip the 2026-09-05 ruling
+            // abolished. `inbox/raw/` holds documents that have not been extracted yet: a
+            // PDF nothing can read, waiting beside the text that was pulled out of it.
+            // Offering the PDF to a promoter spends a model call to be told it is bytes.
+            // That folder protects material before it is read; `processed/` protected
+            // material after it was absorbed, which is the state deletion now removes.
+            if path.file_name().is_some_and(|n| n == crate::ingest::RAW) {
+                continue;
+            }
             walk(&path, out);
         } else if path.is_file() {
             out.push(path);
         }
+    }
+}
+
+/// Whether two paths name the same file on disk.
+///
+/// Canonicalised rather than compared as strings, because the two sides arrive by
+/// different routes: one is built by joining an agent root to a walked entry, the other is
+/// whatever the caller typed. `./fleet/gti/inbox/x.txt` and an absolute path to the same
+/// file are equal here and are not equal as text, and on Windows the separators differ
+/// too. When either side cannot be canonicalised, which means it is not there, they fall
+/// back to a plain comparison and are almost certainly unequal, which is the safe answer:
+/// a scoped run that matches nothing does nothing.
+fn same_file(a: &Path, b: &Path) -> bool {
+    match (a.canonicalize(), b.canonicalize()) {
+        (Ok(x), Ok(y)) => x == y,
+        _ => a == b,
     }
 }
 
@@ -831,6 +856,15 @@ pub fn run(
     dry_run: bool,
     today: &str,
     max: Option<usize>,
+    // One deposit file instead of every deposit in the fleet, for `kb ingest`.
+    //
+    // **A parameter and not a second function.** Ingestion and the nightly sweep have to
+    // distil identically or the two drift, and this repository has paid for that twice:
+    // `checks.rs` and `write.rs` kept separate copies of the STAGE list until the linter
+    // accepted a word the writer refused, and E02 read `MAP.md` for four months after the
+    // index stopped reading it. So there is one promoter prompt, one review loop and one
+    // set of lenses, entered from two commands. A CLI verb is an entry point, not a seam.
+    only: Option<&Path>,
 ) -> Outcome {
     let mut outcome = Outcome::default();
 
@@ -848,6 +882,14 @@ pub fn run(
 
     'agents: for (agent_name, agent_root) in &roster {
         for file in deposit_files(agent_root) {
+            // Compared after discovery rather than by skipping the walk, so a path that is
+            // not a deposit at all simply matches nothing. `kb ingest` cannot then aim
+            // promotion at a file outside `inbox/` by handing it a different argument.
+            if let Some(wanted) = only {
+                if !same_file(&file, wanted) {
+                    continue;
+                }
+            }
             // Checked before the deposit file is read rather than after it is decided, so
             // the cap costs nothing once it has bitten. A run that keeps calling models
             // after it stopped writing is paying for output it already refused to use.
@@ -983,6 +1025,23 @@ pub fn run(
                                     .unreachable
                                     .push(format!("re-reading the base after {}: {e}", decided.proposal.slug));
                             }
+                        }
+                        Err(e) if e.is_refusal() => {
+                            // The linter refused it at the write, which is a verdict and
+                            // not an outage. It joins the reviews as a fourth entry, which
+                            // makes `accepted()` false twice over: the entry does not
+                            // accept, and the count no longer matches the number of lenses.
+                            // It is recorded like any other refusal, because
+                            // a promoter that keeps proposing dead keys is a signal about
+                            // the promoter. Reported as unreachable it would instead have
+                            // meant "promotion did not finish", and `kb ingest` would keep
+                            // the document forever over one imperfect proposal.
+                            decided.reviews.push(Review {
+                                lens: Lens::Scope,
+                                accept: false,
+                                reason: format!("refused at the write: {e}"),
+                            });
+                            record_rejection(fleet_root, &decided, today);
                         }
                         Err(e) => outcome.unreachable.push(format!("write {}: {e}", decided.proposal.slug)),
                     }

@@ -8,7 +8,7 @@
 use kb::checks::{Finding, Level};
 use kb::{
     abstain, answer, base, blocks, boot, capture, checks, classify, commit, eval, gate, index,
-    init, json,
+    init, ingest, json,
     list,
     mcp, memory, misroute, misses, panel, promote, remember, store, ui, write,
 };
@@ -35,6 +35,7 @@ usage:
     kb eval <gold.tsv> [path]... [--top N] [--all] [--classify]
     kb commit <path>... -m <message>
     kb boot [path]... [--top N] [--all]
+    kb ingest <file> [path]... [--agent NAME] [--keep] [--dry-run] [--top N] [--all]
     kb promote [path]... [--top N] [--all] [--dry-run] [--max N] [--lock]
     kb ui [path]... [--port N] [--all]
     kb capture [path] [--session ID]
@@ -68,6 +69,13 @@ usage:
                 list: narrow to one of them
     --stage     write: raw, distilled or derived. Default derived.
                 list: narrow to raw, captured, distilled or derived
+    --agent     ingest: the base to file the document in. Without it the router
+                chooses, and refuses rather than guessing when no base owns the
+                subject: a document filed in the wrong base is worse than one not
+                filed, because the note is then reachable and wrong
+    --keep      ingest: leave the document on disk after it has been absorbed.
+                Without it the staged copy and its extraction are destroyed once
+                a note on disk names them, which is the point of the verb
     --captured-from write: the deposit this note was distilled from. Optional, and
                 written into the note's front matter rather than its prose, so it
                 travels as a column on the index and reaches every passage without
@@ -302,7 +310,7 @@ const LINES_SHOWN: usize = 3;
 /// Flags that consume the argument after them.
 const VALUE_FLAGS: &[&str] = &[
     "--top", "--keys", "--summary", "--folder", "--provenance", "--stage", "--base", "--kind",
-    "--captured-from",
+    "--captured-from", "--agent",
     "-m", "--port", "--max", "--gold", "--chose", "--owner", "--why",
     "--reviewer", "--out", "--from", "--objection", "--resolve",
 ];
@@ -437,6 +445,24 @@ fn main() -> ExitCode {
             };
             cmd_answer(positional[0], &paths_or_default(&positional[1..]), all, top, mode)
         }
+        "ingest" => {
+            if positional.is_empty() {
+                eprintln!(
+                    "kb ingest: name the document to ingest. `kb ingest <file> [path] \
+                     [--agent NAME] [--keep]`"
+                );
+                return ExitCode::from(2);
+            }
+            cmd_ingest(
+                Path::new(positional[0]),
+                &paths_or_default(&positional[1..]),
+                all,
+                top,
+                flag_value(&args, "--agent"),
+                args.iter().any(|a| a == "--keep"),
+                args.iter().any(|a| a == "--dry-run"),
+            )
+        }
         "promote" => cmd_promote(
             &paths_or_default(&positional),
             all,
@@ -542,6 +568,253 @@ fn flag_values(args: &[String], flag: &str) -> Vec<String> {
 
 fn paths_or_default<'a>(given: &[&'a str]) -> Vec<&'a str> {
     if given.is_empty() { vec!["."] } else { given.to_vec() }
+}
+
+// ---------------------------------------------------------------------------
+// ingest
+// ---------------------------------------------------------------------------
+
+/// The text inside a document, by whatever means that document needs.
+///
+/// **Extraction shells out and does not link.** `kb` has one dependency and keeping it
+/// there is worth more than the convenience of a PDF crate: a parser for every format
+/// anyone might hand over is an unbounded surface, and the formats change. So `.txt` and
+/// `.md` are read directly, and everything else runs `tools/extract/<ext>.cmd` with the
+/// document as its argument and takes stdout, which is the same process contract
+/// `promote-claude.cmd` and the classifier already use.
+fn extract(fleet_root: &Path, source: &Path) -> Result<String, String> {
+    let ext = source
+        .extension()
+        .map(|e| e.to_string_lossy().to_lowercase())
+        .unwrap_or_default();
+
+    if ext == "txt" || ext == "md" {
+        return std::fs::read_to_string(source).map_err(|e| e.to_string());
+    }
+
+    let script = fleet_root.join("tools").join("extract").join(format!("{ext}.cmd"));
+    if !script.is_file() {
+        return Err(format!(
+            "nothing here knows how to read a .{ext}. Write {} so that it prints the \
+             document's text on stdout, given the path as its one argument. `pdftotext \
+             -layout -enc UTF-8 %1 -` is the whole of the pdf one.",
+            script.display()
+        ));
+    }
+    let out = std::process::Command::new(&script)
+        .arg(source)
+        .output()
+        .map_err(|e| format!("could not run {}: {e}", script.display()))?;
+    if !out.status.success() {
+        return Err(format!(
+            "{} exited with {}: {}",
+            script.display(),
+            out.status,
+            String::from_utf8_lossy(&out.stderr).trim()
+        ));
+    }
+    Ok(String::from_utf8_lossy(&out.stdout).into_owned())
+}
+
+/// One document, from wherever it is, to notes in the base that owns its subject.
+fn cmd_ingest(
+    source: &Path,
+    paths: &[&str],
+    all: bool,
+    top: usize,
+    agent: Option<String>,
+    keep: bool,
+    dry_run: bool,
+) -> ExitCode {
+    let given: Vec<&Path> = paths.iter().map(Path::new).collect();
+    let root = given.first().copied().unwrap_or_else(|| Path::new("."));
+
+    if !source.is_file() {
+        eprintln!("kb ingest: there is no file at {}", source.display());
+        return ExitCode::from(1);
+    }
+
+    let mut memory = match memory::Memory::open(&given, all) {
+        Ok(m) => m,
+        Err(e) => {
+            eprintln!("kb: {e}");
+            return ExitCode::from(1);
+        }
+    };
+
+    let promoter = memory.promoter();
+    let reviewer = memory.reviewer();
+    if matches!(promoter, classify::Classifier::None)
+        || matches!(reviewer, classify::Classifier::None)
+    {
+        eprintln!(
+            "kb ingest: the fleet manifest needs both `promoter = ...` and `reviewer = ...`. \
+             Ingestion writes into the base, and a run with no reviewer is automatic \
+             extraction into durable memory, which is the one thing promotion exists to \
+             not be."
+        );
+        return ExitCode::from(2);
+    }
+
+    let text = match extract(root, source) {
+        Ok(t) => t,
+        Err(e) => {
+            eprintln!("kb ingest: {e}");
+            return ExitCode::from(1);
+        }
+    };
+    if text.trim().is_empty() {
+        eprintln!(
+            "kb ingest: {} produced no text. It has not been moved, because the original \
+             is still the only copy of whatever it holds.",
+            source.display()
+        );
+        return ExitCode::from(1);
+    }
+
+    // **Extraction happens before the move, and the reason is routing.** A document cannot
+    // be filed into the deposit of an agent nobody has chosen yet, and choosing needs the
+    // words. Nothing is destroyed in this window: reading a file is not a mutation, and if
+    // routing abstains the document is exactly where the caller left it.
+    let owner = match agent {
+        Some(name) => name,
+        None => {
+            // The document's own words, capped, because a router asked a whole textbook
+            // scores every base on vocabulary breadth rather than on subject.
+            let question: String = text.chars().take(4000).collect();
+            let answer = memory.ask(&question, top);
+            match answer.agent {
+                Some(choice) => {
+                    println!(
+                        "routed to {} (score {:.1}, {:.2}x over the runner-up, {} agent(s) \
+                         scored)",
+                        choice.agent, choice.score, choice.margin, choice.contenders
+                    );
+                    choice.agent
+                }
+                None => {
+                    // A router that always picks is the failure ADR-0013 spent a day
+                    // measuring. Filing a document into the wrong base is worse than not
+                    // filing it, because the note is then reachable and wrong.
+                    eprintln!(
+                        "kb ingest: no agent in this fleet owns what {} is about, so there \
+                         is nowhere to file it. Name one with --agent, or decide that this \
+                         subject needs an agent. Nothing was moved.",
+                        source.display()
+                    );
+                    return ExitCode::from(1);
+                }
+            }
+        }
+    };
+
+    let Some(agent_root) = memory
+        .agents
+        .iter()
+        .find(|a| a.name.eq_ignore_ascii_case(&owner))
+        .map(|a| a.root.clone())
+    else {
+        eprintln!("kb ingest: no agent called '{owner}'. `kb fleet` lists the ones that exist.");
+        return ExitCode::from(1);
+    };
+
+    if dry_run {
+        println!(
+            "dry run: {} would be staged into {}/{} and distilled there. Nothing moved.",
+            source.display(),
+            owner,
+            promote::DEPOSIT
+        );
+        return ExitCode::SUCCESS;
+    }
+
+    let today = today();
+    let staged = match ingest::stage(&agent_root, &owner, source, &text, &today) {
+        Ok(s) => s,
+        Err(e) => {
+            eprintln!("kb ingest: {e}");
+            return ExitCode::from(1);
+        }
+    };
+    println!("staged  {}", staged.deposit.display());
+    println!("        original at {}", staged.original.display());
+
+    // The memory was opened before the deposit existed, so promotion would walk a roster
+    // that has it and an index that does not.
+    if let Err(e) = memory.reread() {
+        eprintln!("kb ingest: could not re-read the base after staging: {e}");
+        return ExitCode::from(1);
+    }
+
+    let outcome = promote::run(
+        &mut memory,
+        root,
+        &promoter,
+        &reviewer,
+        top,
+        false,
+        &today,
+        None,
+        Some(&staged.deposit),
+    );
+
+    for d in &outcome.decided {
+        let head = format!("{}/{}", d.proposal.agent, d.proposal.slug);
+        match &d.written {
+            Some(p) => println!("  wrote   {head}\n          {}", p.display()),
+            None => {
+                println!("  refused {head}");
+                for r in d.refusals() {
+                    println!("          {} says: {}", r.lens.name(), r.reason);
+                }
+            }
+        }
+    }
+    for u in &outcome.unreachable {
+        println!("  could not reach {u}");
+    }
+
+    // The name promotion recorded in `captured_from`, which is what the proof matches on.
+    let deposit_name = format!(
+        "{}/{}",
+        owner.to_lowercase(),
+        staged
+            .deposit
+            .strip_prefix(&agent_root)
+            .unwrap_or(&staged.deposit)
+            .to_string_lossy()
+            .replace('\\', "/")
+    );
+
+    let verdict = if keep {
+        Err(ingest::Kept::Asked)
+    } else {
+        ingest::may_delete(root, &deposit_name, &outcome)
+    };
+
+    match verdict {
+        Ok(()) => {
+            let gone = ingest::destroy(&staged);
+            for p in &gone {
+                println!("removed {}", p.display());
+            }
+            println!(
+                "\n{} note(s) written. The document is gone from this machine and what it \
+                 said is in the base.",
+                outcome.written()
+            );
+            ExitCode::SUCCESS
+        }
+        Err(why) => {
+            println!("\nkept: {why}.");
+            println!("      the document is at {}", staged.original.display());
+            println!("      its text is at     {}", staged.deposit.display());
+            // Exit 1 on anything but --keep: the caller asked for a document to be
+            // absorbed and it was not, and a command that reports success for that is a
+            // command whose failures nobody finds.
+            if matches!(why, ingest::Kept::Asked) { ExitCode::SUCCESS } else { ExitCode::from(1) }
+        }
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -2905,7 +3178,8 @@ fn cmd_promote(
     };
 
     let today = today();
-    let outcome = promote::run(&mut memory, root, &promoter, &reviewer, top, dry_run, &today, max);
+    let outcome =
+        promote::run(&mut memory, root, &promoter, &reviewer, top, dry_run, &today, max, None);
 
     if dry_run {
         println!("dry run: nothing was written and no refusal was recorded.\n");

@@ -106,6 +106,21 @@ pub enum WriteError {
     Io(PathBuf, std::io::Error),
 }
 
+impl WriteError {
+    /// Whether this is the writer judging the note, rather than the machine failing.
+    ///
+    /// **The distinction decides whether a document may be destroyed.** `kb ingest` will
+    /// not delete a source unless promotion ran to completion, and "a model could not be
+    /// reached" means the document has not been fully offered yet, so it must survive. A
+    /// note refused for a dead key or an em dash is the opposite: it was read, judged and
+    /// declined, which is a decision and not an outage. Filing both under one heading kept
+    /// every document that produced one imperfect proposal, forever, which was measured on
+    /// the first live run of the verb.
+    pub fn is_refusal(&self) -> bool {
+        matches!(self, WriteError::DeadKeys(_) | WriteError::Dashes(_))
+    }
+}
+
 impl std::fmt::Display for WriteError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {

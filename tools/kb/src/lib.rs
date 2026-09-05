@@ -24,6 +24,7 @@ pub mod eval;
 pub mod fleet;
 pub mod gate;
 pub mod index;
+pub mod ingest;
 pub mod init;
 pub mod json;
 pub mod list;
