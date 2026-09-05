@@ -747,10 +747,44 @@ fn ends_of(agent_root: &Path) -> Option<String> {
     None
 }
 
-/// Every markdown file waiting in one agent's deposit.
+/// Every file waiting in one agent's deposit, at any depth.
+///
+/// **This read one directory level and accepted `.md` only, and the ingestion protocol
+/// files sources into subfolders.** `source-ingestion.md` sends a paper to `inbox/papers/`,
+/// an article to `inbox/articles/`, a talk to `inbox/videos/`, a repository to
+/// `inbox/repos/`. Every one of those is one level too deep for a single `read_dir`, so a
+/// source filed exactly as the fleet's own protocol instructs was never offered to a
+/// promoter, and nothing said so. The two halves of the ingestion story disagreed about
+/// where material lives, and the half written in prose lost silently.
+///
+/// Demonstrated on disk the day this changed: `cosimo/inbox/processed/` held a 56 KB
+/// extraction of an academic PDF, and `kb promote` could not see it for two independent
+/// reasons. It was in a subdirectory, and it was `.txt`.
+///
+/// So: walk the tree, and accept `.txt` beside `.md`. Text is what every extractor
+/// produces, `store::chunk` splits on markdown headings and degrades to one chunk per
+/// document when there are none, and a promoter reads prose either way.
+///
+/// **There is no `processed/` exemption and there must not be one.** Under the ruling of
+/// 2026-09-05 a source is deleted once it is absorbed rather than retired into a folder,
+/// so a skip rule for that folder would be a rule protecting a state the design no longer
+/// produces, and the only files it could ever match are the ones left over from before.
+fn walk(dir: &Path, out: &mut Vec<PathBuf>) {
+    let Ok(entries) = std::fs::read_dir(dir) else { return };
+    for entry in entries.flatten() {
+        let path = entry.path();
+        if path.is_dir() {
+            walk(&path, out);
+        } else if path.is_file() {
+            out.push(path);
+        }
+    }
+}
+
 pub fn deposit_files(agent_root: &Path) -> Vec<PathBuf> {
     let dir = agent_root.join(DEPOSIT);
-    let Ok(entries) = std::fs::read_dir(&dir) else { return Vec::new() };
+    let mut entries = Vec::new();
+    walk(&dir, &mut entries);
     // Orientation files are not deposits. `what-goes-here.md` is the legend telling a
     // person what to drop in this folder, and feeding it to a promoter spends a model call
     // to be told, correctly, that a folder legend is not knowledge. Measured on the first
@@ -764,10 +798,13 @@ pub fn deposit_files(agent_root: &Path) -> Vec<PathBuf> {
             .unwrap_or(false)
     };
 
+    // The extension allow list is also what keeps `.gitkeep` out, and anything else with
+    // no extension at all: `Path::extension` returns None for a name that is only a dot
+    // and a word, so the placeholder holding an empty deposit in git never reaches a
+    // promoter without needing a rule of its own.
     let mut out: Vec<PathBuf> = entries
-        .flatten()
-        .map(|e| e.path())
-        .filter(|p| p.is_file() && p.extension().is_some_and(|x| x == "md"))
+        .into_iter()
+        .filter(|p| p.extension().is_some_and(|x| x == "md" || x == "txt"))
         .filter(|p| !boilerplate(p))
         .collect();
     out.sort();
@@ -808,8 +845,18 @@ pub fn run(
                     break 'agents;
                 }
             }
-            let name = file.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
-            let source = format!("{}/{}/{}", agent.name, DEPOSIT, name);
+            // **The path, not the file name.** This built `<agent>/inbox/<name>` from the
+            // file name alone, which was exactly right while the deposit was one flat
+            // directory and became wrong the moment it was walked recursively: two files
+            // called `notes.md` in two subfolders collapse to one string, and since that
+            // string is what `captured_from` records, a note would name a path that does
+            // not exist and a later deletion would be reasoning about the wrong file.
+            let relative = file
+                .strip_prefix(&agent.root)
+                .unwrap_or(&file)
+                .to_string_lossy()
+                .replace('\\', "/");
+            let source = format!("{}/{}", agent.name, relative);
             let Ok(text) = std::fs::read_to_string(&file) else { continue };
 
             let prompt = proposal_prompt(&agent.name, ends_of(&agent.root).as_deref(), &source, &text);
@@ -922,6 +969,44 @@ pub fn run(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// A source filed where the ingestion protocol says to file it is now offered to a
+    /// promoter, and a placeholder still is not.
+    ///
+    /// `source-ingestion.md` sends papers to `inbox/papers/` and articles to
+    /// `inbox/articles/`, and this function read one directory level and `.md` only. So
+    /// the fleet's own written procedure produced files nothing would ever read, silently.
+    /// The case that proved it was on disk: a 56 KB `.txt` extraction of an academic PDF,
+    /// sitting in `inbox/processed/`, invisible for two independent reasons at once.
+    #[test]
+    fn a_source_filed_in_a_subfolder_reaches_the_promoter_and_a_placeholder_does_not() {
+        let dir = std::env::temp_dir().join("kb-deposit-walk");
+        let _ = std::fs::remove_dir_all(&dir);
+        let inbox = dir.join(DEPOSIT);
+        std::fs::create_dir_all(inbox.join("papers")).expect("papers");
+        std::fs::create_dir_all(inbox.join("processed")).expect("processed");
+
+        std::fs::write(inbox.join("flat.md"), "a deposit at the top level").unwrap();
+        std::fs::write(inbox.join("papers/a-paper.md"), "filed per the protocol").unwrap();
+        std::fs::write(inbox.join("processed/extracted.txt"), "what an extractor writes").unwrap();
+        std::fs::write(inbox.join("what-goes-here.md"), "the folder legend").unwrap();
+        std::fs::write(inbox.join(".gitkeep"), "").unwrap();
+        std::fs::write(inbox.join("papers/scan.pdf"), "not text").unwrap();
+
+        let found: Vec<String> = deposit_files(&dir)
+            .iter()
+            .map(|p| p.file_name().unwrap().to_string_lossy().to_string())
+            .collect();
+
+        assert!(found.contains(&"flat.md".to_string()), "{found:?}");
+        assert!(found.contains(&"a-paper.md".to_string()), "the protocol's own layout: {found:?}");
+        assert!(found.contains(&"extracted.txt".to_string()), "what an extractor emits: {found:?}");
+        assert!(!found.contains(&"what-goes-here.md".to_string()), "a legend is not knowledge");
+        assert!(!found.contains(&".gitkeep".to_string()), "a git placeholder holds no text");
+        assert!(!found.contains(&"scan.pdf".to_string()), "extraction happens before the deposit");
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
 
     #[test]
     fn a_proposal_carries_no_place_to_put_reasoning() {
