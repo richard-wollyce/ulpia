@@ -313,11 +313,21 @@
 
         <dt>A macOS binary</dt>
         <dd>
-          <strong>Not planned.</strong> Nobody here runs one, so a published
-          artifact would be one nothing has ever executed, which is worth less
-          than its absence. Build from source there. The tool's own README
-          names the reopening: somebody who runs one asks for it, and the
-          release matrix gains it.
+          <strong>Reopened and shipped, in <code>kb-v0.2.2</code> on 6
+          September 2026.</strong> It was not planned because nobody here runs
+          one, so a published artifact would have been one nothing had ever
+          executed, which is worth less than its absence. The reopening this
+          entry named was somebody who runs one asking. That is not what
+          happened: the release workflow was rebuilt for other reasons, and
+          once it could execute an artifact on a runner of the artifact's own
+          architecture, the objection had an answer and the cost of holding the
+          line was higher than the cost of crossing it. <code>kb-macos-x64</code>
+          is built on an Intel runner and <code>kb-macos-arm64</code> on an
+          Apple silicon one, each printing its version and linting the demo
+          fleet where it will actually run. Cross compiling both from one
+          runner would have reinstated the original objection, because the
+          hosted Apple silicon images carry no Rosetta and the x64 artifact
+          could not have been executed at all.
         </dd>
 
         <dt>A per-consumer serving scope</dt>
