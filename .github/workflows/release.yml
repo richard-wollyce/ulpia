@@ -326,7 +326,13 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - runner: macos-13
+          # macos-15-intel and not macos-13. The first attempt named macos-13 and the
+          # leg sat queued for 53 minutes while the other three started in seconds:
+          # GitHub retired that image, the label matches no runner, and a job asking for
+          # one waits instead of failing. Read in GitHub docs on 2026-09-06: the Intel
+          # labels that exist are macos-15-intel and macos-26-intel, and every plain
+          # macos-* label is Apple silicon now.
+          - runner: macos-15-intel
             target: x86_64-apple-darwin
             artifact: kb-macos-x64
           - runner: macos-latest

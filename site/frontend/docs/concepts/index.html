@@ -340,6 +340,23 @@
         directory, backing it up and setting up a new machine are the same
         operation.
       </p>
+      <p>
+        <strong>Three folder names are private before anybody says so:
+        <code>profile/</code>, <code>projects/</code> and
+        <code>records/</code>.</strong> They are not in the tree above because
+        <code>kb init</code> does not create them, and that is exactly why the
+        names are worth knowing: create one later, by hand, and its contents
+        stop being served unless a reader passes <code>--all</code>. A base
+        overrides the list with a <code>private =</code> line in its
+        <code>agent.txt</code>, a comma separated set of folders, or
+        <code>.</code> for the whole base. A base directory named
+        <code>person</code> is private in its entirety by name alone, which is
+        how the person's base can sit inside a fleet without leaking into
+        every answer. Nothing else is consulted: no repository is asked and no
+        file needs to be tracked, which is what
+        <a href="https://github.com/richard-wollyce/ulpia/blob/main/decisions/0034-git-leaves-the-runtime.md">ADR-0034</a>
+        settled.
+      </p>
 
       <h3 id="name-role-and-where-it-stops">Name, role, and where it stops</h3>
       <p>

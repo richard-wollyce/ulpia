@@ -59,13 +59,13 @@
 
     <main class="doc" id="main" tabindex="-1">
       <h1>Reference</h1>
-      <p class="doc-date">Last updated: 2 September 2026</p>
+      <p class="doc-date">Last updated: 6 September 2026</p>
 
       <nav class="contents" aria-labelledby="contents-title">
         <p class="contents-title" id="contents-title">Contents</p>
         <ol>
           <li>
-            <a href="#the-eighteen-verbs">The eighteen verbs</a>
+            <a href="#the-twenty-four-verbs">The twenty-four verbs</a>
             <ol>
               <li><a href="#the-usage-block">The usage block</a></li>
               <li><a href="#verb-by-verb">Verb by verb</a></li>
@@ -115,37 +115,56 @@
         This is the catalogue's own card index. The four pages before it tell
         the story; this one lists the verbs, their flags, the fields a program
         reads, the codes the linter prints and the files on disk, each copied
-        from the source on 2 September 2026 rather than remembered. Where a
+        from the source on 6 September 2026 rather than remembered. Where a
         line had to be assembled instead of copied, the entry says so. Nobody
         is expected to read it through.
       </p>
 
-      <h2 id="the-eighteen-verbs">The eighteen verbs</h2>
+      <h2 id="the-twenty-four-verbs">The twenty-four verbs</h2>
 
       <h3 id="the-usage-block">The usage block</h3>
       <p>
-        What <code>kb --help</code> prints, minus its prose. The block carries
-        eighteen lines for seventeen verbs, <code>init</code> twice;
-        <code>answer</code> has no line in it and is assembled below.
+        What <code>kb --help</code> prints, minus its prose, copied on 6
+        September 2026. Twenty-eight lines for twenty-four verbs:
+        <code>init</code> takes two and <code>panel</code> takes four, because
+        each of its modes has its own argument set and folding them into one
+        line would hide which flags may travel together.
       </p>
-      <pre><code>kb check [path]... [--strict] [--all]
+      <pre><code>kb --version
+kb check [path]... [--strict] [--all]
 kb index [path]... [--json] [--all]
 kb list [path]... [--base B] [--folder F] [--kind K] [--stage S] [--provenance P] [--json] [--all]
 kb route &lt;question&gt; [path]... [--top N] [--hybrid] [--json] [--all]
+kb answer &lt;question&gt; [path]... [--top N] [--all] [--expanded | --complete]
 kb remember &lt;claim&gt; [path]... [--all] [--json]
 kb init &lt;name&gt; [fleet-root]
 kb init --person [fleet-root]
 kb write &lt;agent&gt; &lt;slug&gt; [fleet-root] --keys &lt;a, b&gt; --summary &lt;one line&gt; [--folder F]
+            [--captured-from PATH]
 kb fleet [path]... [--all]
 kb blocks [path] [--emit]
 kb eval &lt;gold.tsv&gt; [path]... [--top N] [--all] [--classify]
 kb commit &lt;path&gt;... -m &lt;message&gt;
 kb boot [path]... [--top N] [--all]
+kb ingest &lt;file&gt; [path]... [--agent NAME] [--keep] [--dry-run] [--top N] [--all]
 kb promote [path]... [--top N] [--all] [--dry-run] [--max N] [--lock]
 kb ui [path]... [--port N] [--all]
 kb capture [path] [--session ID]
 kb serve [path]... [--top N] [--all]
-kb misses [path]... [--all] [--top N] [--json]</code></pre>
+kb misses [path]... [--all] [--top N] [--json] [--apply --gold &lt;tsv&gt;]
+kb misroute &lt;message&gt; --chose &lt;agent&gt; --owner &lt;agent|none&gt; [--why &lt;text&gt;] [path]
+kb misroutes [path] [--top N]
+kb abstentions [path] [--top N] [--all]
+kb panel &lt;artifact&gt; [path] --owner &lt;agent&gt; [--reviewer &lt;agent&gt;]... [--out D] [--json]
+kb panel &lt;artifact&gt; [path] --from &lt;agent&gt; (--objection &lt;text&gt; [--blocking]
+                                          | --nothing | --not-returned) [--why &lt;text&gt;]
+kb panel &lt;artifact&gt; [path] --resolve &lt;n&gt; (--taken | --refused | --escalated) [--why &lt;text&gt;]
+kb panel [&lt;artifact&gt;] [path] --ledger [--json]</code></pre>
+      <p>
+        <code>answer</code> carried no usage line when this page was first
+        written and its entry below had to be assembled from the source. The
+        line exists now and is copied like the rest.
+      </p>
 
       <h3 id="verb-by-verb">Verb by verb</h3>
       <p>
@@ -165,12 +184,11 @@ kb misses [path]... [--all] [--top N] [--json]</code></pre>
           It never calls a model and never invents a file.
         </dd>
 
-        <dt><code>kb answer "&lt;question&gt;" [path]... [--expanded | --complete]</code></dt>
+        <dt><code>kb answer &lt;question&gt; [path]... [--top N] [--all] [--expanded | --complete]</code></dt>
         <dd>
-          Assembled, not copied: <code>--help</code> carries no usage line for
-          this verb, so the line above is put together from the README's
-          example and from the dispatch in the source, which also reads
-          <code>--top N</code> and <code>--all</code>. It runs
+          Copied, where it used to be assembled: this verb had no line in
+          <code>--help</code> when the page was written, and it has one now.
+          It runs
           <code>route</code>, then hands only the served passages to the
           command named by <code>answerer =</code> in <code>fleet.txt</code>,
           which must ground every claim in them or say plainly that they do
@@ -388,10 +406,93 @@ kb misses [path]... [--all] [--top N] [--json]</code></pre>
           path it read, because <code>KB_MISSES_PATH</code> can move the log and
           two fleets pointed at one path share it, and an absent log exits 0: a
           fleet nothing has missed against is healthy rather than broken. It
-          proposes and never applies, and there is deliberately no flag that
-          does: <code>kb-aliases.txt</code> is a record of real misses, and a
-          machine appending to it on evidence it produced itself closes that
-          loop with nobody in it.
+          proposes an alias line and, since 3 September 2026, can also
+          apply one. <strong>This page said until 6 September 2026 that it proposes and
+          never applies, and that there was deliberately no flag that does.
+          There is one now, and the condition on it is the whole point.</strong>
+          <code>--apply</code> exists only together with <code>--gold &lt;tsv&gt;</code>,
+          and the pairing is not ergonomic sugar: every argument for letting a
+          machine write into <code>kb-aliases.txt</code> rests on the alias
+          being measured against a gold set afterwards, so a writer with
+          nothing to measure against is the one case the flag refuses to be.
+          Without <code>--gold</code> it still only proposes.
+        </dd>
+
+        <dt><code>kb ingest &lt;file&gt; [path]... [--agent NAME] [--keep] [--dry-run] [--top N] [--all]</code></dt>
+        <dd>
+          Turns a document on somebody's disk into notes in one step, where it
+          used to be seven prose steps that most agents did not have. It moves
+          the document into the owning agent's deposit, extracts its text
+          through <code>tools/extract/&lt;ext&gt;.cmd</code>, distils it through
+          the same <code>promote</code> the nightly sweep runs, and then
+          destroys the source. <code>--agent</code> names the owner instead of
+          letting the router pick, <code>--keep</code> leaves the document
+          alone, and <code>--dry-run</code> does none of it. It never deletes a
+          document that produced no note, and never deletes a path the caller
+          typed: it only ever removes what it moved itself.
+        </dd>
+
+        <dt><code>kb misroute &lt;message&gt; --chose &lt;agent&gt; --owner &lt;agent|none&gt; [--why &lt;text&gt;] [path]</code></dt>
+        <dd>
+          Records that the router handed a message to one agent when a
+          different one owns it, in the owner's own words, so a routing fault
+          becomes a countable fact instead of an anecdote that dies with the
+          conversation. It is evidence and never an edit: it does not touch a
+          base, and it does not decide who was right.
+        </dd>
+
+        <dt><code>kb misroutes [path] [--top N]</code></dt>
+        <dd>
+          Reads that log back, most reported first, so a pair of bases that
+          keep being mistaken for each other is visible as a pattern rather
+          than remembered as a grievance. It writes nothing, and it ranks by
+          nothing except how often the same fault was filed.
+        </dd>
+
+        <dt><code>kb abstentions [path] [--top N] [--all]</code></dt>
+        <dd>
+          The router finding that nobody owns a subject is the fleet's most
+          useful failure, and it was the only one that left no trace: the miss
+          log fires on retrieval, and a misroute needs an agent to file it.
+          This records each coverage abstention keyed on the classifier's
+          subject rather than on the words of the message, with its reason and
+          the bases that scored anyway, and reads them back with what each
+          would score today. Keying on the message is what it refuses to do,
+          because that would leave every real gap sitting at a count of one
+          forever.
+        </dd>
+
+        <dt><code>kb panel &lt;artifact&gt; [path] --owner &lt;agent&gt; [--reviewer &lt;agent&gt;]...</code></dt>
+        <dd>
+          Opens an objection round on one artifact and keeps its ledger, so the
+          objection that killed a piece is remembered by something other than
+          whoever happened to be in the room. The first form boots a named
+          panel from each reviewer's own <code>blocks.txt</code> and prices the
+          round in tokens before it is spent. <code>--from</code> records what
+          one reviewer returned, silence included, as an objection, a
+          <code>--nothing</code> or a <code>--not-returned</code>.
+          <code>--resolve</code> accounts for each objection as
+          <code>--taken</code>, <code>--refused</code> with a reason, or
+          <code>--escalated</code>. <code>--ledger</code> reads the round back,
+          and the round does not close until every objection is accounted for.
+          It never calls a model and never chooses the panel for you. A
+          blocking objection cannot be refused, and each reviewer gets at most
+          one, because a reviewer who can block everything holds a veto rather
+          than an objection.
+        </dd>
+
+        <dt><code>kb --version</code>, also <code>kb -V</code> and <code>kb version</code></dt>
+        <dd>
+          One line: the crate version, the commit the binary was compiled from,
+          and the platform, as in <code>kb 0.2.2 (a1b2c3d, x86_64 linux)</code>.
+          The commit is compiled in at build time from
+          <code>KB_BUILD_SHA</code>, which the release workflow sets to the
+          commit it is building, and a build with none says
+          <code>unknown</code> rather than naming one it might not have come
+          from. It never asks git at runtime, and that is the reason it exists:
+          the copy being questioned is usually vendored inside somebody else's
+          deployment bundle, on a host with no <code>.git</code> and no git
+          binary to ask.
         </dd>
       </dl>
 
@@ -1121,6 +1222,7 @@ kb misses [path]... [--all] [--top N] [--json]</code></pre>
     hash        TEXT NOT NULL,
     provenance  TEXT,
     stage       TEXT,
+    captured_from TEXT,
     private     INTEGER NOT NULL DEFAULT 0,
     PRIMARY KEY (base, path)
 );
@@ -1136,9 +1238,20 @@ CREATE VIRTUAL TABLE IF NOT EXISTS chunks USING fts5(
         <code>hash</code> is a content hash, so an unchanged file is skipped
         on the next index. <code>private</code> is 1 for a file inside the
         base's declared private layer and 0 otherwise, two states and never a
-        third. An index built before that column existed is emptied on open
-        and <code>index_was_rebuilt</code> says so. The tokenizer folds accents,
-        which is what lets a Portuguese question find an English note.
+        third. <code>captured_from</code> names the deposit a promoted note was
+        distilled from and is NULL for anything a person wrote by hand, which
+        is the ordinary case and not a defect; it travels as a column rather
+        than as front matter because front matter is not indexed, so a
+        provenance line written there is invisible to the scorer no matter how
+        well it is worded. An index built before either column existed is
+        emptied on open, because <code>sync</code> skips any file whose hash it
+        already knows and a column added to a live index would stay NULL
+        forever. <strong>That is the one thing to know when upgrading a
+        deployed copy:</strong> the first command that opens the index empties
+        it, and only <code>kb index</code> fills it again, so run that
+        immediately after replacing the binary and before anything reads. The
+        tokenizer folds accents, which is what lets a Portuguese question find
+        an English note.
       </p>
       <dl>
         <dt><code>.kb/sessions/&lt;id&gt;</code></dt>

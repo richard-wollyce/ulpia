@@ -373,14 +373,20 @@
         </figcaption>
       </figure>
       <p>
-        A Windows binary, <code>kb-windows-x64.exe</code>, is built beside
-        <code>kb-linux-x64</code>, each with a <code>.sha256</code> next to it.
-        There is no macOS build. Nobody on the project runs one, so a published
-        artifact would be one nothing has ever executed, which is worth less
-        than its absence.
+        Four binaries are built beside each other, each with a
+        <code>.sha256</code> next to it: <code>kb-linux-x64</code>,
+        <code>kb-windows-x64.exe</code>, and since
+        <code>kb-v0.2.2</code> <code>kb-macos-arm64</code> and
+        <code>kb-macos-x64</code>. macOS was absent until then for a stated
+        reason, that nobody on the project runs one, so a published artifact
+        would have been one nothing had ever executed. The matrix answers that
+        reason instead of overruling it: x64 is built on an Intel runner and
+        arm64 on an Apple silicon one, natively, and each binary prints its
+        version and lints the demo fleet on the architecture it claims before
+        anything is published.
       </p>
       <div class="note" role="note">
-        <p><strong>Note.</strong> Both binaries are on the <a href="https://github.com/richard-wollyce/ulpia/releases/latest">latest release</a>, each with a <code>.sha256</code> beside it, and <a href="/docs/local/#build">On Your Machine</a> shows the download and the checksum line. <strong>Take the latest rather than a pinned tag</strong>: <code>kb-v0.1.0</code> predates <a href="/docs/decisions/">ADR-0034</a> and still asks git which files it may serve, so on a bundle with no <code>.git</code> it leaves every base out and answers with nothing. That is the exact deployment this page describes. The source is public at <a href="https://github.com/richard-wollyce/ulpia">github.com/richard-wollyce/ulpia</a>, under <a href="https://github.com/richard-wollyce/ulpia/blob/main/LICENSE">Apache 2.0</a>, and can be cloned today.</p>
+        <p><strong>Note.</strong> Every binary is on the <a href="https://github.com/richard-wollyce/ulpia/releases/latest">latest release</a>, and <a href="/docs/local/#build">On Your Machine</a> shows the download, the checksum and the provenance check. <strong>Take the latest rather than a pinned tag</strong>: <code>kb-v0.1.0</code> predates <a href="/docs/decisions/">ADR-0034</a> and still asks git which files it may serve, so on a bundle with no <code>.git</code> it leaves every base out and answers with nothing. That is the exact deployment this page describes. <strong>After replacing a deployed binary, run <code>kb index</code> before anything reads.</strong> A binary whose index predates a column it needs empties that index when it opens it, and only <code>kb index</code> fills it again, so a read in between is served by an empty base and looks like a base that does not cover the subject. The source is public at <a href="https://github.com/richard-wollyce/ulpia">github.com/richard-wollyce/ulpia</a>, under <a href="https://github.com/richard-wollyce/ulpia/blob/main/LICENSE">Apache 2.0</a>, and can be cloned today.</p>
       </div>
 
       <h2 id="reading-the-json">Reading the JSON</h2>
