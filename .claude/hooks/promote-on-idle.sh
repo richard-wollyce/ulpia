@@ -47,8 +47,18 @@ set -u
 ROOT="${CLAUDE_PROJECT_DIR:-$(cd "$(dirname "$0")/../.." && pwd)}"
 # KB_BIN overrides which build runs. The installed release binary is held open by the
 # running MCP server and cannot always be replaced, so this is how the hook is exercised
-# against a build that is not installed yet. Unset, it is the installed one.
-KB="${KB_BIN:-$ROOT/tools/kb/target/release/kb.exe}"
+# against a build that is not installed yet.
+#
+# Unset, the name is resolved per platform rather than assumed, the same way boot.sh does it.
+# Cargo writes `kb.exe` only on Windows, and this line used to name that spelling alone, so on
+# Linux and macOS the `-x` guard below failed and the hook exited 0 without ever promoting.
+if [ -n "${KB_BIN:-}" ]; then
+  KB="$KB_BIN"
+elif [ -x "$ROOT/tools/kb/target/release/kb.exe" ]; then
+  KB="$ROOT/tools/kb/target/release/kb.exe"
+else
+  KB="$ROOT/tools/kb/target/release/kb"
+fi
 LOG="$ROOT/fleet/kb-promote.log"
 
 # Never fail a session exit. A missing binary or a checkout with no fleet is not an error

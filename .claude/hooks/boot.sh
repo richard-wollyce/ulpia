@@ -35,13 +35,16 @@ ROOT="${CLAUDE_PROJECT_DIR:-$(cd "$(dirname "$0")/../.." && pwd)}"
 # installed binary is routinely held open by a running MCP server and cannot be replaced.
 #
 # Unset, the name is resolved per platform rather than assumed. Cargo writes `kb.exe` only on
-# Windows, so hard-coding either spelling breaks the other family.
+# Windows, so hard-coding either spelling breaks the other family. The `.exe` is tested first
+# because MSYS resolves an extensionless `kb` to `kb.exe` inside `[ -x ]`, so testing the bare
+# name first on Windows takes a branch on a file that is not there. On Linux and macOS the
+# `.exe` test simply fails and the bare name is reached, which is the file Cargo wrote.
 if [ -n "${KB_BIN:-}" ]; then
   KB="$KB_BIN"
-elif [ -x "$ROOT/tools/kb/target/release/kb" ]; then
-  KB="$ROOT/tools/kb/target/release/kb"
-else
+elif [ -x "$ROOT/tools/kb/target/release/kb.exe" ]; then
   KB="$ROOT/tools/kb/target/release/kb.exe"
+else
+  KB="$ROOT/tools/kb/target/release/kb"
 fi
 
 # A checkout with no build and a checkout with no fleet are both ordinary states for somebody
