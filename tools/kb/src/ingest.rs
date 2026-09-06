@@ -171,7 +171,7 @@ impl std::fmt::Display for Kept {
             ),
             Kept::NotAbsorbed { proposals, refused } => write!(
                 f,
-                "no note on disk names this document as what it was captured from. \
+                "this run wrote no note naming this document, or no note on disk names it. \
                  {proposals} proposal(s) were made and {refused} refused; the reasons are \
                  in kb-rejections.txt. A source that produced no note has not been \
                  absorbed, and destroying the only copy of material the base decided it \
@@ -188,6 +188,34 @@ impl std::fmt::Display for Kept {
 /// absorbed knowledge, and letting a stray defect preserve a 5 MB PDF forever would make
 /// the gate meaningless inside a week. Quality is enforced upstream, at the write, where
 /// [`crate::write::note`] refuses a dead key or an em dash before anything lands.
+///
+/// ## Two conditions, and the second one was added after a review found the hole
+///
+/// The proof used to be the disk read alone, on the argument that a run which believes it
+/// wrote a note and did not is exactly the case where the difference matters. That
+/// argument is still right and it was not enough, because **the deposit name is not an
+/// identity.** It is `<agent>/inbox/<today>-<slug>.txt`, [`unique`] picks it on
+/// `!exists()`, and [`destroy`] unlinks it, so the name is free again the moment the first
+/// document is destroyed. Two documents whose stems slug the same, ingested into the same
+/// base on the same day, therefore get the same string, and the second one inherits the
+/// first one's note as its proof.
+///
+/// The realistic path to that, named in ADR-0001's own revisit trigger: the duplication
+/// lens refuses every proposal about material the base already absorbed, so the second
+/// document is exactly the one that writes nothing. It would have been deleted on a proof
+/// belonging to another document, having been unanimously rejected, and the caller would
+/// have seen exit 0.
+///
+/// So a deletion now needs both: **this run wrote a note**, which is what ties the proof to
+/// this document, and **a note on disk names the deposit**, which is what catches a run
+/// that only believed it wrote one. Neither alone is sufficient and the two fail in
+/// opposite directions, which is why both are here rather than one replacing the other.
+///
+/// The name collision itself is not fixed here. It remains an audit ambiguity: two
+/// documents can leave notes carrying one `captured_from` string, and afterwards nothing
+/// says which note came from which. That wants the deposit name to carry something
+/// derived from the content, and it is a change to every deposit filename rather than to
+/// one condition.
 pub fn may_delete(
     fleet_root: &Path,
     deposit_name: &str,
@@ -200,8 +228,9 @@ pub fn may_delete(
         return Err(Kept::Incomplete(first.clone()));
     }
 
-    let written = notes_captured_from(fleet_root, deposit_name);
-    if written == 0 {
+    let this_run = outcome.written();
+    let on_disk = notes_captured_from(fleet_root, deposit_name);
+    if this_run == 0 || on_disk == 0 {
         let refused = outcome.decided.iter().filter(|d| !d.accepted()).count();
         return Err(Kept::NotAbsorbed { proposals: outcome.decided.len(), refused });
     }
@@ -397,6 +426,52 @@ mod tests {
         .expect("note");
         assert_eq!(notes_captured_from(&dir, "gti/inbox/2026-09-05-teorico.txt"), 1);
         assert_eq!(notes_captured_from(&dir, "gti/inbox/something-else.txt"), 0);
+    }
+
+    /// A second document must not inherit the first one's proof of absorption.
+    ///
+    /// The deposit name is `<agent>/inbox/<today>-<slug>.txt` and nothing in it identifies
+    /// the document, so a second file whose stem slugs the same, ingested into the same
+    /// base on the same day after the first was destroyed, gets the identical string back
+    /// from `unique`. Before the run condition was added, `may_delete` said yes on the
+    /// strength of a note written about a different document, and the second document was
+    /// destroyed having produced nothing.
+    #[test]
+    fn a_second_document_cannot_inherit_the_first_ones_proof() {
+        let dir = scratch("inherit");
+        let knowledge = dir.join("fleet/gti/knowledge");
+        let inbox = dir.join("fleet/gti/inbox");
+        std::fs::create_dir_all(&knowledge).expect("knowledge");
+        std::fs::create_dir_all(&inbox).expect("inbox");
+
+        let name = "gti/inbox/2026-09-05-teorico.txt";
+        std::fs::write(
+            knowledge.join("itil.md"),
+            format!("---\nprovenance: agent\nstage: captured\ncaptured_from: {name}\n---\n\n# ITIL\n"),
+        )
+        .expect("note from the first document");
+
+        // The name really is free again, which is the half that makes the collision reachable.
+        assert_eq!(
+            unique(&inbox, "2026-09-05-teorico", "txt"),
+            inbox.join("2026-09-05-teorico.txt"),
+            "a destroyed deposit frees its own name"
+        );
+
+        // A run that wrote nothing: every proposal refused, or none made at all.
+        let barren = crate::promote::Outcome::default();
+        assert_eq!(barren.written(), 0);
+        assert_eq!(
+            notes_captured_from(&dir, name),
+            1,
+            "and a note on disk does name that string, from the other document"
+        );
+
+        let verdict = may_delete(&dir, name, &barren);
+        assert!(
+            matches!(verdict, Err(Kept::NotAbsorbed { .. })),
+            "a run that wrote nothing must never delete, whatever the disk says: {verdict:?}"
+        );
     }
 
     #[test]
