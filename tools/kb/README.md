@@ -36,7 +36,7 @@ plainly when nothing matched rather than returning a confident guess.
 
 ## What is in the box, and the pain each piece answers
 
-Twenty-three verbs. Each exists because something went wrong without it, and the table says what.
+Twenty-four verbs. Each exists because something went wrong without it, and the table says what.
 A verb whose pain you do not have is a verb you do not need to learn.
 
 | Verb | The pain | What it does | What it never does |
@@ -60,6 +60,7 @@ A verb whose pain you do not have is a verb you do not need to learn.
 | `ui` | Reading a base through a terminal is reading a library through a keyhole | A local reading room over the same contract: shelves, books, broken citations shown rather than hidden | Serves a file discovery did not produce, however the path is spelled |
 | `capture` | A session ends and everything it could not answer ends with it | Turns the session's record, appended by `boot` on every message, into one raw file in the last routed agent's `inbox/`: the refused questions with the vocabulary offered back, and where the conversation went. Then `promote` reads it | Runs a model. Writes a `Search for:` line, so the router never names a raw session as an answer. Captures a session no agent was routed in |
 | `panel` | A piece gets reviewed by whoever is in the room, and the objection that killed it is remembered by nobody | Boots a named panel from each agent's own `blocks.txt`, prices the round before it is spent, and keeps a ledger where every objection is taken, refused with a reason, or escalated | Call a model. Choose the panel for you. Let a blocking objection be refused, or a reviewer's silence be recorded as agreement |
+| `version` | A binary vendored into somebody else's repository cannot say which build it is, so "the release broke it" is a sentence nobody can check | Prints the crate version, the commit the artifact was compiled from and the platform on one line: `kb 0.2.1 (2269ba0, x86_64 linux)` | Ask git at runtime. Name a commit it might not be from: a build with nothing compiled in says `unknown` |
 | `misses` | The log records what was asked and could not be answered, and stops there. The file that nearly held the answer, and the key it was missing, is the half nobody can look up | Reads `kb-misses.txt` back, most asked first, and beside each question names the files today's index nearly caught it with, the keys each of those files declares, and the path it read | Write anything. It proposes the alias line and a person adds it |
 | `misroute` | The router hands a message to the wrong agent, the agent answers anyway or says so in chat, and the evidence dies with the conversation | Records that a named agent was handed a message a different agent owns, in the owner's own words, so a routing fault becomes a countable fact instead of an anecdote | Edit a base. Decide who was right. It is evidence, and `kb misses --apply` is the only thing that proposes a fix from it |
 | `misroutes` | One misroute is an anecdote and thirty are a map, but only if something reads them back | Reads `kb-misroutes.txt`, most reported first, so a pair of bases that keep being confused for each other is visible as a pattern rather than remembered as a grievance | Write anything. Rank by anything but how often the same fault was filed |

@@ -20,6 +20,7 @@ const USAGE: &str = "\
 kb, a linter and router for file based knowledge bases
 
 usage:
+    kb --version
     kb check [path]... [--strict] [--all]
     kb index [path]... [--json] [--all]
     kb list [path]... [--base B] [--folder F] [--kind K] [--stage S] [--provenance P] [--json] [--all]
@@ -315,11 +316,42 @@ const VALUE_FLAGS: &[&str] = &[
     "--reviewer", "--out", "--from", "--objection", "--resolve",
 ];
 
+/// What build this is, in one line: `kb 0.2.1 (2269ba0, x86_64 linux)`.
+///
+/// **A binary that cannot name itself cannot be diagnosed once it is somewhere else.**
+/// `kb` is vendored into other repositories and shipped inside deployment bundles, so
+/// the copy answering a question is routinely not the copy anybody has in front of
+/// them. Without this, "the release broke it" is a sentence with no way to check which
+/// release, and the version in `Cargo.toml` is the version of the source, not of the
+/// file on that host.
+///
+/// **The commit is compiled in rather than asked for at runtime.** `option_env!` reads
+/// the variable when the binary is built, so the release workflow sets `KB_BUILD_SHA`
+/// and the value is baked into the artifact it publishes. The alternative was a build
+/// script shelling out to git, and it was refused for the reason ADR-0003 already
+/// gives: `kb` runs where there is no `.git` and no git binary, and a build that needs
+/// git to describe itself describes itself wrong in exactly the place the answer
+/// matters. Unset, it says `unknown`, which is the honest name for a local build.
+fn version_line() -> String {
+    format!(
+        "kb {} ({}, {} {})",
+        env!("CARGO_PKG_VERSION"),
+        option_env!("KB_BUILD_SHA").unwrap_or("unknown"),
+        std::env::consts::ARCH,
+        std::env::consts::OS,
+    )
+}
+
 fn main() -> ExitCode {
     let args: Vec<String> = std::env::args().skip(1).collect();
 
     if args.is_empty() || args.iter().any(|a| a == "-h" || a == "--help") {
         print!("{USAGE}");
+        return ExitCode::SUCCESS;
+    }
+
+    if args[0] == "version" || args.iter().any(|a| a == "--version" || a == "-V") {
+        println!("{}", version_line());
         return ExitCode::SUCCESS;
     }
 
@@ -4825,6 +4857,28 @@ with a body"];
             Some(json::Value::Arr(k)) => assert_eq!(k.len(), 70, "the JSON is not capped"),
             other => panic!("keys is not an array: {other:?}"),
         }
+    }
+
+    /// The line a deployed copy answers with, and the two things it must not lose.
+    ///
+    /// The version alone is not enough. Two builds of `0.2.1` can differ by every commit
+    /// made between the bump and the tag, and the copy that matters is usually vendored
+    /// into another repository where nobody can run `git log`. So the commit rides along,
+    /// and the fallback is the word `unknown` rather than a guess: a local build that
+    /// claimed a commit it did not come from would be worse than one that admits it.
+    #[test]
+    fn the_version_line_names_the_version_and_the_build() {
+        let line = version_line();
+        assert!(
+            line.contains(env!("CARGO_PKG_VERSION")),
+            "the line does not carry the crate version: {line}"
+        );
+        assert!(line.starts_with("kb "), "the line does not name the binary: {line}");
+        // Unset in a local build, set by the release workflow. Either way the field is
+        // occupied, because an empty parenthesis is a line a parser cannot read.
+        let build = option_env!("KB_BUILD_SHA").unwrap_or("unknown");
+        assert!(line.contains(build), "the build is missing from: {line}");
+        assert!(USAGE.contains("kb --version"), "the verb is not in the usage text");
     }
 
     /// The step that used to be missing, and the condition that replaced its absence.

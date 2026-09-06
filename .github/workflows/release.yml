@@ -17,6 +17,15 @@
 # amazonlinux:2023 and inside alpine before it is published. A portability claim that
 # nothing runs is a rumour, and this one is the whole reason the file exists.
 #
+# 3. **Attestation, not just a hash file.** Every artifact ships a `.sha256`, and a
+#    `.sha256` downloaded from the same release as the binary proves only that the
+#    download was not truncated: whoever can publish one can publish the other. The
+#    attestation is a different claim. `attest-build-provenance` signs a statement
+#    binding this file's digest to this repository, this workflow and this commit, with
+#    a short lived Sigstore certificate issued against the run's OIDC identity, and
+#    `gh attestation verify` checks it against a public transparency log. That is the
+#    only thing here a third party can validate without trusting whoever uploaded it.
+#
 # workflow_dispatch builds and uploads without publishing anything, so the binary can be
 # tested before a tag exists. A tag is what publishes.
 name: release
@@ -28,6 +37,10 @@ on:
 
 permissions:
   contents: write
+  # What attest-build-provenance needs: the OIDC token it signs with, and the store it
+  # writes the attestation to. Neither grants the build itself anything.
+  id-token: write
+  attestations: write
 
 jobs:
   linux:
@@ -44,10 +57,24 @@ jobs:
         run: sudo apt-get update && sudo apt-get install -y musl-tools
 
       - name: Build
+        env:
+          # Compiled into the artifact by `option_env!`, because the copy that has to
+          # name itself is usually vendored into another repository, on a host with no
+          # `.git` and no git binary to ask. Unset, `kb --version` says `unknown`.
+          KB_BUILD_SHA: ${{ github.sha }}
         run: |
           cargo build --release --locked \
             --manifest-path tools/kb/Cargo.toml \
             --target x86_64-unknown-linux-musl
+
+      - name: It knows which build it is
+        run: |
+          KB=tools/kb/target/x86_64-unknown-linux-musl/release/kb
+          chmod +x "$KB"
+          "$KB" --version
+          # Asserted, not printed. A version line that silently lost the commit leaves a
+          # binary nobody can place later, and the loss would be invisible in a log.
+          "$KB" --version | grep -q "${GITHUB_SHA}"
 
       - name: It is actually static
         run: |
@@ -82,6 +109,10 @@ jobs:
           cp tools/kb/target/x86_64-unknown-linux-musl/release/kb dist/kb-linux-x64
           cd dist && sha256sum kb-linux-x64 > kb-linux-x64.sha256
 
+      - uses: actions/attest-build-provenance@v2
+        with:
+          subject-path: dist/kb-linux-x64
+
       - uses: actions/upload-artifact@v4
         with:
           name: kb-linux-x64
@@ -96,7 +127,15 @@ jobs:
         with:
           workspaces: tools/kb
       - name: Build
+        env:
+          KB_BUILD_SHA: ${{ github.sha }}
         run: cargo build --release --locked --manifest-path tools/kb/Cargo.toml
+      - name: It knows which build it is
+        shell: bash
+        run: |
+          KB=tools/kb/target/release/kb.exe
+          "$KB" --version
+          "$KB" --version | grep -q "${GITHUB_SHA}"
       - name: The demo fleet routes
         shell: bash
         run: |
@@ -108,6 +147,9 @@ jobs:
           mkdir -p dist
           cp tools/kb/target/release/kb.exe dist/kb-windows-x64.exe
           cd dist && sha256sum kb-windows-x64.exe > kb-windows-x64.exe.sha256
+      - uses: actions/attest-build-provenance@v2
+        with:
+          subject-path: dist/kb-windows-x64.exe
       - uses: actions/upload-artifact@v4
         with:
           name: kb-windows-x64
@@ -124,21 +166,114 @@ jobs:
         with:
           path: dist
           merge-multiple: true
+      - name: One file with every hash, and a body that carries them
+        run: |
+          cd dist
+          # One stable filename, so a consumer can fetch the hashes without knowing what
+          # the artifacts happen to be called this time. sha256sum -c reads it back.
+          cat ./*.sha256 > checksums.txt
+          cd ..
+          {
+            cat <<'PROSE'
+          Built from ${{ github.sha }}.
+
+          ## Verifying what you downloaded
+
+          ```
+          gh attestation verify <the file> --repo ${{ github.repository }}
+          ```
+
+          That is the check that means something to somebody who did not build this. It
+          asks a public transparency log whether this exact digest came out of this
+          repository's release workflow, from the commit named above, and it needs no
+          trust in whoever uploaded the file. It needs a `gh` logged in to any GitHub
+          account, because it reads the attestation through the API; an unattended
+          consumer that cannot log in verifies the same statement offline against
+          `attestation.jsonl`, published beside the binaries:
+
+          ```
+          gh attestation verify <the file> --repo ${{ github.repository }} --bundle attestation.jsonl
+          ```
+
+          `checksums.txt` and the `.sha256` files travel beside the binaries and prove
+          something much smaller: that a download was not truncated. Anybody who can
+          publish a release can publish a matching hash next to it, so a hash alone is
+          integrity and never provenance.
+
+          ```
+          PROSE
+            cat dist/checksums.txt
+            cat <<'PROSE'
+          ```
+
+          `kb --version` prints that same commit, so a copy already deployed somewhere
+          can be placed without guessing which release it came from.
+
+          `kb-linux-x64` is statically linked against musl and depends on nothing
+          outside the file, so it runs on Alpine, on Debian and on the Amazon Linux
+          images serverless functions use.
+
+          `kb` reads the markdown on every run and reads each base's private layer off
+          the base itself, so a deployment bundle needs no `.git` and no git binary.
+          Pass `--all` only if the consumer is meant to see the private layer. See
+          "Running it somewhere that is not your machine" in `tools/kb/README.md`.
+          PROSE
+          } > body.md
+          cat body.md
+
+      # The offline half of the claim, assembled before the release exists rather than
+      # after it. `gh attestation verify` reads the API and needs a logged in `gh`; a
+      # consumer that cannot log in checks the same signed statement with --bundle. The
+      # body names this asset, and a body that names an asset uploaded in a later step
+      # is a promise the release does not keep for as long as that step can fail.
+      #
+      # The bundle coming from the same release is not the hole it looks like: it is
+      # signed against Sigstore's trust root and bound to this repository's workflow
+      # identity, so a forged one fails verification instead of passing it.
+      - name: The signed bundle travels with the binaries
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          cd dist
+          gh attestation download kb-linux-x64 --repo "${GITHUB_REPOSITORY}"
+          gh attestation download kb-windows-x64.exe --repo "${GITHUB_REPOSITORY}"
+          cat ./sha256*.jsonl > attestation.jsonl
+          rm -f ./sha256*.jsonl
+          gh attestation verify kb-linux-x64 --repo "${GITHUB_REPOSITORY}" --bundle attestation.jsonl
+          gh attestation verify kb-windows-x64.exe --repo "${GITHUB_REPOSITORY}" --bundle attestation.jsonl
+
       - name: Publish the release
         uses: softprops/action-gh-release@v2
         with:
           files: dist/*
           fail_on_unmatched_files: true
-          body: |
-            Built from ${{ github.sha }}.
+          body_path: body.md
 
-            `kb-linux-x64` is statically linked against musl and depends on nothing
-            outside the file, so it runs on Alpine, on Debian and on the Amazon Linux
-            images serverless functions use. Both binaries ship with a `.sha256` beside
-            them: check it after vendoring, because a binary committed into another
-            repository is a binary nobody can tell apart from a different one.
-
-            `kb` reads the markdown on every run and reads each base's private layer off
-            the base itself, so a deployment bundle needs no `.git` and no git binary.
-            Pass `--all` only if the consumer is meant to see the private layer. See
-            "Running it somewhere that is not your machine" in `tools/kb/README.md`.
+      # Frontinus, objection 1 on this file, taken. Every other claim in this workflow is
+      # executed rather than asserted, and the one this change added was the only one
+      # nothing ran: the body tells a stranger to verify the attestation, and until this
+      # step existed the first person to find out whether that instruction works was the
+      # stranger, on their clock, inside the repository that vendors the binary.
+      #
+      # It runs after the upload and against the download, never against `dist/`. What is
+      # claimed is a property of the published release: `upload-artifact` puts every byte
+      # through a zip between the job that attested the digest and the job that publishes
+      # it, and an attestation matches by digest alone, so a transformation anywhere on
+      # that path would invalidate the claim silently, at the consumer. Fetching the
+      # asset back the way a consumer reaches it is the only check that covers the path.
+      - name: The instruction in the body is executed, against the published release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p verify
+          cd verify
+          gh release download "${GITHUB_REF_NAME}" -R "${GITHUB_REPOSITORY}" --clobber
+          # The round trip first. If a byte changed, this names the file that changed,
+          # instead of leaving a signature failure to be read as a signing problem.
+          sha256sum -c checksums.txt
+          # Both paths the body offers, because an instruction nobody ran is the thing
+          # this step exists to stop shipping.
+          gh attestation verify kb-linux-x64 --repo "${GITHUB_REPOSITORY}"
+          gh attestation verify kb-windows-x64.exe --repo "${GITHUB_REPOSITORY}"
+          gh attestation verify kb-linux-x64 --repo "${GITHUB_REPOSITORY}" --bundle attestation.jsonl
+          gh attestation verify kb-windows-x64.exe --repo "${GITHUB_REPOSITORY}" --bundle attestation.jsonl
