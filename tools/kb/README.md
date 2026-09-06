@@ -819,16 +819,29 @@ cargo build --release
 The binary lands in `target/release/kb.exe`.
 
 **There are prebuilt binaries, and this file used not to say so.** Tagged releases carry
-`kb-linux-x64`, statically linked against musl so it depends on nothing outside the file, and
-`kb-windows-x64.exe`, each with a `.sha256` beside it. Both are built and checked by
-`.github/workflows/release.yml`. The first integrator to deploy this developed on Windows, wrapped the
-build gate in a script that skips silently off Linux, and did their measuring inside WSL, because
-nothing they read told them a Windows binary was published. A binary nobody can find is a binary
-nobody has.
+`kb-linux-x64`, statically linked against musl so it depends on nothing outside the file,
+`kb-windows-x64.exe`, and since `kb-v0.2.2` `kb-macos-arm64` and `kb-macos-x64`, each with a `.sha256`
+beside it. All four are built and checked by `.github/workflows/release.yml`. The first integrator to
+deploy this developed on Windows, wrapped the build gate in a script that skips silently off Linux, and
+did their measuring inside WSL, because nothing they read told them a Windows binary was published. A
+binary nobody can find is a binary nobody has.
 
-**There is no macOS build.** Not an oversight being hidden: nobody here runs macOS, so a published
-artifact would be one nothing has ever executed, which is worth less than its absence. Build from
-source there, or open an issue and it gets added to the matrix.
+**macOS was absent until `kb-v0.2.2`, and the reason it was absent is the reason it is now here.**
+Nobody in this project runs macOS, so a published artifact would have been one nothing had ever
+executed, which is worth less than its absence. The matrix answers that rather than overruling it: x64
+is built on `macos-13` and arm64 on `macos-latest`, natively, and each binary prints its version and
+lints the demo fleet on the architecture it claims before anything is published. Cross compiling both
+from a single runner would have reinstated the original objection, because the hosted arm64 images
+carry no Rosetta and the x64 artifact could not have been run at all. macOS quarantines a downloaded
+binary, so `xattr -d com.apple.quarantine kb-macos-arm64` once before the first run.
+
+**Every artifact is attested, not only hashed.** `actions/attest-build-provenance` signs a statement
+binding each digest to this repository, this workflow and the commit it was built from, against the
+public Sigstore instance and the Rekor transparency log, and the release job proves the instruction
+works by downloading the published assets back and verifying them before the run is allowed to go
+green. A `.sha256` next to a binary is integrity; whoever can publish one can publish the other. The
+attestation is provenance, and it is the only thing here a third party can check without trusting
+whoever uploaded the file.
 
 Historical note, because it cost an hour and the mechanism generalises: this used to require calling
 the rustup toolchain by absolute path. A Chocolatey Rust package with an incomplete MinGW environment

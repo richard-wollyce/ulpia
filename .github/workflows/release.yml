@@ -26,14 +26,39 @@
 #    `gh attestation verify` checks it against a public transparency log. That is the
 #    only thing here a third party can validate without trusting whoever uploaded it.
 #
-# workflow_dispatch builds and uploads without publishing anything, so the binary can be
-# tested before a tag exists. A tag is what publishes.
+# workflow_dispatch with `bump: none`, the default, builds and uploads without publishing
+# anything, so a binary can be tested before a tag exists. Choosing a bump instead makes
+# the run cut the version itself: it moves the manifest and both lockfiles, commits that,
+# builds every platform from it, and only then does the release create the tag. The order
+# is deliberate and it is the answer to a fault this repository has already had, a tag
+# published with no release behind it. Nothing is tagged until everything under it passed.
+#
+# **The bump lives here rather than in a workflow of its own, and that is forced.** A tag
+# pushed with `GITHUB_TOKEN` does not start another workflow: GitHub refuses to let the
+# default token trigger a run, which is how it stops a workflow from looping on itself. So
+# a separate bump workflow would push a tag that publishes nothing, and the only ways
+# around it are a personal access token stored as a secret or doing the work in the run
+# that already has it. A credential nobody has to hold is the cheaper of the two.
 name: release
 
 on:
   push:
     tags: ["kb-v*"]
   workflow_dispatch:
+    inputs:
+      bump:
+        description: "Cut a release: which part of the version moves. `none` only builds."
+        type: choice
+        default: none
+        options: [none, patch, minor, major]
+
+# Two dispatches at once would compute the same next version off the same manifest, and
+# the second one finds out at the push or at the tag. Queueing them costs a wait and turns
+# a race into an order. Not cancelling, because a run that is already publishing is not a
+# run to interrupt.
+concurrency:
+  group: release
+  cancel-in-progress: false
 
 permissions:
   contents: write
@@ -43,10 +68,135 @@ permissions:
   attestations: write
 
 jobs:
+  # Moves the version and creates the tag, or does nothing at all and says so in its
+  # outputs. Every job below reads `ref` from here, so one expression decides whether the
+  # run builds the branch or the tag it just made, and nothing downstream repeats the
+  # question.
+  bump:
+    runs-on: ubuntu-latest
+    outputs:
+      # The commit-ish everything else checks out. Empty means "whatever triggered this".
+      ref: ${{ steps.cut.outputs.ref }}
+      # The tag to publish under. Empty means this run publishes nothing.
+      #
+      # **On a bump this names a tag that does not exist yet, and that is the point.** An
+      # earlier draft tagged here, before a single binary had been built, and that is the
+      # trap this repository has already been caught by once: a tag is a promise, and a
+      # tag whose build then fails is a version people can see and cannot download. The
+      # tag is created by the release itself, in the last job, after every build and every
+      # verification has passed. What can still be left behind by a failed run is a
+      # version bump commit on the branch with no release against it, which costs the next
+      # run one number and nothing else.
+      tag: ${{ steps.cut.outputs.tag }}
+      # The commit the binaries are built from and stamped with. Not `github.sha`: when
+      # this job bumps, `github.sha` is the commit before the bump, so a binary stamped
+      # with it would name a commit whose manifest still holds the old version. A build
+      # that describes itself wrong is the exact failure `kb --version` exists to end.
+      sha: ${{ steps.cut.outputs.sha }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # The bump pushes, so the checkout has to keep the token it authenticates with.
+          persist-credentials: true
+          # And it has to see the tags, or the collision check below passes on a name that
+          # is already taken and the release job is what discovers it, at the very end.
+          fetch-depth: 0
+      # The hosted image ships a cargo, but which one is not this file's to assume, and
+      # the lockfiles it rewrites are the ones the build then reads with --locked.
+      - uses: dtolnay/rust-toolchain@stable
+
+      - name: Move the version, or decide that nothing moves
+        id: cut
+        env:
+          BUMP: ${{ inputs.bump || 'none' }}
+        run: |
+          # A tag push already carries its own version. Nothing to compute, and nothing
+          # to commit: the run publishes the tag that started it.
+          if [ "${GITHUB_REF_TYPE}" = "tag" ]; then
+            echo "ref=" >> "$GITHUB_OUTPUT"
+            echo "tag=${GITHUB_REF_NAME}" >> "$GITHUB_OUTPUT"
+            echo "sha=${GITHUB_SHA}" >> "$GITHUB_OUTPUT"
+            echo "publishing the tag that triggered this run: ${GITHUB_REF_NAME}"
+            exit 0
+          fi
+          if [ "${BUMP}" = "none" ]; then
+            echo "ref=" >> "$GITHUB_OUTPUT"
+            echo "tag=" >> "$GITHUB_OUTPUT"
+            echo "sha=${GITHUB_SHA}" >> "$GITHUB_OUTPUT"
+            echo "no bump asked for: this run builds and uploads, and publishes nothing."
+            exit 0
+          fi
+
+          cd tools/kb
+          current=$(grep -m1 '^version = ' Cargo.toml | cut -d'"' -f2)
+          major=${current%%.*}
+          rest=${current#*.}
+          minor=${rest%%.*}
+          patch=${rest#*.}
+          case "${BUMP}" in
+            # No cap on the patch, by Richard's rule of 2026-09-05: it runs to 10 and past
+            # it, and the minor waits for him to call a change substantial. The number
+            # therefore carries no compatibility signal, which is why the release body is
+            # where that warning has to live.
+            patch) patch=$((patch + 1)) ;;
+            minor) minor=$((minor + 1)); patch=0 ;;
+            major) major=$((major + 1)); minor=0; patch=0 ;;
+          esac
+          next="${major}.${minor}.${patch}"
+          tag="kb-v${next}"
+          echo "${current} -> ${next}"
+
+          if git rev-parse -q --verify "refs/tags/${tag}" >/dev/null; then
+            echo "::error::${tag} already exists. Nothing was changed."
+            exit 1
+          fi
+
+          # sed on the manifest, cargo on the lockfiles. Writing the lock by hand is how a
+          # lock drifts from what cargo would have resolved, and the build runs --locked,
+          # which refuses to resolve anything the lock does not already describe: a lock
+          # left behind here fails the release rather than the desk.
+          sed -i "0,/^version = \"${current}\"$/s//version = \"${next}\"/" Cargo.toml
+          cd ../..
+          cargo metadata --manifest-path tools/kb/Cargo.toml --format-version 1 > /dev/null
+          cargo metadata --manifest-path tools/bench/Cargo.toml --format-version 1 > /dev/null
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          # Named paths, never `git add -A`. The rule is the repository's, in ADR-0021,
+          # and it holds on a runner for a different reason than it does on a desk: what
+          # else is dirty here is whatever a step above happened to leave behind.
+          #
+          # **The prefix stops this commit from deploying the website.** Frontinus,
+          # objection 2 on this file. The Pages project `ulpia` is git connected and
+          # `site/DEPLOY.md` puts it plainly: a push to `main` deploys the page, and that
+          # is the whole mechanism. There is no watch path narrowing it to `site/`. So
+          # without this marker, asking this workflow for a version of a command line
+          # tool would publish the website, as job one, before a single binary had been
+          # compiled, and Cloudflare builds the tree at the new HEAD rather than the
+          # diff, so whatever site change happened to be sitting unreleased on `main`
+          # would go live with it. `[CF-Pages-Skip]` is one of the five prefixes
+          # Cloudflare's GitHub integration documents, it is case insensitive, and it has
+          # to lead the message. The Cloudflare specific spelling is chosen over
+          # `[CI Skip]` on purpose: the generic one is also a GitHub Actions skip token,
+          # and silencing this repository's own CI is not what is being asked for.
+          git commit -m "[CF-Pages-Skip] kb ${next}, cut by the release workflow" tools/kb/Cargo.toml tools/kb/Cargo.lock tools/bench/Cargo.lock
+          git push origin HEAD:"${GITHUB_REF_NAME}"
+
+          # The commit, not the tag: there is no tag yet, and the jobs below have to check
+          # out the thing that exists. The tag name travels separately, as a name the
+          # release job will claim if and only if everything under it passed.
+          head=$(git rev-parse HEAD)
+          echo "ref=${head}" >> "$GITHUB_OUTPUT"
+          echo "tag=${tag}" >> "$GITHUB_OUTPUT"
+          echo "sha=${head}" >> "$GITHUB_OUTPUT"
+
   linux:
+    needs: [bump]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.bump.outputs.ref }}
       - uses: dtolnay/rust-toolchain@stable
         with:
           targets: x86_64-unknown-linux-musl
@@ -61,20 +211,22 @@ jobs:
           # Compiled into the artifact by `option_env!`, because the copy that has to
           # name itself is usually vendored into another repository, on a host with no
           # `.git` and no git binary to ask. Unset, `kb --version` says `unknown`.
-          KB_BUILD_SHA: ${{ github.sha }}
+          KB_BUILD_SHA: ${{ needs.bump.outputs.sha }}
         run: |
           cargo build --release --locked \
             --manifest-path tools/kb/Cargo.toml \
             --target x86_64-unknown-linux-musl
 
       - name: It knows which build it is
+        env:
+          SHA: ${{ needs.bump.outputs.sha }}
         run: |
           KB=tools/kb/target/x86_64-unknown-linux-musl/release/kb
           chmod +x "$KB"
           "$KB" --version
           # Asserted, not printed. A version line that silently lost the commit leaves a
           # binary nobody can place later, and the loss would be invisible in a log.
-          "$KB" --version | grep -q "${GITHUB_SHA}"
+          "$KB" --version | grep -q "${SHA}"
 
       - name: It is actually static
         run: |
@@ -119,23 +271,28 @@ jobs:
           path: dist/*
 
   windows:
+    needs: [bump]
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.bump.outputs.ref }}
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
         with:
           workspaces: tools/kb
       - name: Build
         env:
-          KB_BUILD_SHA: ${{ github.sha }}
+          KB_BUILD_SHA: ${{ needs.bump.outputs.sha }}
         run: cargo build --release --locked --manifest-path tools/kb/Cargo.toml
       - name: It knows which build it is
         shell: bash
+        env:
+          SHA: ${{ needs.bump.outputs.sha }}
         run: |
           KB=tools/kb/target/release/kb.exe
           "$KB" --version
-          "$KB" --version | grep -q "${GITHUB_SHA}"
+          "$KB" --version | grep -q "${SHA}"
       - name: The demo fleet routes
         shell: bash
         run: |
@@ -155,11 +312,87 @@ jobs:
           name: kb-windows-x64
           path: dist/*
 
+  # Two runners, not one runner cross compiling both. This workflow's standard is that a
+  # portability claim is executed, and an x64 binary built on an arm64 runner cannot be
+  # executed there: Rosetta is not installed on the hosted images, so the strongest check
+  # available would be `file` printing the word x86_64, which is a claim about the header
+  # and not about the program. A native runner each means each artifact answers a question
+  # before it is published.
+  macos:
+    needs: [bump]
+    strategy:
+      # One architecture failing should still show what the other one did. They fail for
+      # different reasons, and finding out about both costs the same run.
+      fail-fast: false
+      matrix:
+        include:
+          - runner: macos-13
+            target: x86_64-apple-darwin
+            artifact: kb-macos-x64
+          - runner: macos-latest
+            target: aarch64-apple-darwin
+            artifact: kb-macos-arm64
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.bump.outputs.ref }}
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: tools/kb
+          # Keyed per target, or the two legs of the matrix overwrite each other's cache
+          # and every run pays a cold build for whichever one lost the race.
+          key: ${{ matrix.target }}
+
+      - name: Build
+        env:
+          KB_BUILD_SHA: ${{ needs.bump.outputs.sha }}
+        run: cargo build --release --locked --manifest-path tools/kb/Cargo.toml --target ${{ matrix.target }}
+
+      - name: It knows which build it is, and it is the architecture it says
+        env:
+          SHA: ${{ needs.bump.outputs.sha }}
+        run: |
+          KB=tools/kb/target/${{ matrix.target }}/release/kb
+          "$KB" --version
+          "$KB" --version | grep -q "${SHA}"
+          # Printed rather than asserted, deliberately: the binary having just run on this
+          # runner is the architecture proof, and `file` is here so a person reading the
+          # log can see which one without going to look it up.
+          file "$KB"
+
+      - name: The demo fleet routes
+        run: |
+          KB=tools/kb/target/${{ matrix.target }}/release/kb
+          "$KB" check --all examples/demo
+
+      - name: Name it and hash it
+        run: |
+          mkdir -p dist
+          cp tools/kb/target/${{ matrix.target }}/release/kb dist/${{ matrix.artifact }}
+          # `shasum -a 256`, because macOS ships no `sha256sum`. Same two column output,
+          # so the file it writes is read back by `sha256sum -c` on the publish runner.
+          cd dist && shasum -a 256 ${{ matrix.artifact }} > ${{ matrix.artifact }}.sha256
+
+      - uses: actions/attest-build-provenance@v2
+        with:
+          subject-path: dist/${{ matrix.artifact }}
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact }}
+          path: dist/*
+
   publish:
-    # Only a tag publishes. A manual run stops at the artifacts above, which is what
-    # makes it safe to build one and try it before deciding it is a release.
-    if: startsWith(github.ref, 'refs/tags/')
-    needs: [linux, windows]
+    # Only a tag publishes, and there are now two ways to have one: the run was started by
+    # a tag push, or the bump job made one. Either way the tag is in `bump.outputs.tag`,
+    # and an empty value is a run that builds and uploads and stops, which is still what
+    # a manual run does unless somebody asks it for a version.
+    if: needs.bump.outputs.tag != ''
+    needs: [bump, linux, windows, macos]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/download-artifact@v4
@@ -175,7 +408,7 @@ jobs:
           cd ..
           {
             cat <<'PROSE'
-          Built from ${{ github.sha }}.
+          Built from ${{ needs.bump.outputs.sha }}.
 
           ## Verifying what you downloaded
 
@@ -211,7 +444,12 @@ jobs:
 
           `kb-linux-x64` is statically linked against musl and depends on nothing
           outside the file, so it runs on Alpine, on Debian and on the Amazon Linux
-          images serverless functions use.
+          images serverless functions use. `kb-macos-arm64` and `kb-macos-x64` are
+          native builds, each one built and executed on a runner of its own
+          architecture rather than cross compiled and assumed; they link against the
+          system libraries, which is the only supported way on macOS. macOS will
+          quarantine a downloaded binary, so `xattr -d com.apple.quarantine <the file>`
+          once before the first run.
 
           `kb` reads the markdown on every run and reads each base's private layer off
           the base itself, so a deployment bundle needs no `.git` and no git binary.
@@ -235,16 +473,24 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           cd dist
-          gh attestation download kb-linux-x64 --repo "${GITHUB_REPOSITORY}"
-          gh attestation download kb-windows-x64.exe --repo "${GITHUB_REPOSITORY}"
+          for f in kb-linux-x64 kb-windows-x64.exe kb-macos-x64 kb-macos-arm64; do
+            gh attestation download "$f" --repo "${GITHUB_REPOSITORY}"
+          done
           cat ./sha256*.jsonl > attestation.jsonl
           rm -f ./sha256*.jsonl
-          gh attestation verify kb-linux-x64 --repo "${GITHUB_REPOSITORY}" --bundle attestation.jsonl
-          gh attestation verify kb-windows-x64.exe --repo "${GITHUB_REPOSITORY}" --bundle attestation.jsonl
+          for f in kb-linux-x64 kb-windows-x64.exe kb-macos-x64 kb-macos-arm64; do
+            gh attestation verify "$f" --repo "${GITHUB_REPOSITORY}" --bundle attestation.jsonl
+          done
 
       - name: Publish the release
         uses: softprops/action-gh-release@v2
         with:
+          # Named, not inferred, and on a bump this is where the tag comes into
+          # existence: the run is still on a branch, and the tag is created against the
+          # commit the binaries were actually built from. Nothing above this line has
+          # published anything, so a failure anywhere leaves no tag to explain.
+          tag_name: ${{ needs.bump.outputs.tag }}
+          target_commitish: ${{ needs.bump.outputs.sha }}
           files: dist/*
           fail_on_unmatched_files: true
           body_path: body.md
@@ -264,16 +510,17 @@ jobs:
       - name: The instruction in the body is executed, against the published release
         env:
           GH_TOKEN: ${{ github.token }}
+          TAG: ${{ needs.bump.outputs.tag }}
         run: |
           mkdir -p verify
           cd verify
-          gh release download "${GITHUB_REF_NAME}" -R "${GITHUB_REPOSITORY}" --clobber
+          gh release download "${TAG}" -R "${GITHUB_REPOSITORY}" --clobber
           # The round trip first. If a byte changed, this names the file that changed,
           # instead of leaving a signature failure to be read as a signing problem.
           sha256sum -c checksums.txt
           # Both paths the body offers, because an instruction nobody ran is the thing
           # this step exists to stop shipping.
-          gh attestation verify kb-linux-x64 --repo "${GITHUB_REPOSITORY}"
-          gh attestation verify kb-windows-x64.exe --repo "${GITHUB_REPOSITORY}"
-          gh attestation verify kb-linux-x64 --repo "${GITHUB_REPOSITORY}" --bundle attestation.jsonl
-          gh attestation verify kb-windows-x64.exe --repo "${GITHUB_REPOSITORY}" --bundle attestation.jsonl
+          for f in kb-linux-x64 kb-windows-x64.exe kb-macos-x64 kb-macos-arm64; do
+            gh attestation verify "$f" --repo "${GITHUB_REPOSITORY}"
+            gh attestation verify "$f" --repo "${GITHUB_REPOSITORY}" --bundle attestation.jsonl
+          done

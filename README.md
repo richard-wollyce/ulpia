@@ -186,15 +186,34 @@ The binary lands at `tools/kb/target/release/kb` (`kb.exe` on Windows); put it o
 your PATH or call it by that path in everything below.
 
 Building it yourself is the honest default for a tool that reads your notes, and it is not
-the only way. Tagged releases carry a prebuilt `kb-linux-x64` and `kb-windows-x64.exe`,
-each with a `.sha256` beside it. **There is no macOS build**: nobody here runs macOS, so a
-published artifact would be one nothing has ever executed, which is worth less than its
-absence. Build from source there.
+the only way. Tagged releases carry `kb-linux-x64`, `kb-windows-x64.exe`, `kb-macos-arm64`
+and `kb-macos-x64`, each with a `.sha256` beside it, plus a `checksums.txt` holding all of
+them and a signed `attestation.jsonl`.
+
+**macOS used to be absent here on purpose**, and the reason was that nobody in this project
+runs macOS, so the artifact would have been one nothing had ever executed, which is worth
+less than its absence. That reason is what changed, not the appetite: the two macOS
+binaries are built on separate native runners, `macos-13` for x64 and `macos-latest` for
+arm64, and each one is executed on the architecture it claims before it is published.
+Cross compiling both from one runner would have brought the old objection back, because an
+x64 binary built on an arm64 runner cannot be run there.
 
 ```
 gh release download -R richard-wollyce/ulpia -p "kb-linux-x64*"
 sha256sum -c kb-linux-x64.sha256
+gh attestation verify kb-linux-x64 --repo richard-wollyce/ulpia
 ```
+
+**The hash and the attestation answer different questions, and only one of them is worth
+much to a stranger.** A `.sha256` downloaded from the same release as the binary says the
+download was not truncated: whoever can publish one can publish the other, so it is
+integrity and never provenance. `gh attestation verify` asks a public transparency log
+whether that exact digest came out of this repository's release workflow, from a named
+commit, and needs no trust in whoever uploaded it. It wants a `gh` logged in to any GitHub
+account; a consumer that cannot log in checks the same signed statement offline by adding
+`--bundle attestation.jsonl`, which ships as a release asset. Whatever the binary reports
+for `kb --version` names the commit it was built from, so a copy already deployed
+somewhere can be placed without guessing.
 
 **No tag in that command, deliberately**, so it resolves to the latest release and cannot
 rot into pointing at an old binary while the prose describes a newer one. It already did
