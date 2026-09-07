@@ -349,7 +349,14 @@ pub fn header_of(text: &str) -> (Vec<String>, String) {
 }
 
 /// The text after a known label, whatever decoration the label is wearing.
-fn labelled<'a>(line: &'a str, labels: &[&str]) -> Option<&'a str> {
+///
+/// **Crate visible because `blocks::strip_keyword_lines` has to agree with this exactly.**
+/// The assembler removes from the prompt the lines this function feeds to the index, so a
+/// second definition of "is this a keyword line" would let the prompt lose a line the index
+/// never gained, or keep one it did. The head must be the whole label and not merely contain
+/// it, which is what keeps the prose sentences that mention `Search for:` in a map's preamble
+/// out of both.
+pub(crate) fn labelled<'a>(line: &'a str, labels: &[&str]) -> Option<&'a str> {
     let (head, tail) = line.split_once(':')?;
     let head = head.trim().trim_matches(|c| c == '*' || c == '_' || c == ' ');
     let head_lower = head.to_ascii_lowercase();

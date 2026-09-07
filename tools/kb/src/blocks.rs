@@ -41,7 +41,16 @@ pub struct Block {
     pub mode: Mode,
     /// Relative paths, in order.
     pub files: Vec<String>,
+    /// **What this block puts in the prompt**, after [`strip_keyword_lines`], and therefore
+    /// what it costs. Every consumer that turns a block into a number reads this one, so
+    /// `kb blocks`, the panel's cost, the reading room and [`invalidation_cost`] all price
+    /// what is sent without any of them knowing a filter exists.
     pub bytes: usize,
+    /// **What the same files measure on disk**, always at least [`Block::bytes`]. Kept
+    /// separately because a single number that quietly changed meaning is the drift the
+    /// reports read this output to catch: a size that dropped by a third with no column
+    /// saying why is indistinguishable from files somebody deleted.
+    pub file_bytes: usize,
     pub missing: Vec<String>,
 }
 
@@ -49,6 +58,71 @@ impl Block {
     pub fn tokens(&self) -> usize {
         tokens(self.bytes)
     }
+
+    /// Bytes on disk that never reach the prompt. Zero for a block with no keyword lines.
+    pub fn trimmed(&self) -> usize {
+        self.file_bytes.saturating_sub(self.bytes)
+    }
+}
+
+/// The note stapled to a block header whose files lost keyword lines.
+///
+/// **Cheap honesty, and the reason it earns its twenty tokens is written in the maps
+/// themselves.** Seven of the fifteen `MAP.md` files tell their reader, in prose that
+/// survives the filter, that "that line is what the router matches against". A reader who
+/// follows that sentence looking for the line and finds nothing cannot tell an entry that
+/// was trimmed from an entry that is broken. One clause per trimmed block buys that
+/// difference, and it is conditional so a block that lost nothing never claims it did.
+const TRIMMED_NOTE: &str = " (`Search for:` lines removed: the router matches those, not you)";
+
+/// Removes the keyword lines a file carries for the router, and the wrapped lines that
+/// continue them.
+///
+/// **The mechanism, and it is the whole justification.** A `Search for:` line exists so
+/// that `index::header_of` can build a SQLite entry for the file. Retrieval then happens
+/// in `retrieve`, against that index, before the model is handed anything. The model
+/// never scores a candidate, so a keyword line in its prompt is a copy of data that was
+/// already consumed somewhere it could not see. On this fleet that copy is 133,105 bytes
+/// of the 269,899 in the fifteen maps, 49.3%, measured 2026-09-07.
+///
+/// **What counts as the line is `index::labelled`'s decision and not a second one.** The
+/// label has to be the entire head before the first colon, so `Search for:` and the bolded
+/// `**Search for:**` both go and a sentence that merely mentions the label in backticks
+/// stays. That distinction is not theoretical: every map preamble contains such a sentence.
+///
+/// **A wrapped line is taken only when two independent signs agree**, that the line before
+/// it ended on a comma and that it opens on a backtick. Either alone would do on today's
+/// files, where the two agree on all 391 keyword lines in the fleet, and requiring both
+/// means the filter under-removes rather than over-removes when somebody writes a keyword
+/// line this file has not seen. Leaving a stray line of keywords in a prompt is a wasted
+/// line; taking a line of prose out of a constitution is a lost instruction.
+///
+/// Byte exact when nothing matches: the split keeps each line's own newline, so a file
+/// with no keyword line comes back identical rather than newline-normalised.
+pub fn strip_keyword_lines(text: &str) -> String {
+    let mut out = String::with_capacity(text.len());
+    let mut lines = text.split_inclusive('\n').peekable();
+    let open = |t: &str| t.trim_end().ends_with(',');
+
+    while let Some(line) = lines.next() {
+        let trimmed = line.trim();
+        if crate::index::labelled(trimmed, &["search for", "buscar por"]).is_none() {
+            out.push_str(line);
+            continue;
+        }
+
+        let mut wrapping = open(trimmed);
+        while wrapping {
+            match lines.peek() {
+                Some(next) if next.trim().starts_with('`') => {
+                    wrapping = open(next.trim());
+                    lines.next();
+                }
+                _ => break,
+            }
+        }
+    }
+    out
 }
 
 /// Reads `blocks.txt` from the base root.
@@ -81,6 +155,7 @@ pub fn read(root: &Path) -> Option<Vec<Block>> {
                 mode,
                 files: Vec::new(),
                 bytes: 0,
+                file_bytes: 0,
                 missing: Vec::new(),
             });
             continue;
@@ -89,7 +164,8 @@ pub fn read(root: &Path) -> Option<Vec<Block>> {
         if let Some(block) = blocks.last_mut() {
             match fs::read_to_string(root.join(line)) {
                 Ok(content) => {
-                    block.bytes += content.len();
+                    block.file_bytes += content.len();
+                    block.bytes += strip_keyword_lines(&content).len();
                     block.files.push(line.to_string());
                 }
                 // A manifest that points at a file nobody moved yet is a real finding,
@@ -122,20 +198,47 @@ pub fn invalidation_cost(blocks: &[Block]) -> Vec<(String, usize)> {
 ///
 /// The markers are for the human reading the assembled prompt. They cost a handful of
 /// tokens and they are what makes a 12,000 token wall of text reviewable.
+///
+/// **This is the one place a file becomes prompt, which is why the keyword filter lives
+/// here and not on disk.** The lines stay in the files, so `kb check` goes on validating
+/// them and an agent goes on editing them by hand; what changes is only what the model is
+/// handed. The alternative, deleting them from disk, is a migration across fifteen bases
+/// plus a linter change, and it would take the router's index down with it.
+///
+/// **It applies to every resident file and not to the map alone.** The map is the only
+/// block carrying these lines today at 133,105 bytes; the other resident files carry
+/// 28,428 more, all of them the file-top form that `index::header_of` actually reads, so
+/// the general rule saves a further fifth and the narrow one leaves the same waste free to
+/// come back the moment somebody adds a keyed file to the identity block. The cost of the
+/// general rule is that it reaches further than the block that motivated it, which is what
+/// [`TRIMMED_NOTE`] is for.
+///
+/// **What it does not reach**, and this is a real seam and not an oversight: a passage the
+/// router retrieves arrives through `retrieve`, not through here, so a note reached by a
+/// question still carries its keyword line. Resident and retrieved text are therefore
+/// filtered differently, and closing that is a separate change against a different caller.
 pub fn assemble(root: &Path, blocks: &[Block]) -> String {
     let mut out = String::new();
 
     for block in blocks.iter().filter(|b| b.mode == Mode::Resident) {
-        out.push_str(&format!("\n<!-- block: {} -->\n\n", block.name));
+        let mut body = String::new();
+        let mut trimmed = false;
+
         for file in &block.files {
             if let Ok(content) = fs::read_to_string(root.join(file)) {
-                out.push_str(&content);
-                if !content.ends_with('\n') {
-                    out.push('\n');
+                let kept = strip_keyword_lines(&content);
+                trimmed |= kept.len() != content.len();
+                body.push_str(&kept);
+                if !kept.ends_with('\n') {
+                    body.push('\n');
                 }
-                out.push('\n');
+                body.push('\n');
             }
         }
+
+        let note = if trimmed { TRIMMED_NOTE } else { "" };
+        out.push_str(&format!("\n<!-- block: {}{note} -->\n\n", block.name));
+        out.push_str(&body);
     }
     out
 }
@@ -223,5 +326,82 @@ mod tests {
     fn no_manifest_is_not_an_error() {
         let dir = scratch("none");
         assert!(read(&dir).is_none());
+    }
+
+    // -----------------------------------------------------------------------
+    // The keyword filter
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn a_file_with_no_keyword_line_comes_back_byte_identical() {
+        let text = "# Title\n\nA paragraph, ending on a comma,\nand a second line.\n";
+        assert_eq!(strip_keyword_lines(text), text);
+        // No trailing newline either: the filter must not normalise one in.
+        assert_eq!(strip_keyword_lines("one\ntwo"), "one\ntwo");
+    }
+
+    #[test]
+    fn both_spellings_of_the_label_go() {
+        let text = "# T\n\n**Search for:** `a`, `b`\n\nbody\n\n- **[[x]]** an entry.\n  \
+                    Search for: `c`, `d`.\n";
+        let out = strip_keyword_lines(text);
+        assert!(!out.contains("Search for:"), "neither spelling survives: {out}");
+        assert!(out.contains("body") && out.contains("[[x]]"), "the entry itself stays: {out}");
+    }
+
+    #[test]
+    fn a_sentence_that_mentions_the_label_is_prose_and_stays() {
+        // Every map preamble in the fleet contains a line of this shape. Removing it
+        // would take a paragraph of instructions out of the constitution.
+        let text = "Each entry gets a `Search for:` line carrying the words a real\n\
+                    question would use, because that line is what the router matches.\n";
+        assert_eq!(strip_keyword_lines(text), text);
+    }
+
+    #[test]
+    fn a_wrapped_keyword_line_goes_with_its_continuations() {
+        let text = "- **[[n]]** a note.\n  Search for: `one`, `two`,\n  `three`, `four`.\n\
+                    \n- **[[m]]** the next note.\n";
+        let out = strip_keyword_lines(text);
+        assert!(!out.contains("three"), "the wrapped half goes too: {out}");
+        assert!(out.contains("[[m]]"), "the next entry survives: {out}");
+    }
+
+    #[test]
+    fn a_line_after_a_comma_that_is_not_keywords_survives() {
+        // Both signs are required, so a prose line that happens to follow a keyword
+        // line ending on a comma is kept. Under-removing is the safe direction.
+        let text = "  Search for: `one`, `two`,\n  and then a sentence nobody meant to lose.\n";
+        let out = strip_keyword_lines(text);
+        assert_eq!(out, "  and then a sentence nobody meant to lose.\n");
+    }
+
+    #[test]
+    fn the_block_sizes_separate_what_is_sent_from_what_is_on_disk() {
+        let dir = scratch("trim");
+        fs::write(dir.join("blocks.txt"), "[map]\nm.md\n").unwrap();
+        let file = "# M\n\n- **[[n]]** a note.\n  Search for: `one`, `two`.\n";
+        fs::write(dir.join("m.md"), file).unwrap();
+
+        let blocks = read(&dir).expect("manifest");
+        assert_eq!(blocks[0].file_bytes, file.len());
+        assert!(blocks[0].bytes < blocks[0].file_bytes, "the sent size is the smaller one");
+        assert_eq!(blocks[0].trimmed(), blocks[0].file_bytes - blocks[0].bytes);
+        assert_eq!(blocks[0].tokens(), tokens(blocks[0].bytes), "cost prices what is sent");
+    }
+
+    #[test]
+    fn only_a_block_that_lost_something_says_so() {
+        let dir = scratch("note");
+        fs::write(dir.join("blocks.txt"), "[identity]\ni.md\n\n[map]\nm.md\n").unwrap();
+        fs::write(dir.join("i.md"), "# I\n\nplain prose, no keys.\n").unwrap();
+        fs::write(dir.join("m.md"), "# M\n\n- **[[n]]** x.\n  Search for: `one`.\n").unwrap();
+
+        let text = assemble(&dir, &read(&dir).expect("manifest"));
+        assert!(text.contains("<!-- block: identity -->"), "untouched block is unannotated");
+        assert!(
+            text.contains(&format!("<!-- block: map{TRIMMED_NOTE} -->")),
+            "the trimmed block says so: {text}"
+        );
     }
 }

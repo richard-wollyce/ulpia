@@ -792,7 +792,11 @@ fn api_blocks(state: &State) -> Value {
                 "mode",
                 Value::Str(format!("{:?}", b.mode).to_lowercase()),
             );
+            // `bytes` is what the block sends, which is what it costs; `file_bytes` is
+            // what the same files measure on disk. They differ by the keyword lines
+            // `blocks::strip_keyword_lines` keeps out of the prompt.
             v.set("bytes", Value::Num(b.bytes as f64));
+            v.set("file_bytes", Value::Num(b.file_bytes as f64));
             v.set("files", Value::Arr(b.files.iter().map(|f| Value::Str(f.clone())).collect()));
             v.set(
                 "missing",

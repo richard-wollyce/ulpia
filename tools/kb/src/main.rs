@@ -3732,22 +3732,25 @@ fn cmd_blocks(path: &str, emit: bool) -> ExitCode {
     println!("{path}/blocks.txt");
     println!();
     println!(
-        "  {:<3} {:<10} {:<10} {:>5} {:>9} {:>9} {:>11}",
-        "#", "block", "mode", "files", "bytes", "~tokens", "cumulative"
+        "  {:<3} {:<10} {:<10} {:>5} {:>9} {:>9} {:>9} {:>11}",
+        "#", "block", "mode", "files", "on disk", "sent", "~tokens", "cumulative"
     );
 
     let mut cumulative = 0usize;
+    let mut trimmed = 0usize;
     for (i, b) in blocks.iter().enumerate() {
         let resident = b.mode == blocks::Mode::Resident;
         if resident {
             cumulative += b.tokens();
+            trimmed += b.trimmed();
         }
         println!(
-            "  {:<3} {:<10} {:<10} {:>5} {:>9} {:>9} {:>11}",
+            "  {:<3} {:<10} {:<10} {:>5} {:>9} {:>9} {:>9} {:>11}",
             i + 1,
             b.name,
             if resident { "resident" } else { "on-demand" },
             b.files.len(),
+            b.file_bytes,
             b.bytes,
             b.tokens(),
             if resident { cumulative.to_string() } else { "-".to_string() }
@@ -3759,6 +3762,17 @@ fn cmd_blocks(path: &str, emit: bool) -> ExitCode {
 
     println!();
     println!("  resident total: about {cumulative} tokens");
+    // **Two columns, because one number that changed meaning is the drift these reports
+    // exist to catch.** `sent` is what the model is handed and what every cost here is
+    // priced on; `on disk` is what the files measure. The gap is the `Search for:` lines,
+    // which the router reads out of the index and the model never scores against.
+    if trimmed > 0 {
+        println!(
+            "  of the resident files, {trimmed} bytes (about {} tokens) are `Search for:`",
+            blocks::tokens(trimmed)
+        );
+        println!("  lines, kept on disk for `kb check` and stripped out of the prompt.");
+    }
     println!();
     println!("  cost of changing a block, in tokens that have to be prefilled again:");
     for (name, cost) in blocks::invalidation_cost(&blocks) {
