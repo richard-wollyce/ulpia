@@ -10,8 +10,13 @@
 # Run `kb blocks .` to see what each one costs and what changing it costs.
 
 # Who the agent is and how it works. Changes rarely.
+#
+# The constitution is `AGENTS.md`, the cross-vendor name for this file. It was
+# `CLAUDE.md` until 2026-09-06 and that name still works everywhere: this list is
+# what declares it, per base, so an agent created before that date needs no change
+# and gets none. Rename the file and rename it here, or neither.
 [identity]
-CLAUDE.md
+AGENTS.md
 index.md
 
 # Who the human is. One file, shared by the whole fleet: a person is not an agent,

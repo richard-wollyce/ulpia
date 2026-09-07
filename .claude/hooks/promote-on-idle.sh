@@ -45,15 +45,31 @@
 set -u
 
 ROOT="${CLAUDE_PROJECT_DIR:-$(cd "$(dirname "$0")/../.." && pwd)}"
-# KB_BIN overrides which build runs. The installed release binary is held open by the
-# running MCP server and cannot always be replaced, so this is how the hook is exercised
-# against a build that is not installed yet.
+# KB_BIN overrides which build runs. It is how the hook is exercised against a build that is
+# not installed yet.
+#
+# `tools/kb/bin/` is the installed location and `tools/kb/target/release/` is a build
+# directory. They were separated on 2026-09-06 because a process holding the second one is
+# what made `cargo build --release` fail its own final copy on Windows and left a fix for
+# silent data loss uninstalled for 24 minutes. The full reasoning, including why `.mcp.json`
+# gets `bin/` with no fallback while these two hooks keep one, is in the header of `boot.sh`
+# and is not repeated here.
+#
+# The fallback matters more in this file than in boot.sh, in one specific way: the detached
+# `nohup ... kb promote` at the bottom runs for minutes, so it is the longest mapping of the
+# build directory this repository can still create. It exists only while `bin/` is empty, and
+# `tools/kb/install.sh` recovers from a held name by moving it aside rather than by stopping
+# anything, so the case is covered rather than merely unlikely.
 #
 # Unset, the name is resolved per platform rather than assumed, the same way boot.sh does it.
 # Cargo writes `kb.exe` only on Windows, and this line used to name that spelling alone, so on
 # Linux and macOS the `-x` guard below failed and the hook exited 0 without ever promoting.
 if [ -n "${KB_BIN:-}" ]; then
   KB="$KB_BIN"
+elif [ -x "$ROOT/tools/kb/bin/kb.exe" ]; then
+  KB="$ROOT/tools/kb/bin/kb.exe"
+elif [ -x "$ROOT/tools/kb/bin/kb" ]; then
+  KB="$ROOT/tools/kb/bin/kb"
 elif [ -x "$ROOT/tools/kb/target/release/kb.exe" ]; then
   KB="$ROOT/tools/kb/target/release/kb.exe"
 else

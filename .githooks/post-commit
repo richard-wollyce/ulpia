@@ -1,0 +1,84 @@
+#!/bin/sh
+# Drift detector. It announces a binary that lags its own repository, at the moment the
+# lag is created. See the header of `.claude/hooks/boot.sh` for the incident.
+#
+# On 2026-09-06 commit 004f29f fixed a path in `kb ingest` where a second document sharing
+# a deposit name could be destroyed having written nothing, on exit 0. The build that would
+# have installed that fix failed on its last step, and for 24 minutes the repository held
+# the fix while every caller of the installed binary still had the defect. Nothing said so,
+# and nothing could have: no file in this repository compared what the repository says
+# against what is actually running.
+#
+# A commit that touches `tools/kb/` is the moment that gap opens, which makes this the
+# cheapest place to notice it. `kb-install.sh --check` compares four sources and treats any
+# disagreement as a finding: the sha compiled into the binary by `option_env!("KB_BUILD_SHA")`,
+# the install record, the file's sha256 on disk, and HEAD. It builds nothing and tests
+# nothing. Measured by its author as three file reads and one process spawn.
+#
+# ## It cannot fail the commit, and that is enforced rather than left to git
+#
+# git discards this hook's exit status, so a failure here was never going to abort a commit.
+# That is not a licence to be careless with it. A hook that prints a stack trace after every
+# commit is a hook somebody deletes within a week, and then the drift detection is off and
+# nobody remembers switching it off. So every guard below exits 0, the check itself is
+# detached with its output on a file, and the script ends with an unconditional `exit 0`.
+#
+# ## Why detached
+#
+# The pattern is `.claude/hooks/promote-on-idle.sh` and it is followed rather than reinvented:
+# `nohup ... &` puts the work in its own process with its output on a file rather than on a
+# pipe this shell owns, so nothing waits on it. `--check` is cheap, but cheap is a measurement
+# taken on one machine on one day, and the commit path is not where that gets spent. The cost
+# of detaching is that no exit code reaches anybody, which is what the two files below are for.
+#
+# ## The two files it writes
+#
+#   fleet/kb-install-check.log   the history, appended, nobody watches it
+#   fleet/kb-drift.txt           the current finding, or absent when there is none.
+#                                `.claude/hooks/boot.sh` prints this on the next prompt, so
+#                                the finding reaches a person instead of a log file.
+#
+# Both live under `fleet/` for the same reason `kb-promote.log` does: they quote a private
+# machine's state, and they are written unattended, so they must not be able to appear in
+# `git status` looking like work. `fleet/` is gitignored.
+#
+# ## Silence
+#
+# `fleet/frontinus/tools/kb-install.sh` is under `fleet/`, so a public clone does not have it
+# and never will. That is the normal case, not the error case, and it exits 0 saying nothing.
+
+ROOT=$(git rev-parse --show-toplevel 2>/dev/null) || exit 0
+[ -n "$ROOT" ] || exit 0
+
+SCRIPT="$ROOT/fleet/frontinus/tools/kb-install.sh"
+[ -r "$SCRIPT" ] || exit 0
+
+# `--root` so the first commit in a repository goes through the same line as every other one,
+# instead of failing because it has no parent to diff against.
+git diff-tree -r --no-commit-id --name-only --root HEAD 2>/dev/null \
+  | grep -q '^tools/kb/' || exit 0
+
+SHA=$(git rev-parse --short HEAD 2>/dev/null) || SHA=unknown
+
+# The body is single quoted, so nothing in it is expanded by this shell, and its four
+# arguments arrive positionally. `bash "$1"` rather than `"$1"`, so a checkout that lost the
+# executable bit still runs it.
+nohup sh -c '
+  out=$(bash "$1" --check 2>&1); rc=$?
+  {
+    echo
+    echo "=== $(date "+%Y-%m-%d %H:%M:%S")  post-commit $2  rc=$rc"
+    printf "%s\n" "$out"
+  } >>"$3"
+  if [ "$rc" -ne 0 ]; then
+    {
+      echo "kb-install --check found drift after commit $2:"
+      printf "%s\n" "$out"
+    } >"$4"
+  else
+    rm -f "$4"
+  fi
+' sh "$SCRIPT" "$SHA" "$ROOT/fleet/kb-install-check.log" "$ROOT/fleet/kb-drift.txt" \
+  >/dev/null 2>&1 &
+
+exit 0

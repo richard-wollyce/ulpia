@@ -13,7 +13,7 @@ use kb::{
     mcp, memory, misroute, misses, panel, promote, remember, store, ui, write,
 };
 use base::Base;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 
 const USAGE: &str = "\
@@ -35,7 +35,7 @@ usage:
     kb blocks [path] [--emit]
     kb eval <gold.tsv> [path]... [--top N] [--all] [--classify]
     kb commit <path>... -m <message>
-    kb boot [path]... [--top N] [--all]
+    kb boot [path]... [--top N] [--all] [--session ID] [--cwd DIR] [--text]
     kb ingest <file> [path]... [--agent NAME] [--keep] [--dry-run] [--top N] [--all]
     kb promote [path]... [--top N] [--all] [--dry-run] [--max N] [--lock]
     kb ui [path]... [--port N] [--all]
@@ -86,6 +86,15 @@ usage:
                 a writer must not be able to award itself
     --base      list: one agent, by its directory name
     --kind      list: the species read from the folder: memory, skills or tools
+    --session   boot, capture: the conversation this message belongs to. boot uses
+                it to emit a constitution only when the routed agent changes, so
+                without it the constitution is emitted every time. capture files
+                the deposit under it and refuses without one
+    --cwd       boot: the fleet root, when no path is named. A host with no config
+                file needs no config file: `kb boot --cwd $PWD` is complete
+    --text      boot: stdin is the message and never a hook payload. Without it the
+                first non-space byte decides, and a message that is itself a JSON
+                object carrying a `prompt` key would be read as an envelope
     -m          commit: the message. Required, and so is at least one path
 
 misses reads kb-misses.txt back: every question the free stage could not answer,
@@ -298,7 +307,7 @@ checks:
     E04 bad-provenance  provenance or stage carries a value outside the legal set
 
 E02, W06 and W07 are asked of every file the index walks, not only of the knowledge
-folder, and they skip the files nobody searches for: README.md, MAP.md, CLAUDE.md,
+folder, and they skip the files nobody searches for: README.md, MAP.md, AGENTS.md, CLAUDE.md,
 what-goes-here.md, MOVED.md, and anything under inbox/ or records/. There is no rule
 demanding a MAP.md any more; the index walks files and a base without one indexes.
 
@@ -311,7 +320,7 @@ const LINES_SHOWN: usize = 3;
 /// Flags that consume the argument after them.
 const VALUE_FLAGS: &[&str] = &[
     "--top", "--keys", "--summary", "--folder", "--provenance", "--stage", "--base", "--kind",
-    "--captured-from", "--agent",
+    "--captured-from", "--agent", "--session", "--cwd",
     "-m", "--port", "--max", "--gold", "--chose", "--owner", "--why",
     "--reviewer", "--out", "--from", "--objection", "--resolve",
 ];
@@ -440,7 +449,16 @@ fn main() -> ExitCode {
             let message = flag_value(&args, "-m").unwrap_or_default();
             cmd_commit(&positional, &message)
         }
-        "boot" => cmd_boot(&paths_or_default(&positional), all, top),
+        // `positional` raw, not `paths_or_default`, because "no path was named" is a state
+        // this command can still answer: `--cwd`, or the envelope's own field, supplies it.
+        "boot" => cmd_boot(
+            &positional,
+            all,
+            top,
+            flag_value(&args, "--session").as_deref(),
+            flag_value(&args, "--cwd").as_deref(),
+            args.iter().any(|a| a == "--text"),
+        ),
         "misses" => cmd_misses(
             &paths_or_default(&positional),
             all,
@@ -3302,18 +3320,50 @@ fn today() -> String {
     format!("{y:04}-{m:02}-{d:02}")
 }
 
-fn cmd_boot(paths: &[&str], all: bool, top: usize) -> ExitCode {
+/// `kb boot`: who answers this message, decided before the model sees it.
+///
+/// **Two input shapes, and the flags are how a host with no hook says the same things.**
+/// `boot::parse_request` reads either a prompt-hook envelope or the message alone;
+/// `--session` and `--cwd` carry what an envelope would have carried, and `--text` refuses
+/// the envelope reading for a caller that knows it is handing over raw text. The flags win
+/// over the payload, the same order `kb capture` uses, so one adapter can pass both without
+/// having to know which one the other end will believe.
+fn cmd_boot(
+    paths: &[&str],
+    all: bool,
+    top: usize,
+    session: Option<&str>,
+    cwd: Option<&str>,
+    text_only: bool,
+) -> ExitCode {
     use std::io::Read;
 
     let mut stdin = String::new();
     if std::io::stdin().read_to_string(&mut stdin).is_err() {
         return ExitCode::SUCCESS;
     }
-    let Some(req) = boot::parse_request(&stdin) else {
+    let parse = if text_only { boot::parse_text } else { boot::parse_request };
+    let Some(mut req) = parse(&stdin) else {
         return ExitCode::SUCCESS;
     };
+    if let Some(s) = session.map(str::trim).filter(|s| !s.is_empty()) {
+        req.session = Some(s.to_string());
+    }
+    if let Some(c) = cwd.map(str::trim).filter(|c| !c.is_empty()) {
+        req.cwd = Some(PathBuf::from(c));
+    }
 
-    let given: Vec<&Path> = paths.iter().map(Path::new).collect();
+    // **The path is positional first, and the working directory is the fallback.** Every
+    // caller that has a config file names the fleet there, so nothing that works today
+    // changes. What this adds is the caller that has no config file at all: `kb boot
+    // --cwd "$PWD"` is a complete invocation, and the envelope's own `cwd` field stops
+    // being a value this command parsed and never read.
+    let fallback = req.cwd.clone();
+    let given: Vec<&Path> = match (paths.is_empty(), &fallback) {
+        (true, Some(c)) => vec![c.as_path()],
+        (true, None) => vec![Path::new(".")],
+        _ => paths.iter().map(Path::new).collect(),
+    };
     let Ok(memory) = memory::Memory::open(&given, all) else {
         return ExitCode::SUCCESS;
     };
@@ -3342,9 +3392,9 @@ fn cmd_capture(root: &str, session: Option<&str>) -> ExitCode {
         None => {
             let mut stdin = String::new();
             let _ = std::io::stdin().read_to_string(&mut stdin);
-            match boot::parse_request(&stdin) {
-                Some(req) if req.session != "unknown" => req.session,
-                _ => {
+            match boot::parse_request(&stdin).and_then(|req| req.session) {
+                Some(s) => s,
+                None => {
                     eprintln!("kb capture: no session named. Pass --session, or the hook payload on stdin.");
                     return ExitCode::from(2);
                 }

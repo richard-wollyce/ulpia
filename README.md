@@ -180,10 +180,22 @@ No network at runtime.
 ```
 git clone https://github.com/richard-wollyce/ulpia && cd ulpia
 cargo build --release --manifest-path tools/kb/Cargo.toml
+sh tools/kb/install.sh
 ```
 
-The binary lands at `tools/kb/target/release/kb` (`kb.exe` on Windows); put it on
+Cargo writes the binary into `tools/kb/target/release/`, and the install step copies it to
+**`tools/kb/bin/kb`** (`kb.exe` on Windows), which is the path every tracked config file in
+this repository names: [`.mcp.json`](.mcp.json) and the hooks under `.claude/`. Put that on
 your PATH or call it by that path in everything below.
+
+**The two directories are separate on purpose and the reason is mechanical.** `.mcp.json`
+maps `kb serve` for the whole life of a session, so whatever path it names is held open by
+a running process, and on Windows a running image cannot have its file removed while cargo
+installs its artifact by remove-then-hardlink. When both were the same file,
+`cargo build --release` compiled a fix and then died on its own final step with
+`failed to remove file ... (os error 5)`. `tools/kb/bin/` is gitignored like `target/`, so
+each clone fills it once from its own build; the install script moves the old file aside
+rather than writing over it, which is the one operation Windows allows on a mapped file.
 
 Building it yourself is the honest default for a tool that reads your notes, and it is not
 the only way. Tagged releases carry `kb-linux-x64`, `kb-windows-x64.exe`, `kb-macos-arm64`

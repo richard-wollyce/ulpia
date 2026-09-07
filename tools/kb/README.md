@@ -294,6 +294,42 @@ It is still resident only because the agent routes by reading it. **The moment `
 into the loop, the map becomes on-demand and the resident set drops by 46% across the fleet**, because
 routing is the map's whole job and it will be happening outside the model by then.
 
+### `kb boot`: who answers, and the two shapes it accepts
+
+```
+kb boot [path]... [--top N] [--all] [--session ID] [--cwd DIR] [--text]
+```
+
+`kb boot` reads a message on stdin, routes it, and prints the chosen agent's constitution
+for a host to inject before the model sees the message. It accepts two input shapes, and
+the second one is why this is a memory layer rather than one runtime's feature.
+
+**A prompt-hook envelope**, which is what a host with a `UserPromptSubmit` hook sends: a
+JSON object carrying `prompt`, `session_id` and `cwd`. This repository's own
+`.claude/hooks/boot.sh` uses it and nothing about it changed.
+
+**The message alone.** Every host that has no such hook, which is every shell, every editor
+and most runtimes, has a message and nothing else, and that is a complete input:
+
+```
+echo "how much protein per meal" | kb boot --cwd "$PWD" --text --session "$MY_SESSION"
+```
+
+That is the whole adapter. `--session` is what makes the constitution arrive **once** per
+conversation instead of on every message: `kb boot` remembers the last agent per session
+under `.kb/sessions/` and emits the constitution only when the routed agent changes. With
+no `--session` there is nothing to remember against, so the constitution is emitted every
+time, which is the only answer that is never wrong and costs repetition rather than an
+agent running with no rules. `--cwd` names the fleet when no path is given.
+
+**How the two are told apart, and the failure mode, because it has one.** The first
+non-space byte is tested for `{`; the text must then parse as JSON and carry at least one
+field the envelope is known to have. So a message that is itself a valid JSON object with a
+top-level `prompt`, `session_id`, `cwd` or `hook_event_name` is read as an envelope, and
+asking about a hook payload by pasting one and nothing else routes on the value of its
+`prompt` key. `--text` is the escape hatch and skips the test entirely, so an adapter that
+never speaks JSON is never ambiguous.
+
 ### `kb panel`: an objection round any agent can run
 
 ```
@@ -539,18 +575,24 @@ Registering it with Claude Code, project scope, from `.mcp.json` at the reposito
   "mcpServers": {
     "zed-memory": {
       "type": "stdio",
-      "command": "${CLAUDE_PROJECT_DIR}/tools/kb/target/release/kb.exe",
+      "command": "${CLAUDE_PROJECT_DIR}/tools/kb/bin/kb.exe",
       "args": ["serve", "${CLAUDE_PROJECT_DIR}"]
     }
   }
 }
 ```
 
+**`bin/` and not `target/release/`, and the difference is not cosmetic.** This server is
+mapped for the whole life of a session, so the path named here is a file some process is
+holding open. Name the build directory and the next `cargo build --release` fails its own
+final step on Windows, because a running image cannot have its file removed. Build into
+`target/`, which nothing maps, then `sh tools/kb/install.sh` to place it in `bin/`.
+
 For all three agents at once, user scope, which stays out of git:
 
 ```
 claude mcp add --transport stdio --scope user fleet-memory -- \
-  C:\fleets\zed\tools\kb\target\release\kb.exe serve \
+  C:\fleets\zed\tools\kb\bin\kb.exe serve \
   C:\fleets\zed C:\fleets\steve C:\fleets\yaron
 ```
 
@@ -809,14 +851,29 @@ convention writes `[[file-name]]` in backticks and those are examples, not refer
 - **It has no notion of staleness yet.** `valid_for` is required on sourced notes but nothing compares
   it to reality. That needs to know what is installed, which is the next honest step, not a guess.
 
-## Build
+## Build and install
 
 ```
 cargo test
 cargo build --release
+sh install.sh
 ```
 
-The binary lands in `target/release/kb.exe`.
+Cargo writes the binary into `target/release/` and `install.sh` copies it to `bin/`, which
+is the installed path and the one `.mcp.json` and the hooks under `.claude/` name. Both
+directories are gitignored, and they are two directories rather than one because a running
+`kb serve` maps the installed file: on Windows a mapped file cannot be removed, and cargo
+installs by remove-then-hardlink, so a build directory that doubles as an install directory
+makes `cargo build --release` fail its own last step whenever a session is open. The
+installer moves the old file aside instead of writing over it, which is the operation
+Windows does allow on a mapped file, and the running server keeps executing the image it
+already has until it exits.
+
+`install.sh` deliberately has no gate, no download and no record of what it installed. The
+operator-side sibling that has all three, because an unattended machine needs to know which
+commit is actually executing, is `fleet/frontinus/tools/kb-install.sh`, and it is private
+because its gates and its release record describe one operator's machine rather than this
+tool.
 
 **There are prebuilt binaries, and this file used not to say so.** Tagged releases carry
 `kb-linux-x64`, statically linked against musl so it depends on nothing outside the file,

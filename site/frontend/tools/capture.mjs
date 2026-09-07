@@ -13,9 +13,17 @@
 // or diff it against what is there to see whether the capture has gone stale.
 import { execFileSync } from "node:child_process";
 import { resolve } from "node:path";
+import { existsSync } from "node:fs";
 
 const REPO = resolve(import.meta.dirname, "../../..");
-const KB = resolve(REPO, "tools/kb/target/release/kb.exe");
+// The installed binary lives outside `target/` so a running `kb serve` never maps
+// the file cargo has to replace. A plain `cargo build --release` still fills
+// `target/release/`, so both are tried and the installed one wins.
+const KB = [
+  "tools/kb/bin/kb.exe", "tools/kb/bin/kb",
+  "tools/kb/target/release/kb.exe", "tools/kb/target/release/kb",
+].map((p) => resolve(REPO, p)).find(existsSync)
+  ?? resolve(REPO, "tools/kb/target/release/kb.exe");
 const QUESTION = "why is there no embedding model in the retrieval path";
 const BASE = "decisions";
 const HITS = Number(process.argv[2] ?? 3);

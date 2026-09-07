@@ -20,7 +20,7 @@
 //! `--stage raw` with zero rows on a base full of raw captures. The two populations
 //! differ on purpose: a filter is a question about what the library holds, not about
 //! what a question can reach. The cost is real and worth stating, because nothing warns
-//! about it: `MAP.md`, `README.md` and `CLAUDE.md` are rows here, and an operator
+//! about it: `MAP.md`, `README.md` and the constitution are rows here, and an operator
 //! narrows them away with `--folder knowledge`.
 //!
 //! **The facets are read off disk on every call, never out of the store.** The `files`

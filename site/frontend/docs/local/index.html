@@ -78,7 +78,12 @@
           </li>
           <li><a href="#prose-after-the-verdict-kb-answer">Prose after the verdict: kb answer</a></li>
           <li><a href="#from-claude-code-and-claude-desktop">From Claude Code and Claude Desktop</a></li>
-          <li><a href="#the-fleet-boots-the-agent">The fleet boots the agent</a></li>
+          <li>
+            <a href="#the-fleet-boots-the-agent">The fleet boots the agent</a>
+            <ol>
+              <li><a href="#a-host-with-no-hook">A host with no hook</a></li>
+            </ol>
+          </li>
           <li><a href="#the-reading-room">The reading room</a></li>
         </ol>
       </nav>
@@ -103,10 +108,13 @@
         at runtime.
       </p>
       <pre><code>git clone https://github.com/richard-wollyce/ulpia &amp;&amp; cd ulpia
-cargo build --release --manifest-path tools/kb/Cargo.toml</code></pre>
+cargo build --release --manifest-path tools/kb/Cargo.toml
+sh tools/kb/install.sh</code></pre>
       <p>
-        The binary lands at <code>tools/kb/target/release/kb</code>
-        (<code>kb.exe</code> on Windows). Put it on your <code>PATH</code> or
+        Cargo writes the binary into <code>tools/kb/target/release/</code> and the
+        install step copies it to <code>tools/kb/bin/kb</code>
+        (<code>kb.exe</code> on Windows), which is the path every tracked config
+        file in the repository names. Put that on your <code>PATH</code> or
         call it by that path; every command below says <code>kb</code>.
         <code>cargo test</code> in
         <a href="https://github.com/richard-wollyce/ulpia/tree/main/tools/kb"><code>tools/kb</code></a>
@@ -312,7 +320,7 @@ gh attestation verify kb-linux-x64 --repo richard-wollyce/ulpia</code></pre>
       </figure>
       <p>
         Twelve files and directories: <code>agent.txt</code>,
-        <code>index.md</code>, <code>MAP.md</code>, <code>CLAUDE.md</code>,
+        <code>index.md</code>, <code>MAP.md</code>, <code>AGENTS.md</code>,
         <code>blocks.txt</code>, <code>kb-aliases.txt</code> and a
         <code>.gitignore</code>, then <code>knowledge/</code>,
         <code>inbox/</code>, <code>decisions/</code>, <code>protocols/</code>
@@ -637,18 +645,21 @@ These are population numbers from published guidelines, not a prescription.</cod
       <pre><code>{
   "mcpServers": {
     "vesta": {
-      "command": "./tools/kb/target/release/kb.exe",
+      "command": "./tools/kb/bin/kb.exe",
       "args": ["serve", "."]
     }
   }
 }</code></pre>
+      <div class="note" role="note">
+        <p><strong>The installed path, not the build directory.</strong> This server stays mapped for the whole life of a session, so the path named here is a file some process is holding open. Point it at <code>target/release/</code> and the next <code>cargo build --release</code> fails its own final step on Windows, because a running image cannot have its file removed and cargo installs by remove-then-hardlink. Build into <code>target/</code>, which nothing maps, then <code>sh tools/kb/install.sh</code> to place it in <code>bin/</code>.</p>
+      </div>
       <p>
         At user scope, which stays out of any repository, one command
         registers several bases at once, and the <code>--</code> is mandatory:
         everything after it is passed to the server untouched.
       </p>
       <pre><code>claude mcp add --transport stdio --scope user fleet-memory -- \
-  C:\fleets\zed\tools\kb\target\release\kb.exe serve \
+  C:\fleets\zed\tools\kb\bin\kb.exe serve \
   C:\fleets\zed C:\fleets\steve C:\fleets\yaron</code></pre>
       <p>
         Claude Desktop takes the same command and arguments in
@@ -700,7 +711,7 @@ These are population numbers from published guidelines, not a prescription.</cod
         "hooks": [
           {
             "type": "command",
-            "command": "\"$CLAUDE_PROJECT_DIR/tools/kb/target/release/kb.exe\" boot \"$CLAUDE_PROJECT_DIR\" --top 5 --all",
+            "command": "\"$CLAUDE_PROJECT_DIR/tools/kb/bin/kb.exe\" boot \"$CLAUDE_PROJECT_DIR\" --top 5 --all",
             "timeout": 30
           }
         ]
@@ -781,6 +792,52 @@ These are population numbers from published guidelines, not a prescription.</cod
         and must reach the model whatever the router thinks. If nothing was
         injected, the hook is not installed or the router abstained, and the
         session is the librarian rather than one of the agents.
+      </p>
+
+      <h3 id="a-host-with-no-hook">A host with no hook</h3>
+      <p>
+        Everything above is one runtime's envelope, and a memory layer that
+        only speaks one runtime's envelope is that runtime's feature. So
+        <code>kb boot</code> takes a second shape: the message alone on stdin,
+        with <code>--session</code> and <code>--cwd</code> carrying what the
+        envelope would have carried, and <code>--text</code> saying stdin is
+        never an envelope. Every shell, every editor and every runtime without
+        a prompt hook has exactly that, and the adapter is one line.
+      </p>
+      <figure class="plate">
+        <pre><code><span class="prompt">$ </span>printf '%s' 'how much protein per meal' | kb boot examples/demo --text --session s1
+<span class="agree">VESTA: this message routes to yaron. You are yaron for as long as that holds.</span>
+<span class="out"></span>
+<span class="out">Open these before answering:</span>
+<span class="out">  yaron/knowledge/protein-basics.md</span>
+<span class="out">  yaron/index.md</span>
+<span class="prompt">$ </span>printf '%s' 'como faco rollback sem downtime' | kb boot examples/demo --text --session s1
+<span class="agree">VESTA: this message routes to zed. You are zed for as long as that holds.</span>
+<span class="out"></span>
+<span class="out">(the conversation was with yaron until this message)</span>
+<span class="out"></span>
+<span class="out">Open these before answering:</span>
+<span class="out">  zed/knowledge/deploy-checklist.md</span></code></pre>
+        <figcaption>Real output, 6 September 2026, local release build on Windows 11, over examples/demo, two messages in one session. The first line of each briefing is quoted to its first sentence; the full line continues with how to record a misroute. Long lines scroll.</figcaption>
+      </figure>
+      <p>
+        <code>--session</code> is what makes the constitution arrive once per
+        conversation rather than on every message, because it is the key the
+        last routed agent is remembered under. Without it there is nothing to
+        remember against, so the constitution is emitted every time: the cost
+        is repetition, and the alternative is an agent handed a name with none
+        of the rules that go with it.
+      </p>
+      <p>
+        The two shapes are told apart by the first non-space byte. A
+        <code>{</code> that then parses as JSON and carries one of the
+        envelope's own fields is an envelope; everything else is the message,
+        verbatim. That has a failure mode and it is worth stating rather than
+        hiding: a message that is itself a JSON object with a top-level
+        <code>prompt</code> key is read as an envelope, so pasting a hook
+        payload as your whole message routes on the value inside it.
+        <code>--text</code> skips the test entirely, which is why an adapter
+        that never speaks JSON should always pass it.
       </p>
       <p>
         Measured on 18 August 2026 on the release binary over five bases of a

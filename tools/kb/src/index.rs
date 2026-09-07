@@ -170,8 +170,14 @@ pub fn base_name(root: &Path) -> String {
 /// reader could not tell which they had opened: `README.md` is a base's front door,
 /// `what-goes-here.md` is a folder legend read by whoever is about to drop a file in, and
 /// `MOVED.md` is a signpost that shouts because it has to catch somebody who arrived expecting
-/// content. `MAP.md` is a reading list for a person and `CLAUDE.md` is injected by the runtime,
-/// so neither is ever retrieved.
+/// content. `MAP.md` is a reading list for a person, and the constitution, `AGENTS.md` or
+/// `CLAUDE.md`, is assembled into the boot payload, so none of them is ever retrieved.
+///
+/// **Both constitution names are exempt, and the test is on the file name and not on a
+/// suffix.** It used to be `ends_with`, which was survivable while the name was `claude.md`
+/// and is not survivable now: `knowledge/building-agents.md` ends with `agents.md`, so a
+/// suffix test would silently exempt real notes from E02 and drop them out of the count.
+/// Comparing the last path segment costs one `rsplit` and removes the whole class.
 ///
 /// **`inbox/` is the deposit, and it is served rather than hidden.** This used to say the
 /// opposite twice in three lines, that the deposit is a quarantine whose invisibility is the
@@ -197,11 +203,11 @@ pub fn base_name(root: &Path) -> String {
 /// this list now changes what `kb index` prints as well as what `kb check` reports.
 pub fn is_exempt(rel: &str) -> bool {
     let name = rel.to_lowercase();
-    let orientation = name.ends_with("readme.md")
-        || name.ends_with("what-goes-here.md")
-        || name.ends_with("moved.md")
-        || name.ends_with("map.md")
-        || name.ends_with("claude.md");
+    let file = name.rsplit(['/', '\\']).next().unwrap_or(&name);
+    let orientation = matches!(
+        file,
+        "readme.md" | "what-goes-here.md" | "moved.md" | "map.md" | "agents.md" | "claude.md"
+    );
 
     let in_dir =
         |dir: &str| name.starts_with(&format!("{dir}/")) || name.contains(&format!("/{dir}/"));
@@ -1291,6 +1297,11 @@ mod tests {
             ("readme.md", true),
             ("MAP.md", true),
             ("CLAUDE.md", true),
+            // The name `kb init` writes since 2026-09-06, and the note the old suffix
+            // test would have swallowed with it.
+            ("AGENTS.md", true),
+            ("knowledge/building-agents.md", false),
+            ("knowledge/old-readme.md", false),
             ("knowledge/what-goes-here.md", true),
             ("MOVED.md", true),
             ("inbox/x.md", true),

@@ -20,6 +20,20 @@
 # Build output.
 target/
 
+# The installed binary. `tools/kb/bin/` is where the release artifact is installed and
+# `tools/kb/target/` is where cargo builds, and they are two directories on purpose: a
+# process holding the second one is what made `cargo build --release` fail its own final
+# copy on Windows on 2026-09-06, because a running image cannot have its file removed and
+# cargo installs by remove-then-hardlink. `.mcp.json` and the two hooks under
+# `.claude/hooks/` name the first one.
+#
+# It is ignored for the same reason `target/` is. The installed file is derived, so by
+# ADR-0003 it is not source: it is a few megabytes of platform specific binary that every
+# clone fetches from a release or builds for itself. This line exists because the directory
+# is new and nothing else in this file covers it, so without it the first install would put
+# a binary in `git status` looking like untracked work.
+tools/kb/bin/
+
 # The derived index, wherever it lands. Disposable by ADR-0003.
 .kb/
 

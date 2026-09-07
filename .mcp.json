@@ -1,7 +1,7 @@
 {
   "mcpServers": {
     "vesta": {
-      "command": "./tools/kb/target/release/kb.exe",
+      "command": "./tools/kb/bin/kb.exe",
       "args": ["serve", "."]
     }
   }

@@ -259,7 +259,7 @@ pub fn agent(fleet: &Path, name: &str, at: Option<&Path>) -> Result<Created, Ini
         files += 1;
     }
 
-    write(&root.join("CLAUDE.md"), &claude_md(&title))?;
+    write(&root.join(CONSTITUTION), &constitution_md(&title))?;
     write(&root.join("index.md"), &index_md(&title))?;
     write(&root.join("MAP.md"), &map_md(&title))?;
     write(&root.join("agent.txt"), &agent_txt(&title))?;
@@ -303,7 +303,29 @@ fn write(path: &Path, contents: &str) -> Result<(), InitError> {
 // Templates
 // ---------------------------------------------------------------------------
 
-fn claude_md(title: &str) -> String {
+/// The file name a new agent's constitution is written under.
+///
+/// **It used to be `CLAUDE.md`, and nothing in the file was ever about that vendor.** The
+/// content is "you are Cosimo, read index.md, name the mechanism": generic to the last
+/// line, wearing one runtime's configuration name, stamped into every agent this tool
+/// creates on every machine that runs `kb init`. A constitution is the agent's, not the
+/// host's, and a tool that hard-codes one host's file name into somebody else's agent has
+/// made a product decision on their behalf.
+///
+/// `AGENTS.md` is the cross-vendor convention that emerged for exactly this file, so an
+/// adapter for a host we have never run does not have to be told a name only this project
+/// knows. The alternative considered was an in-house name such as `constitution.md`, which
+/// is equally neutral and collides with nothing; it was rejected because neutrality is not
+/// the whole goal. A name other tooling already looks for is worth more than a name only
+/// ours does, and this repository has enough private vocabulary already.
+///
+/// **`CLAUDE.md` keeps working and is not migrated.** `blocks.txt` declares the file name
+/// per base, so an existing agent naming `CLAUDE.md` assembles exactly as before: this
+/// constant changes what is written, never what is read. Nothing here renames anything on
+/// disk.
+pub const CONSTITUTION: &str = "AGENTS.md";
+
+fn constitution_md(title: &str) -> String {
     format!(
         "# {title}\n\n\
          You are **{title}**.\n\n\
@@ -424,8 +446,13 @@ const BLOCKS_TXT: &str = "\
 # Run `kb blocks .` to see what each one costs and what changing it costs.
 
 # Who the agent is and how it works. Changes rarely.
+#
+# The constitution is `AGENTS.md`, the cross-vendor name for this file. It was
+# `CLAUDE.md` until 2026-09-06 and that name still works everywhere: this list is
+# what declares it, per base, so an agent created before that date needs no change
+# and gets none. Rename the file and rename it here, or neither.
 [identity]
-CLAUDE.md
+AGENTS.md
 index.md
 
 # Who the human is. One file, shared by the whole fleet: a person is not an agent,

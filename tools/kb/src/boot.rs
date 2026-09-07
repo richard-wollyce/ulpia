@@ -46,25 +46,84 @@ use crate::json;
 use crate::fleet;
 use crate::memory::{Memory, Verdict};
 
-/// What the runtime handed us on stdin.
+/// What a host handed us on stdin.
 pub struct Request {
     pub prompt: String,
-    pub session: String,
+    /// The conversation this message belongs to, when the host names one.
+    ///
+    /// **`None` is a real state and not a missing value.** It used to be the string
+    /// `"unknown"`, which made every host that does not number its conversations share one
+    /// cache file, so two unrelated sessions suppressed each other's constitution and each
+    /// one was handed an identity the other had chosen. `None` means no cache: nothing is
+    /// read, nothing is written, and the constitution is emitted every time. The cost is
+    /// one extra injection per message, which is exactly the blast radius `session_file`
+    /// already declares acceptable for this cache.
+    pub session: Option<String>,
+    /// The directory the host is working in, used as the fleet root when no path was
+    /// named on the command line. Read by `cmd_boot`, not here.
     pub cwd: Option<PathBuf>,
 }
 
-/// Parses the hook payload.
+/// Parses whatever arrived on stdin, in either shape this command accepts.
 ///
-/// Every field is optional on purpose. A hook that panics on an unexpected payload takes
-/// the user's message down with it, and the contract belongs to somebody else's runtime:
-/// it can gain fields, rename them, or hand us something else entirely on a version bump.
-/// A boot step that fails closed and silent is strictly better than one that fails loud
-/// and blocks the conversation.
+/// ## Two shapes, because one adapter is a claim and two are a demonstration
+///
+/// A host that exposes a prompt hook sends a JSON envelope. A host that does not, which is
+/// every shell, every editor and every runtime that is not this one, has a message and
+/// nothing else. Accepting only the first made the router a feature of one vendor's
+/// product; accepting both makes an adapter for a new host `echo "$msg" | kb boot .`.
+///
+/// ## How the two are told apart, and where that is wrong
+///
+/// The first non-space byte is tested for `{`. That alone is not enough, because a person
+/// can type a brace, so the text must also parse as JSON **and** carry at least one field
+/// this envelope is known to have. Everything else is the message, verbatim.
+///
+/// **The failure mode, named rather than hidden:** a message that is itself a valid JSON
+/// object with a top-level `prompt`, `session_id`, `cwd` or `hook_event_name` is read as an
+/// envelope. Concretely, asking about a hook payload by pasting one and nothing else routes
+/// on the value of its `prompt` key instead of on the paste. The escape hatch is
+/// `--text`, which skips this test entirely and is what an adapter that never speaks JSON
+/// should pass, so the ambiguity exists only for a caller that opted into the sniff.
+///
+/// Anything unparseable is `None` rather than an error. A boot step that fails closed and
+/// silent is strictly better than one that fails loud and blocks the conversation.
 pub fn parse_request(stdin: &str) -> Option<Request> {
+    parse_envelope(stdin).or_else(|| parse_text(stdin))
+}
+
+/// The message alone, with no envelope around it. What every host that is not this one has.
+pub fn parse_text(stdin: &str) -> Option<Request> {
+    match stdin.trim().is_empty() {
+        // Nothing was typed, so there is nothing to route and nothing to say about it. The
+        // roster belongs to an empty prompt inside an envelope, which is a session opening,
+        // and that is a different event with a different right answer.
+        true => None,
+        false => Some(Request { prompt: stdin.to_string(), session: None, cwd: None }),
+    }
+}
+
+/// The hook payload, when stdin is one.
+///
+/// Every field is optional on purpose. The contract belongs to somebody else's runtime: it
+/// can gain fields, rename them, or hand us something else entirely on a version bump, and
+/// a hook that panics on an unexpected payload takes the user's message down with it.
+fn parse_envelope(stdin: &str) -> Option<Request> {
+    if !stdin.trim_start().starts_with('{') {
+        return None;
+    }
     let v = json::parse(stdin).ok()?;
+    // The evidence that this is an envelope and not a message shaped like one.
+    if !["prompt", "session_id", "hook_event_name", "cwd"].iter().any(|k| v.get(k).is_some()) {
+        return None;
+    }
     let prompt = v.get("prompt").and_then(|p| p.as_str()).unwrap_or("").to_string();
-    let session =
-        v.get("session_id").and_then(|s| s.as_str()).unwrap_or("unknown").to_string();
+    let session = v
+        .get("session_id")
+        .and_then(|s| s.as_str())
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .map(str::to_string);
     let cwd = v.get("cwd").and_then(|c| c.as_str()).map(PathBuf::from);
     Some(Request { prompt, session, cwd })
 }
@@ -193,8 +252,15 @@ pub fn brief(memory: &Memory, root: &Path, req: &Request, top: usize) -> Briefin
     // hook runs under the concurrency ADR-0021 describes; `misses::record` now holds a
     // marker while it merges. The loss also goes into the session's own record, which
     // is what `kb capture` turns into a deposit at session end. ADR-0035.
+    //
+    // The session's record is skipped when the host named no session, because a deposit is
+    // filed under a session id and `kb capture` is asked for one by name. There is nothing
+    // to file it under, and inventing a name would put one host's refusals into whatever
+    // the next caller happened to ask for. The fleet-wide miss log above is unaffected.
     if let Some(loss) = memory.recall_loss(&asked, &answer.confidence) {
-        crate::capture::note_refused(root, &req.session, &loss.question, &loss.looked_like);
+        if let Some(session) = &req.session {
+            crate::capture::note_refused(root, session, &loss.question, &loss.looked_like);
+        }
     }
 
     // **Retrieval is code; choosing who answers is a judgement.** ADR-0013 said so and
@@ -361,7 +427,12 @@ pub fn brief(memory: &Memory, root: &Path, req: &Request, top: usize) -> Briefin
         };
     };
 
-    let previous = last_agent(root, &req.session);
+    // **No session named means no memory of one, which is why `switched` stays true.** A
+    // host that does not number its conversations cannot be told the constitution is
+    // already in the context, because nothing here knows whether it is. Emitting it is the
+    // only answer that is never wrong: the cost is repetition, and the alternative is an
+    // agent handed a name with none of the rules that go with it.
+    let previous = req.session.as_deref().and_then(|s| last_agent(root, s));
 
     // **Stickiness was built here and removed on 2026-08-19, measured both times.**
     //
@@ -383,10 +454,12 @@ pub fn brief(memory: &Memory, root: &Path, req: &Request, top: usize) -> Briefin
     // and a message with nothing in it changes nothing.
 
     let switched = previous.as_deref() != Some(agent.as_str());
-    remember_agent(root, &req.session, &agent);
-    // Into the session's record as well, so the deposit `kb capture` writes at session
-    // end lands with whoever had the conversation last and can say where it went.
-    crate::capture::note_routed(root, &req.session, &agent);
+    if let Some(session) = &req.session {
+        remember_agent(root, session, &agent);
+        // Into the session's record as well, so the deposit `kb capture` writes at session
+        // end lands with whoever had the conversation last and can say where it went.
+        crate::capture::note_routed(root, session, &agent);
+    }
 
     let files: Vec<String> = answer
         .found
@@ -680,23 +753,68 @@ mod tests {
         )
         .expect("parses");
         assert_eq!(req.prompt, "quanto de proteina");
-        assert_eq!(req.session, "abc-123");
+        assert_eq!(req.session.as_deref(), Some("abc-123"));
+        assert_eq!(req.cwd, Some(PathBuf::from("C:/x")));
     }
 
     /// The runtime's payload belongs to somebody else and can change under us. Missing
     /// fields must degrade, never panic, because a panicking hook takes the user's
-    /// message with it.
+    /// message with it. The one field kept here is what says this is an envelope at all.
     #[test]
     fn a_payload_missing_everything_still_parses() {
-        let req = parse_request("{}").expect("parses");
+        let req = parse_request(r#"{"hook_event_name":"UserPromptSubmit"}"#).expect("parses");
         assert_eq!(req.prompt, "");
-        assert_eq!(req.session, "unknown");
+        assert_eq!(req.session, None);
         assert!(req.cwd.is_none());
     }
 
+    /// **The second shape, and the reason this command is not one vendor's feature.**
+    /// A host with no prompt hook has a message and nothing else, so a message is a
+    /// complete input: no session, no working directory, and the caller supplies those
+    /// with flags when it has them.
     #[test]
-    fn a_payload_that_is_not_json_is_not_a_panic() {
-        assert!(parse_request("not json at all").is_none());
+    fn a_bare_message_on_stdin_is_the_message() {
+        let req = parse_request("quanto de proteina por refeicao").expect("parses");
+        assert_eq!(req.prompt, "quanto de proteina por refeicao");
+        assert_eq!(req.session, None);
+        assert!(req.cwd.is_none());
+    }
+
+    /// Nothing typed is nothing to route. An empty envelope is a session opening and gets
+    /// the roster; empty stdin with no envelope around it is not an event at all.
+    #[test]
+    fn empty_stdin_is_not_a_message() {
+        assert!(parse_request("   \n  ").is_none());
+        assert!(parse_text("").is_none());
+    }
+
+    /// **The sniff, in both directions.** Text that opens with a brace and does not parse
+    /// is still text, and so is a JSON object carrying none of the envelope's fields. What
+    /// is left over is the failure mode named on `parse_request`, and `--text` is the way
+    /// out of it.
+    #[test]
+    fn text_that_merely_looks_like_a_payload_is_still_text() {
+        let broken = parse_request("{ this is not json, it is a question about braces }")
+            .expect("falls through to text");
+        assert_eq!(broken.prompt, "{ this is not json, it is a question about braces }");
+
+        let foreign = parse_request(r#"{"kind":"note","body":"hi"}"#).expect("falls through");
+        assert_eq!(foreign.prompt, r#"{"kind":"note","body":"hi"}"#);
+
+        // And the residue, stated as a test so nobody discovers it as a surprise: a real
+        // payload pasted as a whole message is read as a payload. `parse_text` is what a
+        // caller passing `--text` gets, and it never looks inside.
+        let pasted = r#"{"prompt":"inner","session_id":"s"}"#;
+        assert_eq!(parse_request(pasted).expect("sniffed").prompt, "inner");
+        assert_eq!(parse_text(pasted).expect("verbatim").prompt, pasted);
+    }
+
+    /// A session id that arrives empty is the same state as no session id, because an
+    /// empty file name is not a cache key.
+    #[test]
+    fn an_empty_session_id_is_no_session() {
+        let req = parse_request(r#"{"prompt":"x","session_id":"  "}"#).expect("parses");
+        assert_eq!(req.session, None);
     }
 
     /// The defect this guard exists for: the runtime submits background task
@@ -782,7 +900,7 @@ mod tests {
 
         let req = Request {
             prompt: "qual a taxa de juros do trimestre".into(),
-            session: "s-loss".into(),
+            session: Some("s-loss".into()),
             cwd: None,
         };
         let _ = brief(&memory, &root, &req, 5);
@@ -821,7 +939,7 @@ mod tests {
 
         let req = Request {
             prompt: "qual a taxa de juros do trimestre".into(),
-            session: "s-shortfall".into(),
+            session: Some("s-shortfall".into()),
             cwd: None,
         };
         let brief = brief(&memory, &root, &req, 5);
@@ -866,7 +984,7 @@ mod tests {
 
         let req = Request {
             prompt: "qual a taxa de juros do trimestre".into(),
-            session: "s-abstain".into(),
+            session: Some("s-abstain".into()),
             cwd: None,
         };
         let brief = brief(&memory, &root, &req, 5);
