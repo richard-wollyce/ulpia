@@ -96,6 +96,23 @@ pub fn chunk(text: &str) -> Vec<Chunk> {
     out
 }
 
+/// **This is a third test for a keyword line, and it is deliberately not `index::labelled`.**
+///
+/// `index::labelled` requires the whole head before the colon to be the label, so it keeps a
+/// prose sentence that merely mentions `Search for:` in backticks. `blocks::strip_keyword_lines`
+/// shares that definition because it edits a constitution, where taking out a line of prose is
+/// a lost instruction. This one drops any line containing the string, which is wider.
+///
+/// **The divergence is measured rather than assumed: 43 lines across the fleet, 2026-09-07,
+/// out of 632 lines carrying the label.** Most sit in `MAP.md` files, which `sync` never
+/// chunks anyway, and a handful are sentences in real notes that are therefore missing from
+/// the full text index.
+///
+/// It is left as it is tonight and not tightened, because tightening it changes what the text
+/// scorer can find, which needs the fleet reindexed and `kb eval` rerun before and after. A
+/// recall change measured by nobody is exactly the kind of quiet improvement that turns out to
+/// be a regression. The cost of leaving it is bounded and stated above; the cost of changing it
+/// blind is not.
 fn is_keyword_line(line: &str) -> bool {
     line.contains("Search for:") || line.contains("Buscar por:")
 }

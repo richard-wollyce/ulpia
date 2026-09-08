@@ -159,65 +159,6 @@ pub const PROVENANCE: &[&str] = &["human", "agent", "external"];
 /// agent claim is never quietly promoted. The word says who has and has not looked at it.
 pub const STAGE: &[&str] = &["raw", "captured", "distilled", "derived"];
 
-pub struct MapEntry {
-    pub line: usize,
-    pub name: String,
-    pub has_search_line: bool,
-    /// Every line the entry owns, which is what the index reads for keywords.
-    pub body: String,
-}
-
-/// Entries in a map file: top level list items opening with a bold wikilink.
-///
-/// An entry owns every line until the next entry or the next heading, which is
-/// where its `Search for:` line has to be.
-///
-/// The shape is exact on purpose, `- **[[name]]**` with no indentation, because
-/// all three maps use the other shapes for something else: an indented
-/// `- [[name]]` is a sub item inside an entry, and a `- [[name]] beats [[other]]`
-/// line in a connections section is a cross reference. Counting those as entries
-/// produced 20 false warnings on the first real run, all of them demanding a
-/// keyword line for something that is not a file's entry at all.
-pub fn map_entries(text: &str) -> Vec<MapEntry> {
-    let lines: Vec<&str> = text.lines().collect();
-
-    let mut starts: Vec<(usize, String)> = Vec::new();
-    for (i, line) in lines.iter().enumerate() {
-        if line.starts_with("- **[[") {
-            if let Some(name) = links_in(line).into_iter().next() {
-                starts.push((i, name));
-            }
-        }
-    }
-
-    let mut out = Vec::new();
-    for (index, (start, name)) in starts.iter().enumerate() {
-        let mut end = starts
-            .get(index + 1)
-            .map(|(next, _)| *next)
-            .unwrap_or(lines.len());
-
-        for j in (start + 1)..end {
-            if lines[j].starts_with('#') {
-                end = j;
-                break;
-            }
-        }
-
-        let has_search_line = lines[*start..end]
-            .iter()
-            .any(|l| l.contains("Search for:") || l.contains("Buscar por:"));
-
-        out.push(MapEntry {
-            line: start + 1,
-            name: name.clone(),
-            has_search_line,
-            body: lines[*start..end].join("\n"),
-        });
-    }
-    out
-}
-
 // ---------------------------------------------------------------------------
 // The checks
 // ---------------------------------------------------------------------------
@@ -292,29 +233,25 @@ pub fn run(base: &Base) -> Vec<Finding> {
         // `kb check fleet/zed` printed "31 tracked files, clean" over the top of them. A
         // linter that certifies an unreachable file is worse than no linter, because it is
         // the reason nobody looked.
-        check_reachable(file, &mut findings);
+        check_reachable(base, file, &mut findings);
 
         if base.is_note(file) {
             check_note(base, file, &mut findings);
         }
     }
 
-    if let Some(map) = base.map_file() {
-        for entry in map_entries(&map.text) {
-            if !entry.has_search_line {
-                findings.push(Finding {
-                    level: Level::Warning,
-                    code: "W02",
-                    file: map.rel.clone(),
-                    line: entry.line,
-                    message: format!(
-                        "entry [[{}]] has no Search for line, so grep cannot route to it",
-                        entry.name
-                    ),
-                });
-            }
-        }
-    }
+    // **W02 is retired, and it goes with the line it graded.** It warned that a map entry
+    // carried no `Search for:` line, "so grep cannot route to it", which stopped being true
+    // with ADR-0028: the router reads the note's own header and has not read a map entry
+    // since. What was left was a check on a second copy of the keys, and the copy has no
+    // reader. E02, above, asks the same question of the file that decides it, so a note the
+    // map does not describe is still reported and a note the map describes badly is not
+    // reported twice. Keeping W02 would have meant every entry `kb write` now produces
+    // warning about itself, which is a tool whose linter complains about its own output.
+    //
+    // Measured before removing it: 0 findings across the fleet's fifteen bases on
+    // 2026-09-07, because every existing entry carries the line. It graded 391 lines and
+    // reported nothing, which is what a check on a redundant copy looks like.
 
     check_ignores(base, &mut findings);
 
@@ -371,8 +308,12 @@ fn check_ignores(base: &Base, findings: &mut Vec<Finding>) {
 /// the knowledge folder. The two halves answer different questions: this one asks whether the
 /// router can see the file, and `check_note` asks whether a note it CAN see carries the
 /// provenance the evidence rules require.
-fn check_reachable(file: &MdFile, findings: &mut Vec<Finding>) {
-    if crate::index::is_exempt(&file.rel) {
+fn check_reachable(base: &Base, file: &MdFile, findings: &mut Vec<Finding>) {
+    // The base's map is passed rather than assumed, so this reports exactly the population
+    // `index::build` leaves in `Built::unreachable`. They were already required to agree;
+    // once the catalogue became an arm of the exemption, agreeing meant asking with the
+    // same argument.
+    if crate::index::is_exempt(base.map.as_deref(), &file.rel) {
         return;
     }
 
@@ -636,44 +577,6 @@ mod tests {
     #[test]
     fn unterminated_front_matter_does_not_count() {
         assert!(front_matter("---\ntitle: x\n\n# body").is_none());
-    }
-
-    #[test]
-    fn map_entry_sees_its_search_line() {
-        let text = "### knowledge/\n\n- **[[note-one]]** does a thing.\n  Search for: `word`.\n\n- **[[note-two]]** does another.\n";
-        let entries = map_entries(text);
-        assert_eq!(entries.len(), 2);
-        assert!(entries[0].has_search_line);
-        assert!(!entries[1].has_search_line);
-    }
-
-    #[test]
-    fn an_entry_does_not_borrow_the_search_line_of_the_next_section() {
-        let text = "- **[[lonely]]** no keywords here.\n\n## Another section\n\nSearch for: `stolen`.\n";
-        let entries = map_entries(text);
-        assert!(!entries[0].has_search_line);
-    }
-
-    #[test]
-    fn a_cross_reference_in_prose_is_not_an_entry() {
-        // From Yaron's "Conexões principais" section.
-        let text = "- [[seguranca-e-limites]] vence [[formulas]] em qualquer conflito.\n";
-        assert!(map_entries(text).is_empty());
-    }
-
-    #[test]
-    fn an_indented_sub_item_belongs_to_its_parent_entry() {
-        // From Steve's carousel series, where one entry lists its studies.
-        let text = "- **[[series]]** the parent.\n  - [[study-one]]: a slide by slide read.\n  Search for: `series`.\n";
-        let entries = map_entries(text);
-        assert_eq!(entries.len(), 1);
-        assert!(entries[0].has_search_line);
-    }
-
-    #[test]
-    fn portuguese_search_line_counts() {
-        let text = "- **[[nota]]** faz uma coisa.\n  Buscar por: `palavra`.\n";
-        assert!(map_entries(text)[0].has_search_line);
     }
 
     fn md(rel: &str, text: &str) -> MdFile {

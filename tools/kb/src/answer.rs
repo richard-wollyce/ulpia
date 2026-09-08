@@ -256,7 +256,21 @@ pub fn map_prompt(question: &str, batch: &[(String, String)]) -> String {
          - Only what the files literally state. No inference across files, no outside \
            knowledge.\n\n",
     );
+    // **The second door, filtered by the same rule as the first.** Every other prompt here
+    // is built from passages, and `store::chunk` has always dropped keyword lines before a
+    // chunk is stored, for the independence reason: the keyword scorer and the text scorer
+    // must not read the same words. Complete mode is the one path that bypasses chunking and
+    // reads the file off disk, so it was the one path that shipped keyword lines to a model.
+    //
+    // Measured on this fleet 2026-09-07, over the 330 files `complete_plan` selects: 3,641,773
+    // bytes read from disk, of which 310,215 are keyword lines and their wrapped
+    // continuations, 8.5%, about 77,500 tokens per full read across 33 batches.
+    //
+    // The filter is here rather than at the caller's `read_to_string` because this function is
+    // where a file becomes a prompt, which is the same seam `blocks::assemble` occupies, and
+    // it is the definition `index::labelled` owns rather than a fourth copy of it.
     for (name, text) in batch {
+        let text = crate::blocks::strip_keyword_lines(text);
         out.push_str(&format!("--- {name}\n{text}\n\n"));
     }
     out.push_str(&format!("THE QUESTION:\n{question}\n"));
@@ -338,6 +352,37 @@ mod tests {
         assert!(p.contains("no relevant mention"), "skipping a file is a visible act");
         assert!(p.contains("the session \\\n           date") || p.contains("session date") || p.contains("session \
            date"), "dates survive into fact lines");
+    }
+
+    /// **The one path that reads a file instead of a chunk, and therefore the one path that
+    /// shipped keyword lines to a model.** Every other prompt here is built from passages,
+    /// and `store::chunk` drops those lines before a chunk is stored. Complete mode reads
+    /// whole files off disk, so the filter has to be applied where the file becomes a prompt.
+    ///
+    /// The prose of the note has to survive intact, which is the half worth pinning: a filter
+    /// that over-removes takes a fact out of the only stage that reads every file.
+    #[test]
+    fn a_whole_file_batch_arrives_without_its_keyword_lines() {
+        let file = "# Protein
+
+**Search for:** `proteina`, `protein`, `g per kg`,
+                    `grama por quilo`
+
+**Exists to:** state the daily floor
+
+                    The floor is 1.6 g per kg, and the line above ends on a comma,
+                    which must not take this sentence with it.
+";
+        let p = map_prompt("quanta proteina", &[("yaron/knowledge/protein.md".into(), file.into())]);
+
+        assert!(!p.contains("Search for:"), "the declaration goes: {p}");
+        assert!(!p.contains("grama por quilo"), "and its wrapped continuation with it: {p}");
+        assert!(p.contains("The floor is 1.6 g per kg"), "the fact survives: {p}");
+        assert!(
+            p.contains("which must not take this sentence with it"),
+            "a prose line after one ending on a comma survives: {p}"
+        );
+        assert!(p.contains("**Exists to:** state the daily floor"), "the summary is not a key line");
     }
 
     #[test]

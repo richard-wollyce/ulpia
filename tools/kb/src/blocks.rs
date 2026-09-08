@@ -213,10 +213,25 @@ pub fn invalidation_cost(blocks: &[Block]) -> Vec<(String, usize)> {
 /// general rule is that it reaches further than the block that motivated it, which is what
 /// [`TRIMMED_NOTE`] is for.
 ///
-/// **What it does not reach**, and this is a real seam and not an oversight: a passage the
-/// router retrieves arrives through `retrieve`, not through here, so a note reached by a
-/// question still carries its keyword line. Resident and retrieved text are therefore
-/// filtered differently, and closing that is a separate change against a different caller.
+/// **What it does not reach, corrected 2026-09-07.** This used to say a retrieved passage
+/// still carries its keyword line and that resident and retrieved text were therefore filtered
+/// differently. That was wrong, and it was written without looking: `store::chunk` drops those
+/// lines before a chunk is ever stored, for a different reason and with the same effect, so
+/// that the keyword scorer and the text scorer do not read the same words and call their
+/// agreement evidence. Counted over the fleet's fifteen indexes, **0 of 4,357 stored chunks
+/// carry one**, so every surface built from passages, `kb answer`, `kb serve`'s `kb_retrieve`,
+/// `kb route --json`, `promote::evidence_for` and the reading room, was already clean.
+///
+/// The one path that genuinely was not is `kb answer --complete`, which reads whole files off
+/// disk and never touches the chunker. It is filtered in [`crate::answer::map_prompt`], by
+/// this function, at the point the file becomes a prompt.
+///
+/// **The two stated exceptions, where a keyword line is the subject and not overhead.**
+/// `gate::propose` shows a model the keys each near-miss file declares, because its job is to
+/// propose an alias from a query term to a term a file already carries and it cannot do that
+/// blind. `promote::review_prompt` shows the reviewer the proposed note's own keys, because
+/// judging the keys is half of what the reviewer is for. Neither reads a file's prose, so
+/// neither goes through here, and both would be broken by a filter that did.
 pub fn assemble(root: &Path, blocks: &[Block]) -> String {
     let mut out = String::new();
 

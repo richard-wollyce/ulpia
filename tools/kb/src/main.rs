@@ -296,7 +296,6 @@ checks:
     E01 broken-link     a [[link]] with no file behind it
     E02 not-indexed     a file with no `Search for:` line, so the index has no entry
     W01 ambiguous-link  a [[link]] matching more than one file
-    W02 no-search-line  a map entry with no Search for line, where a map exists
     W06 thin-keywords   a `Search for:` line too short to be found by a real question
     W08 unignored       a .gitignore is here and misses a folder declared private
     W07 dead-key        a key that reaches neither the keyword nor the phrase index

@@ -8,10 +8,17 @@
 //!
 //! # Why a note and its map entry are one operation
 //!
-//! A note with no map entry is unreachable. That is not a lint opinion, it is how
-//! routing works: the keyword scorer ranks map entries, so a file nobody listed is a
-//! file no question can reach, and the full text scorer alone reduces to the single
-//! scorer case this system already calls a guess rather than an answer.
+//! A note with no keys is unreachable. That is not a lint opinion, it is how routing
+//! works: the keyword scorer reads the `Search for:` line in each file's own header, so
+//! a file that declares none can be reached by the full text scorer alone, which is the
+//! single scorer case this system already calls a guess rather than an answer.
+//!
+//! The map entry is the other half and it answers a different question. It is what makes
+//! the file browsable by a person and by a model reading the resident map: the wikilink
+//! and one line saying what the file is. **It stopped carrying a copy of the keys on
+//! 2026-09-07**, per ADR-0041, because the router has read the note's header since
+//! ADR-0028 and a second copy of a list is a copy that drifts. This module writes both
+//! halves in one act, which is ADR-0016 and is untouched; only what each half holds moved.
 //!
 //! It is measured, twice, on 2026-08-17. A routing audit of twenty real questions
 //! found the largest single cause of failure was vocabulary the map did not carry.
@@ -159,9 +166,9 @@ impl std::fmt::Display for WriteError {
             WriteError::NoKeys => write!(
                 f,
                 "a note needs keys, and there is no flag to skip it. The keyword scorer \
-                 ranks map entries, so a note with no Search for line is a note no \
-                 question can reach. Give the words a real question would use, not a \
-                 description of the file."
+                 reads the `Search for:` line in the note's own header, so a note without \
+                 one is a note no question can reach. Give the words a real question would \
+                 use, not a description of the file."
             ),
             WriteError::DeadKeys(keys) => write!(
                 f,
@@ -375,15 +382,23 @@ fn render_note(spec: &Note) -> String {
     )
 }
 
-/// The map entry, in the shape `checks::map_entries` reads back.
+/// The map entry: the wikilink, and one line saying what the file is.
+///
+/// **It stopped carrying a `Search for:` line on 2026-09-07, and the reason is a second copy
+/// rather than a byte count.** ADR-0028 moved the keys into the note's own header, which is
+/// what `index::header_of` reads; [`render_note`] writes them there. Writing them here as well
+/// produced two copies of one list with nothing keeping them in sync, and the copy the router
+/// does not read is the one that drifts, silently, the first time somebody widens the keys of
+/// a note by hand. A reader who greps the map for a term then gets an answer built from the
+/// stale half.
+///
+/// The tokens are a second-order argument and were already collected: `blocks::assemble`
+/// filters these lines out of every prompt, so the copy was costing the fleet nothing at boot
+/// and still costing every diff, every hand edit and every non-prompt reader. What a map entry
+/// has to do is make the file browsable, and that is the wikilink, the summary and nothing
+/// else. ADR-0041.
 fn render_entry(slug: &str, spec: &Note) -> String {
-    let keys = spec
-        .keys
-        .iter()
-        .map(|k| format!("`{k}`"))
-        .collect::<Vec<_>>()
-        .join(", ");
-    format!("- **[[{slug}]]** {}\n  Search for: {keys}.\n", spec.summary.trim())
+    format!("- **[[{slug}]]** {}\n", spec.summary.trim())
 }
 
 /// Inserts the entry at the end of its folder's section, creating the section when
@@ -488,9 +503,16 @@ mod tests {
         let text = std::fs::read_to_string(&out.note).expect("note");
         assert!(text.starts_with("---\nprovenance: agent\nstage: derived\n---"), "{text}");
 
+        // The keys are written once, in the note, which is where `index::header_of` reads
+        // them. The map entry is the reading list line and carries none. ADR-0041.
+        assert!(text.contains("**Search for:** `prefill`, `kv cache`"), "{text}");
+
         let map = std::fs::read_to_string(&out.map).expect("map");
         assert!(map.contains("- **[[new-thing]]**"), "{map}");
-        assert!(map.contains("Search for: `prefill`, `kv cache`."), "{map}");
+        assert!(
+            !map.contains("Search for: `prefill`"),
+            "the entry must not carry a second copy of the keys: {map}"
+        );
     }
 
     /// A key no question can reach is dropped, and the note is still written.

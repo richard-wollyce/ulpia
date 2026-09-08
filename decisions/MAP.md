@@ -540,3 +540,15 @@
   `precision loss`, `kb misroute`, `registro de roteamento errado`, `misroute log`,
   `o agente reporta`, `the agent reports it`, `modelo propoe e nao decide`,
   `model proposes and does not decide`, `coluna de abstencao`, `abstention column`.
+
+- **[[0041-the-keys-live-in-one-place]]** 🟢 accepted 2026-09-07. **A note's keys live in the
+  note and nowhere else, and every door by which base text reaches a model filters those lines
+  at the door.** `kb write` stops writing a second copy into the map entry, `kb init`'s
+  generated map stops telling a writer that the entry's line is what the router matches, and
+  W02 is retired with the copy it graded: it reported 0 findings across 391 lines because the
+  router has read the note's own header since ADR-0028. The two mechanical fixes underneath it:
+  an orientation file is never indexed, asked before the file is parsed, which is what stopped
+  `person/MAP.md` ranking beside the file it points at; and `kb answer --complete` filters the
+  whole files it reads off disk, 8.5% of what it sends. Corrects `e5df2b5`'s claim that a
+  retrieved passage still carries its keyword line: 0 of 4,357 stored chunks do. Two stated
+  exceptions where the keys are the subject, `gate::propose` and `promote::review_prompt`.

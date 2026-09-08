@@ -887,14 +887,13 @@ mod tests {
         let _ = std::fs::remove_dir_all(&dir);
         let agent = dir.join("fleet").join("probe");
         std::fs::create_dir_all(agent.join("knowledge")).expect("mkdir");
-        std::fs::write(
-            agent.join("MAP.md"),
-            "# MAP\n\n- **[[real-note]]** a note\n  Search for: `probe`\n",
-        )
-        .expect("map");
+        // The keys are in the note, not in the map entry. They used to be in the entry only,
+        // which made this base's one index entry its own catalogue: see
+        // `index::is_orientation`.
+        std::fs::write(agent.join("MAP.md"), "# MAP\n\n- **[[real-note]]** a note\n").expect("map");
         std::fs::write(
             agent.join("knowledge").join("real-note.md"),
-            "# Real\n\nSee [[missing-note]].\n",
+            "# Real\n\n**Search for:** `probe`, `sonda`\n\n**Exists to:** be a note\n\nSee [[missing-note]].\n",
         )
         .expect("note");
         std::fs::write(agent.join("agent.txt"), "name = Probe\nrole = testing\n").expect("agent");

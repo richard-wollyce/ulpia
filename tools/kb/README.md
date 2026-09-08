@@ -827,7 +827,6 @@ Exit code is 1 when there are errors, or when `--strict` and there are warnings.
 | E02  | error | A file with no `Search for:` line, so the router builds no entry for it. A file nobody can find does not exist |
 | E04  | error | `provenance` or `stage` carries a value outside the legal set |
 | W01  | warn  | A `[[link]]` matching more than one file, so it is ambiguous |
-| W02  | warn  | A map entry with no `Search for:` line, where a map exists |
 | W03  | warn  | An em dash or en dash, which house style forbids |
 | W04  | warn  | A note declaring a source with no `evidence_tier` or `valid_for` |
 | W05  | warn  | A note with no `provenance` or no `stage`, so who wrote it is unknown |
@@ -837,6 +836,12 @@ Exit code is 1 when there are errors, or when `--strict` and there are warnings.
 
 E03, no map file, is gone with the reason it existed: the index walks files since ADR-0028 and a map
 is a reading list for people, so a base without one indexes perfectly well.
+
+W02, a map entry with no `Search for:` line, is gone for the same reason one step further on. The
+router has read the note's own header since ADR-0028 and has not read a map entry since, so W02
+graded a second copy of the keys that nothing consumes. ADR-0041 stops `kb write` producing that
+copy at all, and a check that would then warn about every entry the tool itself writes is a check
+that has to go with it. E02 still asks the reachability question, of the file that decides it.
 
 Links inside fenced blocks and inline code are ignored, because a base that documents its own link
 convention writes `[[file-name]]` in backticks and those are examples, not references. The

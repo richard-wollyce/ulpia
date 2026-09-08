@@ -1844,11 +1844,21 @@ mod tests {
         assert_eq!(found[0], root, "and it is returned untouched");
     }
 
+    /// **The note is the base's entry, and it used to be the map.** This fixture wrote a
+    /// `MAP.md` whose only entry carried a keyword line and no `##` heading, so
+    /// `index::header_of` read that line and the map indexed itself. Every test asserting
+    /// "this base has entries" was passing on the catalogue rather than on a file, which is
+    /// exactly the defect `index::is_orientation` closes. A base is a folder with a note in
+    /// it, so the fixture writes one.
     fn make_base(root: &Path, name: &str) -> PathBuf {
         let dir = root.join(name);
         std::fs::create_dir_all(dir.join("knowledge")).expect("mkdir");
-        std::fs::write(dir.join("MAP.md"), "# MAP\n\n- **[[a]]** thing\n  Search for: `thing`\n")
-            .expect("map");
+        std::fs::write(dir.join("MAP.md"), "# MAP\n\n- **[[a]]** thing\n").expect("map");
+        std::fs::write(
+            dir.join("knowledge").join("a.md"),
+            "# A\n\n**Search for:** `thing`, `coisa`\n\n**Exists to:** hold one thing\n",
+        )
+        .expect("note");
         dir
     }
 

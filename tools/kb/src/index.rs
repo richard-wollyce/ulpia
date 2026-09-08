@@ -163,7 +163,7 @@ pub fn base_name(root: &Path) -> String {
         .unwrap_or_else(|| root.display().to_string())
 }
 
-/// Files nothing should ever search for, in three classes whose reasons are not interchangeable.
+/// Files nothing should ever search for, in four classes whose reasons are not interchangeable.
 ///
 /// **Orientation files** are found by standing in the directory they describe, never by a
 /// question. Three names, because one name was doing three jobs across thirteen files and a
@@ -171,7 +171,14 @@ pub fn base_name(root: &Path) -> String {
 /// `what-goes-here.md` is a folder legend read by whoever is about to drop a file in, and
 /// `MOVED.md` is a signpost that shouts because it has to catch somebody who arrived expecting
 /// content. `MAP.md` is a reading list for a person, and the constitution, `AGENTS.md` or
-/// `CLAUDE.md`, is assembled into the boot payload, so none of them is ever retrieved.
+/// `CLAUDE.md`, is assembled into the boot payload.
+///
+/// **The base's own catalogue is the fourth arm, and it is a parameter rather than a name.**
+/// [`Base::map`] holds whichever of `MAP.md`, `INDEX.md` and `MAPA.md` the base actually
+/// declares, so a base whose reading list is `MAPA.md` is covered and a `knowledge/map.md`
+/// that is not the base's catalogue is not covered by this arm. The name list alone knew only
+/// the first spelling, which is the same class of bug as the `ends_with` below: a test on a
+/// string standing in for a test on the thing.
 ///
 /// **Both constitution names are exempt, and the test is on the file name and not on a
 /// suffix.** It used to be `ends_with`, which was survivable while the name was `claude.md`
@@ -201,21 +208,56 @@ pub fn base_name(root: &Path) -> String {
 /// exempt, so a count that tested only for an empty keyword list would have printed 63 beside
 /// a linter reporting 0. That coupling is the point and it has a cost worth stating: editing
 /// this list now changes what `kb index` prints as well as what `kb check` reports.
-pub fn is_exempt(rel: &str) -> bool {
+pub fn is_exempt(map: Option<&str>, rel: &str) -> bool {
     let name = rel.to_lowercase();
-    let file = name.rsplit(['/', '\\']).next().unwrap_or(&name);
-    let orientation = matches!(
-        file,
-        "readme.md" | "what-goes-here.md" | "moved.md" | "map.md" | "agents.md" | "claude.md"
-    );
 
     let in_dir =
         |dir: &str| name.starts_with(&format!("{dir}/")) || name.contains(&format!("/{dir}/"));
 
-    orientation
+    is_orientation(map, rel)
         || in_dir(crate::promote::DEPOSIT)
         || in_dir("records")
         || name.contains("calculation-log/")
+}
+
+/// The half of [`is_exempt`] that means **the router builds no entry for this file, whatever
+/// the file happens to carry**, as opposed to the half that only means a missing keyword line
+/// is not a defect.
+///
+/// **Splitting the two is the fix for a bug the exemption looked like it already covered.**
+/// `is_exempt` was consulted in [`build`] only after [`header_of`] had come back empty, so it
+/// classified files nobody could reach and never stopped a file from being reached. An
+/// orientation file that happened to carry a `Search for:` line was indexed like a note. That
+/// is not hypothetical: `person/MAP.md` has no `##` heading anywhere, so `header_of`'s bound
+/// never fired, it read the first entry's keyword line, and the map tied with the file it
+/// points at at 28.26 on `quem e o usuario`, measured 2026-09-07. A library that answers with
+/// its own catalogue is the failure `decisions/MOVED.md` records for a different case.
+///
+/// **The mechanism, and it is why the fix is here and not in that one file.** `header_of`'s
+/// doc claimed the `##` bound excluded a map "by construction". It does not: the construction
+/// is a formatting convention, and fourteen of the fleet's fifteen maps happen to follow it.
+/// Giving `person/MAP.md` a heading would close this instance and leave the next map written
+/// without one waiting. Asking the question before the parse runs makes the answer independent
+/// of how the file is punctuated.
+///
+/// **The text scorer already worked this way**, which is the second reason to trust the rule
+/// rather than the bound: `store::sync` has always skipped [`Base::map`], so a map has never
+/// been chunked and no map has ever come back as a passage. The two scorers disagreed about
+/// one file class and only the keyword side leaked it.
+///
+/// **What this deliberately does not reach.** A `README.md` or a `what-goes-here.md` stays in
+/// the full text index and can still be retrieved by the text scorer, 56 chunks across the
+/// fleet on 2026-09-07. That is not the same case and it should not take the same answer: a
+/// map's body is pointers to files that are themselves indexed, so returning it returns a
+/// worse copy of something already reachable, while a folder legend's body is content nothing
+/// else carries. Excluding those would lose real answers to buy tidiness.
+pub fn is_orientation(map: Option<&str>, rel: &str) -> bool {
+    let name = rel.to_lowercase();
+    let file = name.rsplit(['/', '\\']).next().unwrap_or(&name);
+    matches!(
+        file,
+        "readme.md" | "what-goes-here.md" | "moved.md" | "map.md" | "agents.md" | "claude.md"
+    ) || map == Some(rel)
 }
 
 /// What one walk over a base produced, and what the same walk could not.
@@ -258,13 +300,20 @@ pub fn build(base: &Base) -> Built {
     let mut unreachable = Vec::new();
     let mut exempt = 0usize;
     for f in &base.files {
+        // **Asked before the parse, which is the whole of the fix.** An orientation file is
+        // not a note whatever it carries, so whether it gets an entry must not depend on how
+        // it is punctuated. See [`is_orientation`] for the file this caught.
+        if is_orientation(base.map.as_deref(), &f.rel) {
+            exempt += 1;
+            continue;
+        }
         let (keywords, purpose) = header_of(&f.text);
         if keywords.is_empty() {
             // **The `continue` became a classification and that is the whole change.** A
             // file with no `Search for:` line used to leave the walk without a trace, so
             // the base held files nobody could reach and said nothing about it anywhere a
             // person was required to look.
-            if is_exempt(&f.rel) {
+            if is_exempt(base.map.as_deref(), &f.rel) {
                 exempt += 1;
             } else {
                 unreachable.push(f.rel.clone());
@@ -317,11 +366,17 @@ pub fn first_heading(text: &str) -> String {
 
 /// The keys and the purpose a file declares about itself, per [[0028-a-note-carries-its-own-keys]].
 ///
-/// **Scans only what sits before the first section heading**, and that bound is doing real
-/// work rather than being tidy. `MAP.md` carries one `Search for:` line per entry and would
-/// otherwise index itself as a file holding every keyword in the base. Its first section
-/// heading arrives before its first entry, so the bound excludes it by construction rather
-/// than by a filename check that a rename would defeat.
+/// **Scans only what sits before the first section heading**, so a keyword line quoted deep
+/// inside a file is not mistaken for the file's own declaration.
+///
+/// **This bound used to claim it was what kept a map from indexing itself, "by construction".
+/// It was not, and the claim was the bug.** A map carries one `Search for:` line per entry, so
+/// a map whose first `##` arrives before its first entry is excluded and a map with no `##` at
+/// all is not. That is a formatting convention, not a construction: `person/MAP.md` has no
+/// section heading anywhere, so this function read its first entry's keyword line and the map
+/// ranked alongside the file it points at. What excludes a map now is
+/// [`is_orientation`], asked before this runs, which is a question about what the file is
+/// rather than about how it is punctuated.
 ///
 /// Tolerant on read, one shape on write. Each tolerance below was a real parse failure
 /// before it was a tolerance: the label bolded corrupted the first term, the label lower
@@ -377,35 +432,6 @@ fn terms_in(rest: &str) -> Vec<String> {
                 .to_string()
         })
         .filter(|t| !t.is_empty())
-        .collect()
-}
-
-/// Terms from the `Search for:` or `Buscar por:` line, which may wrap over several lines.
-pub fn keywords_in(body: &str) -> Vec<String> {
-    let lines: Vec<&str> = body.lines().collect();
-    let start = lines
-        .iter()
-        .position(|l| l.contains("Search for:") || l.contains("Buscar por:"));
-
-    let start = match start {
-        Some(s) => s,
-        None => return Vec::new(),
-    };
-
-    let mut collected = String::new();
-    for line in &lines[start..] {
-        let piece = match line.split_once(':') {
-            Some((head, tail)) if head.contains("Search for") || head.contains("Buscar por") => tail,
-            _ => line,
-        };
-        collected.push(' ');
-        collected.push_str(piece);
-    }
-
-    collected
-        .split(',')
-        .map(|term| term.trim().trim_matches(|c| c == '`' || c == '.' || c == ' ').to_string())
-        .filter(|term| !term.is_empty())
         .collect()
 }
 
@@ -986,31 +1012,6 @@ mod tests {
     }
 
     #[test]
-    fn keywords_come_off_the_search_line() {
-        let body = "- **[[note]]** does a thing.\n  Search for: `one`, `two words`, `three`.";
-        let k = keywords_in(body);
-        assert_eq!(k, vec!["one", "two words", "three"]);
-    }
-
-    #[test]
-    fn keywords_wrap_across_lines() {
-        let body = "- **[[note]]** x.\n  Search for: `alpha`,\n  `beta`, `gamma`.";
-        let k = keywords_in(body);
-        assert_eq!(k, vec!["alpha", "beta", "gamma"]);
-    }
-
-    #[test]
-    fn portuguese_keyword_line_is_read_too() {
-        let body = "- **[[nota]]** faz algo.\n  Buscar por: `piso calorico`, `bandeira vermelha`.";
-        assert_eq!(keywords_in(body), vec!["piso calorico", "bandeira vermelha"]);
-    }
-
-    #[test]
-    fn no_keyword_line_gives_no_keywords() {
-        assert!(keywords_in("- **[[note]]** just prose.").is_empty());
-    }
-
-    #[test]
     fn the_folder_declares_the_species() {
         // The table, pinned. The unknown-folder default is the load bearing row: the safe
         // misreading of a folder nobody classified is "knows something", never "can do
@@ -1317,8 +1318,20 @@ mod tests {
             ("knowledge/note.md", false),
             ("skills/research.md", false),
         ] {
-            assert_eq!(is_exempt(rel), want, "{rel}");
+            assert_eq!(is_exempt(None, rel), want, "{rel}");
         }
+    }
+
+    /// The arm the name list cannot cover: a base whose reading list is not called
+    /// `MAP.md`. `Base::map` holds whichever of the three legal names is on disk, so a
+    /// base with `MAPA.md` is exempt for the same reason and by the same rule, and a
+    /// `map.md` that is not the base's catalogue is still caught by the name.
+    #[test]
+    fn the_bases_own_catalogue_is_exempt_whatever_it_is_called() {
+        assert!(is_orientation(Some("MAPA.md"), "MAPA.md"), "the declared catalogue");
+        assert!(!is_orientation(None, "MAPA.md"), "the name list alone does not know it");
+        assert!(is_orientation(Some("MAPA.md"), "MAP.md"), "the name list still applies");
+        assert!(is_exempt(Some("MAPA.md"), "MAPA.md"), "and E02 stays quiet about it");
     }
 
     /// **The deposit is one name used in three places, not three string literals.**
@@ -1335,7 +1348,7 @@ mod tests {
     #[test]
     fn the_deposit_is_exempt_under_the_name_promote_writes_to() {
         let rel = format!("{}/dropped.md", crate::promote::DEPOSIT);
-        assert!(is_exempt(&rel), "the deposit carries no keys by design: {rel}");
+        assert!(is_exempt(None, &rel), "the deposit carries no keys by design: {rel}");
         assert_eq!(
             crate::retrieve::layer_of(&rel),
             crate::retrieve::Layer::Short,
@@ -1384,5 +1397,48 @@ mod tests {
             base.files.len(),
             "a file the walk touched and counted nowhere is the silence this exists to break"
         );
+    }
+
+    /// **The regression, reproduced from the file that produced it.**
+    ///
+    /// `person/MAP.md` has no `##` heading anywhere, so `header_of`'s bound never fires, it
+    /// reads the first entry's keyword line, and the map is indexed as a note holding every
+    /// keyword in the base. Measured on the live fleet 2026-09-07: `kb route "quem e o
+    /// usuario"` returned `person/MAP.md` and `person/core.md` tied at 28.26, the catalogue
+    /// ranking with the file it points at.
+    ///
+    /// The fixture is deliberately the shape that breaks: entries with keyword lines and no
+    /// section heading. A map with a heading passes this test either way, which is what made
+    /// the old claim look true for four months and fourteen of fifteen files.
+    #[test]
+    fn a_map_with_no_section_heading_still_does_not_index_itself() {
+        let map = "# MAP: who the person is
+
+- **[[core]]** who they are.
+                     Search for: `usuario`, `user`, `quem sou eu`
+";
+        let base = Base {
+            root: std::path::PathBuf::from("person"),
+            map: Some("MAP.md".into()),
+            knowledge_dir: None,
+            files: vec![
+                md("MAP.md", map),
+                md("core.md", "# Core
+
+**Search for:** `usuario`, `user`
+"),
+            ],
+            unreadable: Vec::new(),
+            aliases: Vec::new(),
+        };
+
+        let built = build(&base);
+        assert_eq!(
+            built.entries.iter().map(|e| e.rel.as_str()).collect::<Vec<_>>(),
+            vec!["core.md"],
+            "the catalogue is not an answer; the file it points at is"
+        );
+        assert_eq!(built.exempt, 1);
+        assert!(built.unreachable.is_empty(), "an exempt file is not a defect");
     }
 }

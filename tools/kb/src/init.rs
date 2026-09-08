@@ -127,18 +127,19 @@ const PERSON_MAP: &str = "\
 
 ---
 
+> **An entry here is the reading list and not the index.** Each file carries its own keys,
+> on a `**Search for:**` line in its header, which is the copy the router reads. Repeating
+> them here would be a second copy with nothing keeping it in sync.
+
 - **[[core]]** Resident in every constitution, so keep it short: who they are, the
   language they write in, the machine, and how they want to be worked with. Everything
   here is paid for by every question every agent answers.
-  Search for: `who am i`, `user`, `person`, `profile`, `how they work`.
 
 - **[[work]]** Retrieved. Employment, stack, level, projects. What an agent touching code
   needs and nobody else does on every question.
-  Search for: `work`, `job`, `stack`, `projects`, `level`.
 
 - **[[presence]]** Retrieved. Goals, public surface, how work should find them. What an
   agent writing something publishable needs.
-  Search for: `goal`, `presence`, `public`, `positioning`.
 ";
 
 const PERSON_CORE: &str = "\
@@ -408,9 +409,11 @@ fn map_md(title: &str) -> String {
          ---\n\n\
          ## Current contents\n\n\
          Nothing yet. {title} was created by `kb init` and has not been fed.\n\n\
-         Each entry below gets a `Search for:` line carrying the words a real question would\n\
-         use, because that line is what the router matches against. An entry without one is an\n\
-         entry grep cannot reach.\n"
+         An entry here is a reading list line: the `[[wikilink]]` and one sentence saying what\n\
+         the file is. **The keys do not go here.** They go in the note's own header, on a\n\
+         `**Search for:**` line above the first `##`, which is the only copy the router reads\n\
+         and the copy `kb check` requires. `kb write` puts them there for you. Two copies of\n\
+         one key list drift, and the copy nobody reads is the one that drifts first.\n"
     )
 }
 

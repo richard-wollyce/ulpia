@@ -12,15 +12,16 @@
 
 ---
 
+> **An entry here is the reading list and not the index.** Each file carries its own keys,
+> on a `**Search for:**` line in its header, which is the copy the router reads. Repeating
+> them here would be a second copy with nothing keeping it in sync.
+
 - **[[core]]** Resident in every constitution, so keep it short: who they are, the
   language they write in, the machine, and how they want to be worked with. Everything
   here is paid for by every question every agent answers.
-  Search for: `who am i`, `user`, `person`, `profile`, `how they work`.
 
 - **[[work]]** Retrieved. Employment, stack, level, projects. What an agent touching code
   needs and nobody else does on every question.
-  Search for: `work`, `job`, `stack`, `projects`, `level`.
 
 - **[[presence]]** Retrieved. Goals, public surface, how work should find them. What an
   agent writing something publishable needs.
-  Search for: `goal`, `presence`, `public`, `positioning`.
