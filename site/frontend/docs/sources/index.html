@@ -1,0 +1,537 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Citing What You Read · Ulpia</title>
+    <meta name="description" content="A source is a record with an opaque key, a citation is a pointer at it, and the bibliography is printed by the tool and checked byte for byte." />
+    <meta name="color-scheme" content="light dark" />
+    <meta name="theme-color" media="(prefers-color-scheme: light)" content="#F6F1E7" />
+    <meta name="theme-color" media="(prefers-color-scheme: dark)" content="#12100D" />
+    <link rel="canonical" href="https://ulpia.io/docs/sources/" />
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <meta property="og:title" content="Citing What You Read · Ulpia" />
+    <meta property="og:description" content="A source is a record with an opaque key, a citation is a pointer at it, and the bibliography is printed by the tool and checked byte for byte." />
+    <meta property="og:url" content="https://ulpia.io/docs/sources/" />
+    <meta property="og:type" content="website" />
+    <script src="/theme.js"></script>
+    <script src="/nav.js" defer></script>
+    <link rel="stylesheet" href="/src/styles.css" />
+  </head>
+  <body>
+    <a class="skip" href="#main">Skip to content</a>
+    <header class="band">
+      <div class="band-inner">
+        <p class="wordmark"><a href="/">Ulpia</a></p>
+        <nav class="nav" aria-label="Sections">
+          <details class="nav-menu">
+            <summary class="nav-door">Documentation</summary>
+            <div class="nav-panel">
+              <ul>
+              <li><a href="/docs/" aria-current="page">All</a></li>
+              <li><a href="/benchmarks/">Benchmarks</a></li>
+              <li><a href="/blog/">Writing</a></li>
+              </ul>
+            </div>
+          </details>
+        </nav>
+        <button type="button" class="lamp-toggle" aria-label="Color scheme: light, press to change">
+          <svg viewBox="0 0 28 28" width="28" height="28" aria-hidden="true" focusable="false">
+            <g class="glow">
+              <path class="ray ray-c" d="M 14 1.2 L 14 3.6" />
+              <path class="ray ray-l" d="M 8.6 2.6 L 10.1 4.3" />
+              <path class="ray ray-r" d="M 19.4 2.6 L 17.9 4.3" />
+              <path class="shade-fill" d="M 6 13.5 L 10.5 5.5 L 17.5 5.5 L 22 13.5 Z" />
+            </g>
+            <g class="lamp">
+              <path class="shade-line" d="M 6 13.5 L 10.5 5.5 L 17.5 5.5 L 22 13.5 Z" />
+              <path class="stem" d="M 12.6 13.5 C 11.9 14.3, 11.1 15.0, 11.1 16.1 C 11.1 17.6, 12.9 18.2, 12.9 19.5 C 12.9 20.6, 10.6 20.9, 10.6 22.2 L 17.4 22.2 C 17.4 20.9, 15.1 20.6, 15.1 19.5 C 15.1 18.2, 16.9 17.6, 16.9 16.1 C 16.9 15.0, 16.1 14.3, 15.4 13.5 Z" />
+              <path class="base" d="M 9 24.25 L 19 24.25" />
+              <g class="chain-group">
+                <path class="chain" d="M 19 14.35 L 19 16.35" />
+                <circle class="chain-pull" cx="19" cy="17.15" r="1.05" />
+              </g>
+            </g>
+          </svg>
+        </button>
+      </div>
+    </header>
+
+    <main class="doc" id="main" tabindex="-1">
+      <h1>Citing What You Read</h1>
+      <p class="doc-date">Last updated: 8 September 2026</p>
+
+      <nav class="contents" aria-labelledby="contents-title">
+        <p class="contents-title" id="contents-title">Contents</p>
+        <ol>
+          <li><a href="#two-strings-that-drifted">Two strings that drifted</a></li>
+          <li>
+            <a href="#a-source-is-an-object">A source is an object</a>
+            <ol>
+              <li><a href="#the-shelf-mark">The shelf mark</a></li>
+              <li><a href="#why-ten-characters">Why ten characters</a></li>
+              <li><a href="#the-record">The record</a></li>
+            </ol>
+          </li>
+          <li><a href="#what-a-note-looks-like">What a note looks like</a></li>
+          <li>
+            <a href="#what-the-checks-refuse">What the checks refuse</a>
+            <ol>
+              <li><a href="#the-one-that-catches-maslow">The one that catches Maslow</a></li>
+            </ol>
+          </li>
+          <li><a href="#a-correction-supersedes">A correction supersedes</a></li>
+          <li><a href="#leaving-csl-json">Leaving: CSL JSON</a></li>
+          <li><a href="#what-was-taken-from-zotero">What was taken from Zotero, and what was not</a></li>
+          <li><a href="#nothing-is-converted-yet">Nothing is converted yet</a></li>
+        </ol>
+      </nav>
+
+      <p>
+        A book on these shelves is a note, and a source is the outside work
+        that note read. The two words are close enough to trip on, so this
+        page keeps them apart: a book is ours and lives in
+        <code>knowledge/</code>; a source belongs to somebody else and lives
+        as a record in <code>sources/</code>. What follows is how a book says
+        which source it read, and why saying it twice is the thing the design
+        removes.
+      </p>
+
+      <h2 id="two-strings-that-drifted">Two strings that drifted</h2>
+      <p>
+        A document written in this fleet last week cited
+        <code>Maslow (1965)</code> twice in its body, for a paper published in
+        1943, and its reference list carried no Maslow entry at all. Three
+        more defects of the same shape sat in the same document: a reference
+        entry dated 1996 against the document's own in-text 1986, a body year
+        of 1972 against six catalogue records reading 1969, and ten authors
+        cited in the body against a list of fourteen entries holding none of
+        them.
+      </p>
+      <p>
+        <strong>None of those is an error of knowledge.</strong> Nobody was
+        confused about when Maslow published. They are divergences between
+        restatements: the same source was written down by hand in more than
+        one place, the copies were never joined, and nothing could compare
+        them. "The body and the reference list agree" was a property
+        maintained by attention, and attention is the thing that runs out at
+        two in the morning.
+      </p>
+      <p>
+        That is the class of failure this page is about, and it is worth
+        naming precisely, because the fix follows from the naming.
+        <strong>The bibliography line is printed by the tool that mints the
+        source record and compared against it byte for byte, so a citation
+        that disagrees with its source is a state the data cannot enter rather
+        than a mistake somebody has to notice.</strong>
+      </p>
+
+      <h2 id="a-source-is-an-object">A source is an object</h2>
+      <p>
+        One source becomes one file, with an opaque key on it. Every mention
+        of that source anywhere in the base is a pointer at the file rather
+        than a fresh retelling of what the file says. The reference list at
+        the foot of a note is then a projection of the pointers rather than
+        another copy of the facts, and <strong>a restatement can drift with
+        nothing noticing, while a projection cannot drift without failing a
+        check.</strong>
+      </p>
+
+      <h3 id="the-shelf-mark">The shelf mark</h3>
+      <p>
+        The key is ten characters drawn from
+        <code>23456789ABCDEFGHIJKLMNPQRSTUVWXYZ</code>, thirty-three
+        characters with <code>0</code>, <code>1</code> and <code>O</code>
+        taken out. That alphabet is Zotero's, and it is taken for the reason
+        it exists: a key gets read aloud, written on paper and retyped off a
+        screen, and each of those three has a partner it will be confused
+        with. Nothing else about the string carries meaning. It is a shelf
+        mark, and a shelf mark tells you where the book is, not what is in it.
+      </p>
+      <p>
+        <strong>It is never derived from the content, the title, the author,
+        the year or the path, and it is never regenerated.</strong> The
+        popular alternative is a formula key such as
+        <code>maslow_motivation_1943</code>, which reads beautifully until the
+        day somebody fixes a misspelled author name and every pointer in the
+        base is now aimed at a key that no longer exists. A key that changes
+        when you correct a field is the identity bug wearing a better face.
+      </p>
+
+      <h3 id="why-ten-characters">Why ten characters</h3>
+      <p>
+        Zotero uses eight and can afford to, because it enforces a uniqueness
+        constraint at insert against a library one process reads whole. Here
+        there is no such process. Bases do not see one another, a private base
+        is not readable from outside it, and the whole fleet is meant to
+        restore onto a machine that has never met the others, so
+        <strong>uniqueness has to come from the draw and not from a
+        constraint.</strong> The number that decides the length is then the
+        birthday bound over the population a key will ever share a namespace
+        with.
+      </p>
+      <figure class="ledger">
+        <div class="ledger-scroll" tabindex="0" role="region" aria-labelledby="length-caption">
+          <table>
+            <thead>
+              <tr>
+                <th scope="col">Length</th>
+                <th scope="col" class="num">Keys available</th>
+                <th scope="col" class="num">Collision at 100,000</th>
+                <th scope="col" class="num">Collision at 1,000,000</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <th scope="row">8</th>
+                <td class="num">1.41e12</td>
+                <td class="num">1 in 280</td>
+                <td class="num">1 in 2.8</td>
+              </tr>
+              <tr>
+                <th scope="row">10</th>
+                <td class="num">1.53e15</td>
+                <td class="num">1 in 306,000</td>
+                <td class="num">1 in 3,060</td>
+              </tr>
+              <tr>
+                <th scope="row">12</th>
+                <td class="num">1.67e18</td>
+                <td class="num">1 in 3.3e8</td>
+                <td class="num">1 in 3.3e6</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <figcaption id="length-caption">
+          Arithmetic, not a measurement: the birthday bound over a population
+          of independently drawn keys, computed 8 September 2026 and recorded
+          in
+          <a href="https://github.com/richard-wollyce/ulpia/blob/main/decisions/0042-a-source-is-an-object-and-a-citation-is-a-pointer.md">ADR-0042</a>.
+          The two populations are one person's fleet over fifty years and the
+          same figure with a factor of ten of headroom.
+        </figcaption>
+      </figure>
+      <p>
+        The scale in the last two columns is the honest part. The busiest week
+        this fleet has had read sixty-three sources; sustained at three times
+        that rate forever, one person reaches roughly a hundred thousand
+        records in fifty years. Ten characters put that at one chance in
+        306,000, and survive being wrong about the scale by a factor of ten.
+        Twelve buys three more orders of magnitude and spends them on a token
+        nobody can hold in one glance, which undoes the reason the alphabet
+        was chosen. <strong>Ten reads as two groups of five.</strong>
+      </p>
+      <p>
+        The draw comes from the operating system's generator, with modulo bias
+        rejected rather than tolerated. The clock was refused for a measurable
+        reason: Windows' default timer granularity is milliseconds at best and
+        often about fifteen, so two sessions minting inside one tick would
+        collide.
+      </p>
+
+      <h3 id="the-record">The record</h3>
+      <p>
+        A record is <code>sources/&lt;KEY&gt;.txt</code>, in the same
+        <code>key = value</code> shape as <code>agent.txt</code> and
+        <code>kb-aliases.txt</code>. It is minted by <code>kb source add</code>
+        from arguments, so there is no template to copy a placeholder out of,
+        and that command prints the bibliography line the note will carry.
+      </p>
+      <figure class="plate">
+        <pre><code><span class="prompt">$ </span>kb source add zed --type article --title "A Theory of Human Motivation" --author "Maslow, A. H." --year 1943 --container "Psychological Review 50" --pages "370-396" --url "https://psychclassics.yorku.ca/Maslow/motivation.htm" --retrieved-on 2026-09-06 --retrieval-status full
+<span class="out">wrote zed\sources\YYUFQ78X4U.txt</span>
+<span class="out"></span>
+<span class="out">Cite it as [src:YYUFQ78X4U], and carry one bibliography line:</span>
+<span class="agree">- [src:YYUFQ78X4U] Maslow, A. H. "A Theory of Human Motivation". Psychological Review 50, 370-396. 1943. https://psychclassics.yorku.ca/Maslow/motivation.htm. read in full, 2026-09-06.</span></code></pre>
+        <figcaption>Real output, 8 September 2026, commit 645bd0a, release build on Windows 11, over a copy of examples/demo. The command line and the line it printed are both longer than the plate and scroll.</figcaption>
+      </figure>
+      <p>
+        The file it wrote holds the fields and nothing else:
+      </p>
+      <pre><code>type = article
+title = A Theory of Human Motivation
+author = Maslow, A. H.
+year = 1943
+container = Psychological Review 50
+pages = 370-396
+url = https://psychclassics.yorku.ca/Maslow/motivation.htm
+retrieved_on = 2026-09-06
+retrieval_status = full</code></pre>
+      <p>
+        <code>type</code> is one of six, <code>book</code>,
+        <code>chapter</code>, <code>article</code>, <code>report</code>,
+        <code>webpage</code>, <code>recording</code>, and not forty: forty
+        types exist to feed style processors, and there is no style processor
+        here. <code>retrieval_status</code> is one of <code>full</code>,
+        <code>partial</code>, <code>metadata</code>,
+        <code>unreachable</code>, and it is required, because
+        <strong><code>metadata</code> is the word for "I saw the catalogue
+        entry and never opened the thing".</strong> That sentence was needed
+        the first week it existed. The honest boundary, stated rather than
+        glossed: a required field removes the case where nobody was ever
+        asked, and it does not remove lying.
+      </p>
+      <div class="note" role="note">
+        <p><strong>Note.</strong> One file per source, never one shared ledger. More than one session writes these repositories at the same time, and two sessions appending to one ledger conflict on every busy day. The path is derived from the key and never the reverse.</p>
+      </div>
+
+      <h2 id="what-a-note-looks-like">What a note looks like</h2>
+      <p>
+        The pointer sits in the body where the claim is, and one line under
+        <code>## Sources</code> carries the copy. Both are shown here rather
+        than described, because the whole point is that the second one is a
+        paste and not an invention. The bibliography line is one line however
+        long it gets, so it scrolls inside the block below.
+      </p>
+      <pre><code>The paper proposes that human needs are ordered and that a satisfied
+need stops motivating [src:YYUFQ78X4U]. It does not claim the order is
+fixed across cultures, it does not present data, and the pyramid
+drawing that carries its name appears nowhere in it.
+
+## Sources
+
+- [src:YYUFQ78X4U] Maslow, A. H. "A Theory of Human Motivation". Psychological Review 50, 370-396. 1943. https://psychclassics.yorku.ca/Maslow/motivation.htm. read in full, 2026-09-06.</code></pre>
+      <p>
+        Single brackets, and that is not cosmetic. Double brackets are this
+        base's wikilink and carry exactly one meaning, a pointer to a note in
+        this base resolved by file stem; overloading them would make one
+        syntax mean two things and force the linter, the router, an editor and
+        a person to each learn the exception. <code>[1]</code> is already what
+        a citation marker looks like, and <code>[text](url)</code> cannot
+        collide with a token that has to open with <code>src:</code>. Like a
+        wikilink, a citation resolves inside its own base and nowhere else,
+        for the privacy reason and not for a tidiness one.
+      </p>
+      <p>
+        The rendered line is a canonical form and not a citation style. Every
+        title is quoted, including a book's, which no style would do, because
+        equality has to be decidable by a machine and readable by a person at
+        the same time. Style is what the export below is for.
+      </p>
+
+      <h2 id="what-the-checks-refuse">What the checks refuse</h2>
+      <p>
+        <code>kb check</code> gained four codes for citations and one for the
+        records themselves. Each is stated here as the situation it catches
+        rather than as the condition it tests; the
+        <a href="/docs/reference/#the-codes">reference</a> carries the codes
+        in a table with the rest.
+      </p>
+      <dl>
+        <dt><code>E05</code></dt>
+        <dd>
+          You cited a key and there is no record behind it. A citation is a
+          pointer, so a key pointing at nothing is a claim with no source, and
+          the base cannot tell whether you meant a record you never made or
+          one you deleted.
+        </dd>
+        <dt><code>E06</code></dt>
+        <dd>
+          You made a record and no note cites it. The bibliography is a
+          projection of the pointers, so a record nothing points at appears in
+          no bibliography and answers no question. It is an error rather than
+          a warning because a warning accumulates into a list nobody
+          reconciles, which is what the hand written ledgers it replaced had
+          already become.
+        </dd>
+        <dt><code>E08</code></dt>
+        <dd>
+          You cited a key and the bibliography line is missing, or it says
+          something the record does not. This is the load-bearing one, and the
+          next section is about it.
+        </dd>
+        <dt><code>E09</code></dt>
+        <dd>
+          There is a file under <code>sources/</code> that is not a record.
+          Without it, a dropped file blames the notes for a defect that is in
+          the folder.
+        </dd>
+        <dt><code>W09</code></dt>
+        <dd>
+          You cited a source that another record supersedes. A warning and not
+          an error, because citing what you actually read is legitimate.
+        </dd>
+      </dl>
+
+      <h3 id="the-one-that-catches-maslow">The one that catches Maslow</h3>
+      <p>
+        The note below is correct in every other way. Its front matter is
+        complete, its keyword line is long, its claim is sound, and its
+        bibliography line says 1965 where the record says 1943. That is the
+        defect that shipped, reproduced.
+      </p>
+      <figure class="plate">
+        <pre><code><span class="prompt">$ </span>kb check zed
+<span class="out">zed  (5 public files, map: none)</span>
+<span class="agree">  error E08  knowledge/motivation.md:21                     the bibliography line for [src:YYUFQ78X4U] has drifted from the record. The record says:</span>
+<span class="out">    - [src:YYUFQ78X4U] Maslow, A. H. "A Theory of Human Motivation". Psychological Review 50, 370-396. 1943. https://psychclassics.yorku.ca/Maslow/motivation.htm. read in full, 2026-09-06.</span>
+<span class="out">  1 errors, 0 warnings</span></code></pre>
+        <figcaption>Real output, 8 September 2026, commit 645bd0a, release build on Windows 11, over a copy of examples/demo with one wrong year in one bibliography line. The finding and the record's own line are longer than the plate and scroll. Exit code 1.</figcaption>
+      </figure>
+      <p>
+        Nobody had to notice. The comparison is byte for byte against a string
+        the tool itself printed, so the only way to satisfy the check is to
+        paste what the record renders, and the only way to change what it
+        renders is to change the record, which every pointer already reads.
+        <strong>Without <code>E08</code> the embedded copy would be exactly
+        the free prose paragraph it replaces, in a new place.</strong>
+      </p>
+
+      <h2 id="a-correction-supersedes">A correction supersedes</h2>
+      <p>
+        The common case is not a source that was wrong. It is a source that
+        was right and has been improved on: a preprint that became a paper, a
+        page you read again with a DOI in hand, an edition that replaced the
+        one you had. A record can declare <code>replaces = &lt;OLDKEY&gt;</code>,
+        and three consequences follow, which together are the whole feature.
+      </p>
+      <ul>
+        <li><strong>The old key keeps resolving.</strong> The old record is never deleted, so no note that cites it breaks.</li>
+        <li><strong>A superseded record is exempt from <code>E06</code>.</strong> Without that, correcting a source would start failing the moment the last note moved to the new key, which is the opposite of what a correction should cost.</li>
+        <li><strong>A note still citing the old key gets <code>W09</code>, naming the replacement.</strong> A warning, because an error would force somebody to rewrite the history of their own reading.</li>
+      </ul>
+      <figure class="plate">
+        <pre><code><span class="prompt">$ </span>kb source add zed --type article --title "A Theory of Human Motivation" --author "Maslow, A. H." --year 1943 --container "Psychological Review 50" --pages "370-396" --doi "10.1037/h0054346" --retrieved-on 2026-09-08 --retrieval-status full --replaces YYUFQ78X4U
+<span class="out">wrote zed\sources\LUDPV5YVC5.txt</span>
+<span class="prompt">$ </span>kb check zed
+<span class="out">zed  (5 public files, map: none)</span>
+<span class="agree">  warn  W09  knowledge/motivation.md:15                     [src:YYUFQ78X4U] is superseded by [src:LUDPV5YVC5], "A Theory of Human Motivation". The old key still resolves, so this is a correction to consider and not a broken link</span>
+<span class="out">  error E06  sources/LUDPV5YVC5.txt                         no note cites [src:LUDPV5YVC5], "A Theory of Human Motivation". The bibliography is a projection of the pointers, so a record nothing points at is in no bibliography and answers no question. Cite it or delete it</span>
+<span class="out">  1 errors, 1 warnings</span></code></pre>
+        <figcaption>Real output, 8 September 2026, commit 645bd0a, release build on Windows 11, over a copy of examples/demo. Two commands in one plate, with the first command's <em>Cite it as</em> lines left out because the section above already shows them; the command line and the two findings are longer than the plate and scroll. The E06 is the new record waiting to be cited, and it goes when the note moves to the new key.</figcaption>
+      </figure>
+      <p>
+        The pointer goes one direction only. A back pointer on the old record
+        would be a second fact free to disagree with the first, which is the
+        failure this whole design removes. This is what "Maslow 1965 is wrong,
+        1943 is right" should have produced, instead of two notes and a
+        sentence joining them.
+      </p>
+
+      <h2 id="leaving-csl-json">Leaving: CSL JSON</h2>
+      <p>
+        <code>kb sources --json</code> emits a CSL JSON array, the shape
+        Zotero, Pandoc and every reference processor already read. It is there
+        from the first commit for one reason: it costs nothing today and it
+        means the records can leave this system without a converter written
+        under pressure. One record from the run above, indented here in the
+        key order the tool emits; the tool prints the whole array on one line.
+      </p>
+      <pre><code>{
+  "URL": "https://psychclassics.yorku.ca/Maslow/motivation.htm",
+  "accessed": { "date-parts": [ [ 2026, 9, 6 ] ] },
+  "author": [ { "family": "Maslow", "given": "A. H." } ],
+  "container-title": "Psychological Review 50",
+  "custom": { "retrieval_status": "full" },
+  "id": "YYUFQ78X4U",
+  "issued": { "date-parts": [ [ 1943 ] ] },
+  "page": "370-396",
+  "title": "A Theory of Human Motivation",
+  "type": "article-journal"
+}</code></pre>
+      <p>
+        <code>accessed</code> carries <code>retrieved_on</code>, which is the
+        field CSL has for exactly the thing the old prose paragraphs were
+        retyping by hand. <code>retrieval_status</code> and
+        <code>replaces</code> travel under <code>custom</code>, which is where
+        CSL passes fields through untouched. <strong>It is an export and not
+        an import.</strong> Nothing here reads CSL back, because an importer
+        is a translator and a translator is a second thing to maintain.
+      </p>
+
+      <h2 id="what-was-taken-from-zotero">What was taken from Zotero, and what was not</h2>
+      <p>
+        The identity model is Zotero's, and saying so costs nothing and gives
+        a reader a reference point they may already have. Three things were
+        taken, and they are the three that matter:
+      </p>
+      <ul>
+        <li><strong>The opaque key</strong>, and its alphabet, for the transcription reason above.</li>
+        <li><strong>A pointer instead of a restatement</strong>, which is the mechanism the whole page is about: an item is an object, and every mention of it points at the object.</li>
+        <li><strong>Supersession</strong>, which Zotero carries as a <code>dc:replaces</code> relation between items.</li>
+      </ul>
+      <p>
+        Everything else was left where it was, and the list of what was left
+        is the more useful half, because it says what this is not trying to
+        be. <strong>No style engine and no CSL processor</strong>, so nothing
+        here will format a bibliography for a journal. <strong>No browser
+        connector and no translators</strong>, so nothing here will scrape a
+        publisher's page into a record for you; a record is typed out once.
+        <strong>No sync and no blob storage</strong>, so there is no snapshot
+        of the PDF and no account.
+      </p>
+      <p>
+        Using Zotero itself as the store was the other real option, and it was
+        refused for a stated reason rather than by reflex. Everything needed
+        exists: a local HTTP API, a CSL JSON format parameter, a translator
+        that already emits item links into markdown. The cost is that a
+        graphical application would have to be running for <code>kb check</code>
+        to pass, and an application runtime would become a dependency of a
+        binary that has one dependency on purpose. <strong>The memory would
+        stop being readable without a vendor's runtime</strong>, which is the
+        one thing this product is not allowed to do.
+      </p>
+      <div class="note" role="note">
+        <p><strong>Careful.</strong> Zotero was read from its published source on 8 September 2026 and nothing was run, so every claim here about how Zotero works is a reading and not a measurement. The claims about <code>kb</code> on this page are runs, and the plates carry their date and commit.</p>
+      </div>
+
+      <h2 id="nothing-is-converted-yet">Nothing is converted yet</h2>
+      <p>
+        This is a writing convention that starts today and enforces nothing on
+        what was written before it. Notes in this fleet still cite in a hand
+        written prose paragraph at their foot, and they still work. What
+        changed for them is that the check demanding an evidence grade stopped
+        being opt in: it used to ask whether the front matter declared a
+        source field, which is a key a writer adds or does not, so a base that
+        declared none was never graded. It now asks a question about the body,
+        namely whether the note cites anything at all, by pointer or in prose.
+      </p>
+      <p>
+        Measured on the private fleet the authors run, which is a corpus a
+        reader cannot reproduce: that condition took the ungraded-note warning
+        from zero findings to fifty-eight, on exactly the twenty-nine notes
+        that cite in prose, two findings each. Every other check on that fleet
+        printed an identical count before and after. The stronger rule, every
+        note in the knowledge folder, was considered and refused: it fires on
+        188 of 204 notes on the day it lands, which turns the linter into a
+        wall people learn to scroll past.
+      </p>
+      <p>
+        <strong>The migration is one note at a time, and it is reversible at
+        every step.</strong> A half converted note fails <code>E08</code> or
+        <code>E06</code> loudly, which is the property that makes doing them
+        one at a time safe rather than reckless.
+      </p>
+      <ol>
+        <li>Run <code>kb source add</code> once per source in the paragraph. <code>retrieval_status</code> is the field to think about, because several of those paragraphs already say "metadata only, paywalled, not read" in prose, and that sentence has a value now.</li>
+        <li>Replace the prose mention in the body with <code>[src:KEY]</code>.</li>
+        <li>Replace the paragraph with one bibliography line per source, pasted from what <code>kb source add</code> printed.</li>
+        <li>Add <code>evidence_tier</code> and <code>valid_for</code> to the front matter, which the check is now asking for.</li>
+        <li><code>kb check</code> goes clean on that note, and <code>E06</code> stops firing for those records.</li>
+      </ol>
+      <p>
+        The reasoning behind every decision on this page, including the two
+        options that were refused and the fact that would make us reopen the
+        key length, is
+        <a href="https://github.com/richard-wollyce/ulpia/blob/main/decisions/0042-a-source-is-an-object-and-a-citation-is-a-pointer.md">ADR-0042</a>.
+        The verbs and the check codes are on the
+        <a href="/docs/reference/#the-codes">Reference</a>.
+      </p>
+
+      <p class="doc-back">
+        Previous: <a href="/docs/concepts/">Concepts</a> ·
+        Next: <a href="/docs/how-it-works/">How the Catalogue Ranks</a> ·
+        <a href="/docs/">All of the docs</a> ·
+        <a href="/">Back to the library</a>
+      </p>
+    </main>
+
+    <footer>
+      <p class="address-line">
+        <a class="gh-link" href="https://github.com/richard-wollyce/ulpia"><svg class="gh-mark" viewBox="0 0 24 24" width="16" height="16" fill="currentColor" aria-hidden="true" focusable="false"><path d="M12 .297c-6.63 0-12 5.373-12 12 0 5.303 3.438 9.8 8.205 11.385.6.113.82-.258.82-.577 0-.285-.01-1.04-.015-2.04-3.338.724-4.042-1.61-4.042-1.61C4.422 18.07 3.633 17.7 3.633 17.7c-1.087-.744.084-.729.084-.729 1.205.084 1.838 1.236 1.838 1.236 1.07 1.835 2.809 1.305 3.495.998.108-.776.417-1.305.76-1.605-2.665-.3-5.466-1.332-5.466-5.93 0-1.31.465-2.38 1.235-3.22-.135-.303-.54-1.523.105-3.176 0 0 1.005-.322 3.3 1.23.96-.267 1.98-.399 3-.405 1.02.006 2.04.138 3 .405 2.28-1.552 3.285-1.23 3.285-1.23.645 1.653.24 2.873.12 3.176.765.84 1.23 1.91 1.23 3.22 0 4.61-2.805 5.625-5.475 5.92.42.36.81 1.096.81 2.22 0 1.606-.015 2.896-.015 3.286 0 .315.21.69.825.57C20.565 22.092 24 17.592 24 12.297c0-6.627-5.373-12-12-12"/></svg>GitHub</a> · <a href="/docs/">Docs</a> · <a href="/benchmarks/">Benchmarks</a> · <a href="mailto:hello@ulpia.io">hello@ulpia.io</a>
+      </p>
+      <p class="copyright">&copy; 2026 Richard Wollyce</p>
+    </footer>
+  </body>
+</html>

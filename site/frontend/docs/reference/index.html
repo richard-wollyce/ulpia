@@ -59,13 +59,13 @@
 
     <main class="doc" id="main" tabindex="-1">
       <h1>Reference</h1>
-      <p class="doc-date">Last updated: 6 September 2026</p>
+      <p class="doc-date">Last updated: 8 September 2026</p>
 
       <nav class="contents" aria-labelledby="contents-title">
         <p class="contents-title" id="contents-title">Contents</p>
         <ol>
           <li>
-            <a href="#the-twenty-four-verbs">The twenty-four verbs</a>
+            <a href="#the-twenty-six-verbs">The twenty-six verbs</a>
             <ol>
               <li><a href="#the-usage-block">The usage block</a></li>
               <li><a href="#verb-by-verb">Verb by verb</a></li>
@@ -112,23 +112,27 @@
       </nav>
 
       <p>
-        This is the catalogue's own card index. The four pages before it tell
+        This is the catalogue's own card index. The five pages before it tell
         the story; this one lists the verbs, their flags, the fields a program
         reads, the codes the linter prints and the files on disk, each copied
-        from the source on 6 September 2026 rather than remembered. Where a
+        from the source rather than remembered. The verbs and the check codes
+        were last read on 8 September 2026 and the rest on 6 September. Where a
         line had to be assembled instead of copied, the entry says so. Nobody
         is expected to read it through.
       </p>
 
-      <h2 id="the-twenty-four-verbs">The twenty-four verbs</h2>
+      <h2 id="the-twenty-six-verbs">The twenty-six verbs</h2>
 
       <h3 id="the-usage-block">The usage block</h3>
       <p>
-        What <code>kb --help</code> prints, minus its prose, copied on 6
-        September 2026. Twenty-eight lines for twenty-four verbs:
-        <code>init</code> takes two and <code>panel</code> takes four, because
-        each of its modes has its own argument set and folding them into one
-        line would hide which flags may travel together.
+        What <code>kb --help</code> prints, minus its prose, copied on 8
+        September 2026. Thirty-five lines for twenty-six verbs.
+        <code>init</code> and <code>panel</code> each carry more than one
+        usage, because each of their modes has its own argument set and
+        folding them into one line would hide which flags may travel together;
+        <code>write</code>, <code>source add</code> and one of the
+        <code>panel</code> usages wrap onto a continuation line because they
+        are too long for the width.
       </p>
       <pre><code>kb --version
 kb check [path]... [--strict] [--all]
@@ -141,11 +145,16 @@ kb init &lt;name&gt; [fleet-root]
 kb init --person [fleet-root]
 kb write &lt;agent&gt; &lt;slug&gt; [fleet-root] --keys &lt;a, b&gt; --summary &lt;one line&gt; [--folder F]
             [--captured-from PATH]
+kb source add [path] --type T --title X --retrieved-on DATE --retrieval-status S
+              [--author A]... [--year Y] [--container C] [--volume V] [--pages P]
+              [--publisher P] [--url U] [--doi D] [--isbn I] [--lang L]
+              [--replaces KEY] [--note N]
+kb sources [path]... [--json] [--all]
 kb fleet [path]... [--all]
 kb blocks [path] [--emit]
 kb eval &lt;gold.tsv&gt; [path]... [--top N] [--all] [--classify]
 kb commit &lt;path&gt;... -m &lt;message&gt;
-kb boot [path]... [--top N] [--all]
+kb boot [path]... [--top N] [--all] [--session ID] [--cwd DIR] [--text]
 kb ingest &lt;file&gt; [path]... [--agent NAME] [--keep] [--dry-run] [--top N] [--all]
 kb promote [path]... [--top N] [--all] [--dry-run] [--max N] [--lock]
 kb ui [path]... [--port N] [--all]
@@ -227,6 +236,40 @@ kb panel [&lt;artifact&gt;] [path] --ledger [--json]</code></pre>
           keys, and there is no flag to skip them; it also refuses when the
           agent has no <code>MAP.md</code>. It never leaves half a write
           behind: a failed map entry deletes the note again.
+        </dd>
+
+        <dt><code>kb source add [path] --type T --title X --retrieved-on DATE --retrieval-status S</code></dt>
+        <dd>
+          Mints a source record. The key is ten characters from an alphabet
+          with <code>0</code>, <code>1</code> and <code>O</code> removed, drawn
+          from the operating system's generator, and the record lands at
+          <code>sources/&lt;KEY&gt;.txt</code>. It then prints the one
+          bibliography line a citing note has to carry, which
+          <code>kb check</code> later compares byte for byte, so the reference
+          list is a projection of the pointers rather than a second telling of
+          them. <code>--type</code> is one of <code>book</code>,
+          <code>chapter</code>, <code>article</code>, <code>report</code>,
+          <code>webpage</code>, <code>recording</code>;
+          <code>--retrieval-status</code> is one of <code>full</code>,
+          <code>partial</code>, <code>metadata</code>,
+          <code>unreachable</code>, and it cannot be skipped, because a source
+          nobody opened has to say so out loud. <code>--replaces KEY</code>
+          supersedes an earlier record without deleting it. The key is never
+          derived from the title, the author or the path, and it is never
+          regenerated.
+        </dd>
+
+        <dt><code>kb sources [path]... [--json] [--all]</code></dt>
+        <dd>
+          Lists what a base has read, one rendered line per record.
+          <code>--json</code> emits CSL JSON, the shape every reference
+          processor already reads, with <code>retrieved_on</code> under
+          <code>accessed</code> and <code>retrieval_status</code> and
+          <code>replaces</code> under <code>custom</code>. Read off disk and
+          never out of the index, so an export is never an export of a stale
+          cache, and it skips a base that declares <code>sources/</code>
+          private unless <code>--all</code> is given. It is an export and never
+          an import: nothing here reads CSL back.
         </dd>
 
         <dt><code>kb promote [path]... [--top N] [--all] [--dry-run] [--max N] [--lock]</code></dt>
@@ -1012,12 +1055,24 @@ kb panel [&lt;artifact&gt;] [path] --ledger [--json]</code></pre>
                 <td><code>provenance</code> or <code>stage</code> carries a value outside the legal set. Provenance is <code>human</code>, <code>agent</code> or <code>external</code>; stage is <code>raw</code>, <code>captured</code>, <code>distilled</code> or <code>derived</code>.</td>
               </tr>
               <tr>
-                <th scope="row"><code>W01</code> ambiguous-link</th>
-                <td>A <code>[[link]]</code> matching more than one file.</td>
+                <th scope="row"><code>E05</code> dead-citation</th>
+                <td>A <code>[src:KEY]</code> with no record behind it in this base, or a key that is not ten characters of the alphabet. A citation is a pointer, so a key with nothing behind it is a claim with no source.</td>
               </tr>
               <tr>
-                <th scope="row"><code>W02</code> no-search-line</th>
-                <td>A map entry with no <em>Search for</em> line, where a map exists.</td>
+                <th scope="row"><code>E06</code> uncited-source</th>
+                <td>A source record no note points at. The bibliography is a projection of the pointers, so a record nothing cites appears in no bibliography. A superseded record is exempt, or correcting a source would start failing the moment the last note moved to the new key.</td>
+              </tr>
+              <tr>
+                <th scope="row"><code>E08</code> bibliography</th>
+                <td>A cited key with no bibliography line, or one that has drifted from the record. The comparison is byte for byte against the line <code>kb source add</code> printed, and the message quotes the line the record renders.</td>
+              </tr>
+              <tr>
+                <th scope="row"><code>E09</code> source-record</th>
+                <td>A file under <code>sources/</code> that is not a source record. Without it a dropped file blames the notes for a defect that is in the folder.</td>
+              </tr>
+              <tr>
+                <th scope="row"><code>W01</code> ambiguous-link</th>
+                <td>A <code>[[link]]</code> matching more than one file.</td>
               </tr>
               <tr>
                 <th scope="row"><code>W03</code> dash</th>
@@ -1025,7 +1080,7 @@ kb panel [&lt;artifact&gt;] [path] --ledger [--json]</code></pre>
               </tr>
               <tr>
                 <th scope="row"><code>W04</code> front-matter</th>
-                <td>Front matter declaring <code>source</code> or <code>type</code> with no <code>evidence_tier</code> or no <code>valid_for</code>.</td>
+                <td>A note that cites a source and carries no <code>evidence_tier</code>, or no <code>valid_for</code>. It used to ask only whether the front matter declared a <code>source</code> or <code>type</code> key, which a writer adds or does not, so a base that declared neither was never graded; it now also asks a question about the body, namely whether the note cites anything, by <code>[src:KEY]</code> pointer or in the hand written prose paragraph that predates pointers.</td>
               </tr>
               <tr>
                 <th scope="row"><code>W05</code> no-provenance</th>
@@ -1043,16 +1098,21 @@ kb panel [&lt;artifact&gt;] [path] --ledger [--json]</code></pre>
                 <th scope="row"><code>W08</code> unignored</th>
                 <td>A <code>.gitignore</code> is here and does not cover a folder the base declares private. A warning and never a refusal, because git is optional; skipped when the base is private as a whole.</td>
               </tr>
+              <tr>
+                <th scope="row"><code>W09</code> superseded</th>
+                <td>A citation of a source another record replaces. The message names the replacement. A warning and not an error, because citing what you actually read is legitimate and the old key still resolves.</td>
+              </tr>
             </tbody>
           </table>
         </div>
         <figcaption id="check-codes-caption">
-          The eleven codes the linter emits, read from its source at commit
-          <code>ea43d1d</code> on 2 September 2026. E03 is not among them.
+          The fifteen codes the linter emits, read from its source at commit
+          <code>645bd0a</code> on 8 September 2026. E03, E07 and W02 are not
+          among them.
         </figcaption>
       </figure>
       <div class="note" role="note">
-        <p><strong>Note.</strong> There is no E03. It demanded a map file at the root, which was right while the index was built from map entries; since a note carries its own keys, a base with no map indexes perfectly well, and the rule was deleted rather than left to print one error per base forever.</p>
+        <p><strong>Note.</strong> Three codes are missing from the sequence, and all three were deleted rather than left to print an error nobody could act on. E03 demanded a map file at the root, which was right while the index was built from map entries; since a note carries its own keys, a base with no map indexes perfectly well. E07 and W02 both graded a map entry, one for a shape the router's parser could not read and one for a missing <em>Search for</em> line, and both stopped meaning anything when the router began reading each note's own header instead of the map. W02 graded 391 lines across the fleet's fifteen bases on 7 September 2026 and reported nothing, which is what a check on a redundant copy looks like.</p>
       </div>
 
       <h3 id="what-the-checks-skip">What the checks skip</h3>
@@ -1203,6 +1263,27 @@ kb panel [&lt;artifact&gt;] [path] --ledger [--json]</code></pre>
           <em>Search for</em> line. Served and labelled short at every surface;
           read by <code>kb promote</code>.
         </dd>
+        <dt><code>sources/</code></dt>
+        <dd>
+          One <code>&lt;KEY&gt;.txt</code> per source the base has read, written by
+          <code>kb source add</code> and never by hand, as
+          <code>key = value</code> lines. Required on every record:
+          <code>type</code>, <code>title</code>, <code>retrieved_on</code>,
+          <code>retrieval_status</code>. Optional and typed:
+          <code>author</code>, which repeats, then <code>year</code>,
+          <code>container</code>, <code>volume</code>, <code>pages</code>,
+          <code>publisher</code>, <code>url</code>, <code>doi</code>,
+          <code>isbn</code>, <code>lang</code>, <code>replaces</code>,
+          <code>note</code>. One file per source and never one shared ledger,
+          because two sessions appending to one ledger conflict on every busy
+          day; <code>.txt</code> and not <code>.md</code>, because a record is
+          structured data with no prose and as markdown it would join the chunk
+          index and be graded for a keyword line it has no use for. The path is
+          derived from the key and never the reverse. Public by default: a
+          bibliography is the part of a base that is safest to publish, and a
+          base that names it on its <code>private =</code> line is honoured.
+          Explained on <a href="/docs/sources/">Citing What You Read</a>.
+        </dd>
       </dl>
 
       <h3 id="the-derived-files">The derived files</h3>
@@ -1214,7 +1295,7 @@ kb panel [&lt;artifact&gt;] [path] --ledger [--json]</code></pre>
         <dt><code>.kb/index.db</code></dt>
         <dd>
           One SQLite file per base, and there is no flag to point it anywhere
-          else. Two tables, readable with any <code>sqlite3</code> binary.
+          else. Three tables, readable with any <code>sqlite3</code> binary.
         </dd>
       </dl>
       <pre><code>CREATE TABLE IF NOT EXISTS files (
@@ -1226,6 +1307,23 @@ kb panel [&lt;artifact&gt;] [path] --ledger [--json]</code></pre>
     captured_from TEXT,
     private     INTEGER NOT NULL DEFAULT 0,
     PRIMARY KEY (base, path)
+);
+
+CREATE TABLE IF NOT EXISTS sources (
+    base             TEXT NOT NULL,
+    key              TEXT NOT NULL,
+    type             TEXT NOT NULL,
+    title            TEXT NOT NULL,
+    author           TEXT,
+    year             TEXT,
+    container        TEXT,
+    url              TEXT,
+    doi              TEXT,
+    isbn             TEXT,
+    retrieved_on     TEXT NOT NULL,
+    retrieval_status TEXT NOT NULL,
+    replaces         TEXT,
+    PRIMARY KEY (base, key)
 );
 
 CREATE VIRTUAL TABLE IF NOT EXISTS chunks USING fts5(
@@ -1252,7 +1350,10 @@ CREATE VIRTUAL TABLE IF NOT EXISTS chunks USING fts5(
         it, and only <code>kb index</code> fills it again, so run that
         immediately after replacing the binary and before anything reads. The
         tokenizer folds accents, which is what lets a Portuguese question find
-        an English note.
+        an English note. <code>sources</code> is rewritten in full on every
+        sync from the records on disk, so it needed no migration and has no
+        stale row to migrate around; it answers "have we read this already",
+        which nothing could be asked before.
       </p>
       <dl>
         <dt><code>.kb/sessions/&lt;id&gt;</code></dt>
