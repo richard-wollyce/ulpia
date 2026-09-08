@@ -552,3 +552,20 @@
   whole files it reads off disk, 8.5% of what it sends. Corrects `e5df2b5`'s claim that a
   retrieved passage still carries its keyword line: 0 of 4,357 stored chunks do. Two stated
   exceptions where the keys are the subject, `gate::propose` and `promote::review_prompt`.
+
+- **[[0042-a-source-is-an-object-and-a-citation-is-a-pointer]]** 🟢 accepted 2026-09-08. **A
+  source becomes a first class object with an opaque ten character key, a citation is a
+  `[src:KEY]` pointer at it, and the bibliography is a projection of the pointers that
+  `kb check` compares byte for byte.** Every citation defect the fleet shipped was a
+  divergence between restatements, because a source was written in three unconnected places
+  and nothing joined them. The key length is arithmetic, not Zotero's eight: 33^10 against a
+  measured lifetime ceiling of 1e5 sources, minted without coordination because bases do not
+  see each other. Six types and a required `retrieval_status`, which is the field that makes
+  "I only saw the catalogue entry" impossible to leave unsaid. `dc:replaces` supersedes a
+  source while the old key keeps resolving. Three new errors and one warning; W04 stops being
+  opt in and goes from 0 findings to 58 on 29 notes that were always making sourced claims.
+  CSL JSON is the export from the first commit, which keeps the Zotero door open at no cost.
+  Nothing is retrofitted here and the migration path is written down.
+  Search for: `fonte`, `source`, `citacao`, `citation`, `bibliografia`, `bibliography`,
+  `chave opaca`, `opaque key`, `src:`, `kb source add`, `kb sources`, `CSL JSON`, `Zotero`,
+  `retrieval_status`, `registro de catalogo`, `fonte nao lida`, `dc:replaces`, `E05`, `E06`, `E08`, `W04`, `W09`.

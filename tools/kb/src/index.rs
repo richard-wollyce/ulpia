@@ -1386,6 +1386,7 @@ mod tests {
             ],
             unreadable: Vec::new(),
             aliases: Vec::new(),
+            all: false,
         };
 
         let built = build(&base);
@@ -1430,6 +1431,7 @@ mod tests {
             ],
             unreadable: Vec::new(),
             aliases: Vec::new(),
+            all: false,
         };
 
         let built = build(&base);

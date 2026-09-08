@@ -105,9 +105,18 @@ fn find_close(chars: &[char], from: usize) -> Option<usize> {
 }
 
 /// Lines carrying an em dash or an en dash, at most one report per line.
+///
+/// **A bibliography entry is exempt, and the exemption is the rule read correctly.** House
+/// style governs what we write; a book's real title is what somebody else wrote, and
+/// `kb write` refuses a note outright on a dash, so without this a source titled with an em
+/// dash could be recorded and never cited. Rewriting the title to satisfy our style would
+/// corrupt the one string the whole citation model exists to keep single.
 pub fn dashes(text: &str) -> Vec<(usize, char)> {
     let mut out = Vec::new();
     for (i, line) in text.lines().enumerate() {
+        if crate::sources::bibliography_line(line).is_some() {
+            continue;
+        }
         if let Some(c) = line.chars().find(|c| *c == '\u{2014}' || *c == '\u{2013}') {
             out.push((i + 1, c));
         }
@@ -165,6 +174,59 @@ pub const STAGE: &[&str] = &["raw", "captured", "distilled", "derived"];
 
 pub fn run(base: &Base) -> Vec<Finding> {
     let mut findings = Vec::new();
+
+    // The base's source records, read off disk here rather than carried on `Base`, the same
+    // way `check_ignores` reads the `.gitignore`. They are `.txt`, so the markdown walk never
+    // saw them, and giving `Base` a field for them would put them in front of every consumer
+    // of a base including the ones that only want notes.
+    //
+    // **The private declaration is honoured here or E06 becomes a lie.** On a base that
+    // declares itself private as a whole, discovery without `--all` leaves `base.files`
+    // empty. Loading the records anyway would find every one of them cited by nobody and
+    // report the base as broken, when the truth is that the notes citing them were filtered
+    // out one function earlier. Reading a second thing off the same disk means making the
+    // same decision the walk made.
+    let layer = crate::base::private_layer(&base.root);
+    let hidden = !base.all && layer.covers(crate::sources::DIR);
+    let (sources, bad_records) = if hidden {
+        (Vec::new(), Vec::new())
+    } else {
+        crate::sources::load(&base.root)
+    };
+    for bad in &bad_records {
+        findings.push(Finding {
+            level: Level::Error,
+            code: "E09",
+            file: bad.path.clone(),
+            line: 0,
+            message: format!(
+                "not a source record: {}. Records are written by `kb source add`, so a \
+                 broken one means the file was edited by hand",
+                bad.problem
+            ),
+        });
+    }
+    let by_key = crate::sources::by_key(&sources);
+
+    // **A private note still counts as a citation, and counting it leaks nothing.**
+    //
+    // Without this, `kb check` on an agent base reports every source cited only from
+    // `records/` or `projects/` as cited by nobody, because the walk dropped those files
+    // one function earlier. The finding would be an error, and it would be false.
+    //
+    // Privacy here is about what gets reported and served, not about whether a fact is
+    // counted. E06 names the source record, which is public, and never the file that cites
+    // it, so the only thing crossing the line is the number of files a key appeared in, and
+    // that number never reaches an output. E05, E08 and W09 do name the file, so they are
+    // reported only over `base.files`, which is the filtered set.
+    //
+    // The scan is over the declared private folders alone, not over the base again: the
+    // public files are already in memory.
+    let mut cited: std::collections::BTreeSet<String> = if base.all || sources.is_empty() {
+        std::collections::BTreeSet::new()
+    } else {
+        cited_in_private_layer(&base.root, &layer)
+    };
 
     // stem -> every file that answers to it
     let mut by_stem: HashMap<&str, Vec<&str>> = HashMap::new();
@@ -234,11 +296,14 @@ pub fn run(base: &Base) -> Vec<Finding> {
         // linter that certifies an unreachable file is worse than no linter, because it is
         // the reason nobody looked.
         check_reachable(base, file, &mut findings);
+        check_citations(file, &sources, &by_key, &mut cited, &mut findings);
 
         if base.is_note(file) {
             check_note(base, file, &mut findings);
         }
     }
+
+    check_uncited_sources(&sources, &cited, &mut findings);
 
     // **W02 is retired, and it goes with the line it graded.** It warned that a map entry
     // carried no `Search for:` line, "so grep cannot route to it", which stopped being true
@@ -298,6 +363,206 @@ fn check_ignores(base: &Base, findings: &mut Vec<Finding>) {
                 ),
             });
         }
+    }
+}
+
+/// Citation keys used by markdown inside the base's declared private folders.
+///
+/// Only the keys come back. Nothing about which file, how many, or what it said, so this
+/// cannot put a private path into a finding even by accident.
+fn cited_in_private_layer(
+    root: &std::path::Path,
+    layer: &crate::base::PrivateLayer,
+) -> std::collections::BTreeSet<String> {
+    let folders: Vec<String> = match layer {
+        crate::base::PrivateLayer::Whole => vec![String::new()],
+        crate::base::PrivateLayer::Folders(f) => f.clone(),
+    };
+    let mut keys = std::collections::BTreeSet::new();
+    for folder in folders {
+        walk_for_citations(&root.join(folder), &mut keys);
+    }
+    keys
+}
+
+fn walk_for_citations(dir: &std::path::Path, keys: &mut std::collections::BTreeSet<String>) {
+    let Ok(entries) = std::fs::read_dir(dir) else { return };
+    for entry in entries.flatten() {
+        let path = entry.path();
+        // `.git` and `.kb` hold no notes and are the two directories large enough to make
+        // this walk visible in the time `kb check` takes.
+        if entry.file_name().to_string_lossy().starts_with('.') {
+            continue;
+        }
+        if path.is_dir() {
+            walk_for_citations(&path, keys);
+        } else if path.extension().is_some_and(|e| e == "md") {
+            if let Ok(text) = std::fs::read_to_string(&path) {
+                for (_, token) in crate::sources::citations(&text) {
+                    keys.insert(token);
+                }
+            }
+        }
+    }
+}
+
+/// E05, E08 and W09: the three things a `[src:KEY]` pointer can be wrong about.
+///
+/// **A citation is a pointer, and these are the ways a pointer stops pointing.** The
+/// bibliography at the foot of a note is a rendering of the records it cites, so it is a
+/// cache with an equality check rather than a second copy a person maintains. That is the
+/// whole difference between this and the prose paragraphs it replaces: a restatement can
+/// drift and nothing notices, a projection cannot drift without failing E08.
+///
+/// - **E05**, the key does not resolve. A malformed token or no record with that key.
+/// - **E08**, the note cites a key and carries no bibliography line for it, or carries one
+///   that no longer matches the record. Without this, the embedded copy is exactly the
+///   restatement the pointer was introduced to remove, and item three of the design would
+///   have reintroduced the bug item one exists to kill.
+/// - **W09**, the note cites a source another record supersedes. A warning and not an error
+///   on purpose: citing what was actually read on the day is legitimate, and an error would
+///   force somebody to rewrite the history of their own reading. The correction is surfaced
+///   and the choice is left where it belongs.
+///
+/// A key that has been superseded still resolves, which is `dc:replaces` doing its one job.
+/// The old record is never deleted.
+fn check_citations(
+    file: &MdFile,
+    sources: &[crate::sources::Source],
+    by_key: &std::collections::BTreeMap<&str, &crate::sources::Source>,
+    cited: &mut std::collections::BTreeSet<String>,
+    findings: &mut Vec<Finding>,
+) {
+    let pointers = crate::sources::citations(&file.text);
+    if pointers.is_empty() {
+        return;
+    }
+
+    // Every bibliography entry in this file, by the key it opens with.
+    let entries: HashMap<String, (usize, String)> = file
+        .text
+        .lines()
+        .enumerate()
+        .filter_map(|(i, l)| {
+            crate::sources::bibliography_line(l).map(|(k, rest)| (k, (i + 1, rest)))
+        })
+        .collect();
+
+    let mut reported: std::collections::BTreeSet<String> = std::collections::BTreeSet::new();
+    for (line, token) in pointers {
+        let Some(source) = by_key.get(token.as_str()) else {
+            if reported.insert(token.clone()) {
+                let why = if crate::sources::is_key(&token) {
+                    format!("no {}/{token}.txt in this base", crate::sources::DIR)
+                } else {
+                    format!(
+                        "`{token}` is not a key: {} characters from {}",
+                        crate::sources::KEY_LEN,
+                        String::from_utf8_lossy(crate::sources::ALPHABET)
+                    )
+                };
+                findings.push(Finding {
+                    level: Level::Error,
+                    code: "E05",
+                    file: file.rel.clone(),
+                    line,
+                    message: format!(
+                        "citation [src:{token}] does not resolve: {why}. A citation is a \
+                         pointer, so a key with no record behind it is a claim with no source"
+                    ),
+                });
+            }
+            continue;
+        };
+        cited.insert(token.clone());
+
+        // Once per key per file. A note citing a superseded source names it twice by
+        // construction, in the prose and in its own bibliography line, and reporting the
+        // same correction twice teaches the reader that the second half of the output is
+        // padding.
+        if reported.insert(format!("old:{token}")) {
+            if let Some(newer) = crate::sources::replacement_of(sources, &token) {
+                findings.push(Finding {
+                    level: Level::Warning,
+                    code: "W09",
+                    file: file.rel.clone(),
+                    line,
+                    message: format!(
+                        "[src:{token}] is superseded by [src:{}], \"{}\". The old key still \
+                         resolves, so this is a correction to consider and not a broken link",
+                        newer.key, newer.title
+                    ),
+                });
+            }
+        }
+
+        if !reported.insert(format!("bib:{token}")) {
+            continue;
+        }
+        let expected = crate::sources::render_line(source);
+        match entries.get(&token) {
+            None => findings.push(Finding {
+                level: Level::Error,
+                code: "E08",
+                file: file.rel.clone(),
+                line,
+                message: format!(
+                    "cited [src:{token}] with no bibliography line for it. Add:\n    - \
+                     [src:{token}] {expected}"
+                ),
+            }),
+            Some((at, actual)) if actual != &expected => findings.push(Finding {
+                level: Level::Error,
+                code: "E08",
+                file: file.rel.clone(),
+                line: *at,
+                message: format!(
+                    "the bibliography line for [src:{token}] has drifted from the record. \
+                     The record says:\n    - [src:{token}] {expected}"
+                ),
+            }),
+            Some(_) => {}
+        }
+    }
+}
+
+/// E06: a source record no note in this base cites.
+///
+/// **An error rather than a warning, because an uncited source is a claim about work that
+/// was never used.** A record is minted by reading something; if nothing cites it, either a
+/// note is missing its pointer or the record should not exist, and both are the writer's to
+/// resolve. Left as a warning it would accumulate exactly the way the `SOURCES.md` ledgers
+/// did, into a list nobody reconciles.
+///
+/// A superseded record is exempt, and that exemption is what makes `dc:replaces` work. The
+/// old record stays on disk so its key keeps resolving for every note that already cites it,
+/// and notes will stop citing it over time. Without the exemption, correcting a source would
+/// fail the check the moment the last note moved to the new key, which is the opposite of
+/// what a correction should cost.
+fn check_uncited_sources(
+    sources: &[crate::sources::Source],
+    cited: &std::collections::BTreeSet<String>,
+    findings: &mut Vec<Finding>,
+) {
+    for source in sources {
+        if cited.contains(&source.key) {
+            continue;
+        }
+        if crate::sources::replacement_of(sources, &source.key).is_some() {
+            continue;
+        }
+        findings.push(Finding {
+            level: Level::Error,
+            code: "E06",
+            file: format!("{}/{}.txt", crate::sources::DIR, source.key),
+            line: 0,
+            message: format!(
+                "no note cites [src:{}], \"{}\". The bibliography is a projection of the \
+                 pointers, so a record nothing points at is in no bibliography and answers \
+                 no question. Cite it or delete it",
+                source.key, source.title
+            ),
+        });
     }
 }
 
@@ -413,7 +678,31 @@ fn check_note(_base: &Base, file: &MdFile, findings: &mut Vec<Finding>) {
         let has = |k: &str| pairs.iter().any(|(key, _)| key == k);
         let value = |k: &str| pairs.iter().find(|(key, _)| key == k).map(|(_, v)| v.clone());
 
-        if has("source") || has("type") {
+        // **W04 used to be opt in, and nothing opted in.**
+        //
+        // The condition was `has("source") || has("type")`: two front matter keys a writer
+        // adds or does not, so the evidence ruler graded only the notes whose author had
+        // already decided to be graded. Measured on 2026-09-08: 204 knowledge notes across
+        // the fleet, 17 carrying a front matter `source`. Cosimo's base was 73 notes with
+        // zero of either, so the 63 sources read into it in one week were never graded at
+        // all, and `kb check` printed nothing about any of them. A rule nothing triggers is
+        // not a rule.
+        //
+        // **The new condition is a fact about the body, not about optional front matter: the
+        // note cites something.** A `[src:KEY]` pointer, or the hand written `Sources, ...:`
+        // paragraph that predates pointers. A note that cites a source is making a sourced
+        // claim by definition, and that is exactly the population the evidence ruler was
+        // written for.
+        //
+        // The alternative considered and refused was **every note in the knowledge folder**.
+        // It is the strongest rule and it fires on 188 of 204 notes on the day it lands,
+        // which turns `kb check` into a wall the reader learns to scroll past. This
+        // repository already recorded that failure once, in the note above about why E03
+        // was removed. The condition here fires on the 29 that cite in prose today, which is
+        // the population the ruler was already supposed to have caught.
+        let cites = !crate::sources::citations(&file.text).is_empty()
+            || crate::sources::prose_paragraph(&file.text).is_some();
+        if has("source") || has("type") || cites {
             for required in ["evidence_tier", "valid_for"] {
                 if !has(required) {
                     findings.push(Finding {
@@ -421,7 +710,10 @@ fn check_note(_base: &Base, file: &MdFile, findings: &mut Vec<Finding>) {
                         code: "W04",
                         file: file.rel.clone(),
                         line: 1,
-                        message: format!("front matter declares a source but has no {required}"),
+                        message: format!(
+                            "this note cites a source and has no {required}. A sourced claim \
+                             that grades itself nowhere is a claim nobody can weigh"
+                        ),
                     });
                 }
             }
@@ -499,6 +791,213 @@ mod tests {
         let mut findings = Vec::new();
         check_ignores(&base, &mut findings);
         assert!(findings.is_empty(), "a base that never mentioned git owes git nothing");
+    }
+
+    // -----------------------------------------------------------------------
+    // Citations
+    // -----------------------------------------------------------------------
+
+    /// A base on disk with one source record and one note, so the citation checks run
+    /// against the same two files a person would have.
+    fn base_with_a_source(name: &str, note_body: &str) -> (std::path::PathBuf, String) {
+        let dir = scratch(name);
+        std::fs::write(dir.join("agent.txt"), "name = Probe\n").expect("manifest");
+        std::fs::create_dir_all(dir.join("knowledge")).expect("mkdir");
+        std::fs::create_dir_all(dir.join(crate::sources::DIR)).expect("mkdir");
+        std::fs::write(
+            dir.join(crate::sources::DIR).join("K7M2QX4BTF.txt"),
+            "type = article\ntitle = A Theory of Human Motivation\nauthor = Maslow, A. H.\n\
+             year = 1943\nretrieved_on = 2026-09-06\nretrieval_status = full\n",
+        )
+        .expect("record");
+        std::fs::write(
+            dir.join("knowledge").join("note.md"),
+            format!("**Search for:** `a`\n\n{note_body}\n"),
+        )
+        .expect("note");
+        let expected = "Maslow, A. H. \"A Theory of Human Motivation\". 1943. \
+                        read in full, 2026-09-06."
+            .to_string();
+        (dir, expected)
+    }
+
+    fn codes(dir: &std::path::Path) -> Vec<String> {
+        let base = Base::discover(dir, false).expect("discover");
+        run(&base).into_iter().map(|f| f.code.to_string()).collect()
+    }
+
+    /// The shape that is supposed to be clean: a pointer in the prose and one bibliography
+    /// line rendering the record it points at.
+    #[test]
+    fn a_pointer_with_a_matching_bibliography_line_is_clean() {
+        let (dir, expected) = base_with_a_source(
+            "cite-ok",
+            "Maslow is [src:K7M2QX4BTF].\n\n## Sources\n\n- [src:K7M2QX4BTF] PLACEHOLDER",
+        );
+        let note = dir.join("knowledge").join("note.md");
+        let text = std::fs::read_to_string(&note).expect("read").replace("PLACEHOLDER", &expected);
+        std::fs::write(&note, text).expect("write");
+
+        let found = codes(&dir);
+        assert!(
+            !found.iter().any(|c| c.starts_with('E')),
+            "expected no errors, got {found:?}"
+        );
+    }
+
+    #[test]
+    fn a_citation_whose_key_has_no_record_is_an_error() {
+        let (dir, _) = base_with_a_source("cite-dead", "See [src:AAAAAAAAAA].");
+        let base = Base::discover(&dir, false).expect("discover");
+        let dead: Vec<_> = run(&base).into_iter().filter(|f| f.code == "E05").collect();
+        assert_eq!(dead.len(), 1, "one unresolved key");
+        assert!(dead[0].message.contains("sources/AAAAAAAAAA.txt"), "{}", dead[0].message);
+        assert!(matches!(dead[0].level, Level::Error));
+    }
+
+    /// A key that is not a key at all takes the same code and a different sentence, because
+    /// the fix is different: one is a missing file, the other is a typo.
+    #[test]
+    fn a_malformed_key_is_the_same_error_with_a_different_reason() {
+        let (dir, _) = base_with_a_source("cite-malformed", "See [src:maslow1943].");
+        let base = Base::discover(&dir, false).expect("discover");
+        let dead: Vec<_> = run(&base).into_iter().filter(|f| f.code == "E05").collect();
+        assert_eq!(dead.len(), 1);
+        assert!(dead[0].message.contains("is not a key"), "{}", dead[0].message);
+    }
+
+    /// **The check that keeps the embedded copy from being a fourth restatement.** Without
+    /// it, a note could carry a bibliography line saying anything at all, which is the state
+    /// the prose paragraphs were already in.
+    #[test]
+    fn a_bibliography_line_that_drifted_from_the_record_is_an_error() {
+        let (dir, _) = base_with_a_source(
+            "cite-drift",
+            "See [src:K7M2QX4BTF].\n\n- [src:K7M2QX4BTF] Maslow, A. H. \"A Theory\". 1965.",
+        );
+        let base = Base::discover(&dir, false).expect("discover");
+        let drift: Vec<_> = run(&base).into_iter().filter(|f| f.code == "E08").collect();
+        assert_eq!(drift.len(), 1);
+        assert!(drift[0].message.contains("has drifted"), "{}", drift[0].message);
+        assert!(drift[0].message.contains("1943"), "the message carries the fix");
+    }
+
+    #[test]
+    fn citing_a_source_with_no_bibliography_line_at_all_is_an_error() {
+        let (dir, expected) = base_with_a_source("cite-nobib", "See [src:K7M2QX4BTF].");
+        let base = Base::discover(&dir, false).expect("discover");
+        let missing: Vec<_> = run(&base).into_iter().filter(|f| f.code == "E08").collect();
+        assert_eq!(missing.len(), 1);
+        assert!(missing[0].message.contains(&expected), "{}", missing[0].message);
+    }
+
+    #[test]
+    fn a_source_no_note_cites_is_an_error_against_the_record() {
+        let (dir, _) = base_with_a_source("cite-orphan", "A note that cites nothing.");
+        let base = Base::discover(&dir, false).expect("discover");
+        let orphan: Vec<_> = run(&base).into_iter().filter(|f| f.code == "E06").collect();
+        assert_eq!(orphan.len(), 1);
+        assert_eq!(orphan[0].file, "sources/K7M2QX4BTF.txt");
+        assert!(matches!(orphan[0].level, Level::Error));
+    }
+
+    /// `dc:replaces` in one test: the superseded record keeps resolving, it stops being
+    /// reported as uncited, and the note that still points at it is told what replaced it.
+    #[test]
+    fn a_superseded_source_still_resolves_and_stops_being_an_orphan() {
+        let (dir, _) = base_with_a_source("cite-replaces", "Old reading: [src:K7M2QX4BTF].");
+        std::fs::write(
+            dir.join(crate::sources::DIR).join("BBBBBBBBBB.txt"),
+            "type = article\ntitle = Who Built Maslow's Pyramid\nauthor = Bridgman, T.\n\
+             year = 2019\nretrieved_on = 2026-09-06\nretrieval_status = full\n\
+             replaces = K7M2QX4BTF\n",
+        )
+        .expect("record");
+        std::fs::write(
+            dir.join("knowledge").join("other.md"),
+            "**Search for:** `b`\n\nThe correction is [src:BBBBBBBBBB].\n",
+        )
+        .expect("note");
+
+        let base = Base::discover(&dir, false).expect("discover");
+        let findings = run(&base);
+
+        assert!(
+            !findings.iter().any(|f| f.code == "E05"),
+            "the old key must keep resolving, which is the whole point of dc:replaces"
+        );
+        assert!(
+            !findings.iter().any(|f| f.code == "E06"),
+            "a superseded record is exempt from the orphan rule, or a correction costs a \
+             check failure the day the last note moves off it"
+        );
+        let superseded: Vec<_> = findings.iter().filter(|f| f.code == "W09").collect();
+        assert_eq!(superseded.len(), 1);
+        assert!(superseded[0].message.contains("BBBBBBBBBB"), "{}", superseded[0].message);
+        assert!(matches!(superseded[0].level, Level::Warning), "a correction is not a break");
+    }
+
+    #[test]
+    fn a_file_in_sources_that_is_not_a_record_is_reported_rather_than_ignored() {
+        let (dir, _) = base_with_a_source("cite-badrecord", "See [src:K7M2QX4BTF].");
+        std::fs::write(dir.join(crate::sources::DIR).join("CCCCCCCCCC.txt"), "type = tweet\n")
+            .expect("write");
+        let base = Base::discover(&dir, false).expect("discover");
+        let bad: Vec<_> = run(&base).into_iter().filter(|f| f.code == "E09").collect();
+        assert_eq!(bad.len(), 1);
+        assert_eq!(bad[0].file, "sources/CCCCCCCCCC.txt");
+    }
+
+    /// W04's condition is a fact about the body now. The note here declares neither `source`
+    /// nor `type` in front matter, which is exactly the shape that went ungraded 73 times.
+    #[test]
+    fn a_note_that_cites_a_source_is_graded_even_with_no_source_line_in_front_matter() {
+        let file = md(
+            "knowledge/n.md",
+            "---\nprovenance: agent\nstage: derived\n---\n\n**Search for:** `a`\n\n\
+             See [src:K7M2QX4BTF].\n",
+        );
+        let mut findings = Vec::new();
+        check_note(&four_files(), &file, &mut findings);
+        let w04: Vec<_> = findings.iter().filter(|f| f.code == "W04").collect();
+        assert_eq!(w04.len(), 2, "evidence_tier and valid_for");
+    }
+
+    /// The 29 notes that cite in prose today are the population this was written to reach,
+    /// so the old shape has to trigger it too or the change grades nothing until a retrofit.
+    #[test]
+    fn a_prose_sources_paragraph_triggers_the_evidence_rules_as_well() {
+        let file = md(
+            "knowledge/n.md",
+            "---\nprovenance: agent\nstage: derived\n---\n\n**Search for:** `a`\n\n\
+             Sources, read 2026-09-06: Maslow, A. H., Psychological Review 50.\n",
+        );
+        let mut findings = Vec::new();
+        check_note(&four_files(), &file, &mut findings);
+        assert_eq!(findings.iter().filter(|f| f.code == "W04").count(), 2);
+    }
+
+    #[test]
+    fn a_note_that_cites_nothing_is_not_asked_for_a_tier() {
+        let file = md(
+            "knowledge/n.md",
+            "---\nprovenance: agent\nstage: derived\n---\n\n**Search for:** `a`\n\nPlain prose.\n",
+        );
+        let mut findings = Vec::new();
+        check_note(&four_files(), &file, &mut findings);
+        assert!(findings.iter().all(|f| f.code != "W04"), "{:?}", findings.len());
+    }
+
+    /// House style is about our prose. A book's real title belongs to somebody else, and
+    /// `write::note` refuses a whole note on a dash, so without the exemption a source
+    /// titled with one could be recorded and never cited.
+    #[test]
+    fn a_dash_inside_a_bibliography_line_is_not_a_house_style_finding() {
+        let text = "our prose \u{2014} with a dash\n- [src:K7M2QX4BTF] Someone. \
+                    \"Title \u{2014} Subtitle\". 2019. read in full, 2026-09-06.";
+        let found = dashes(text);
+        assert_eq!(found.len(), 1, "only our own line is reported");
+        assert_eq!(found[0].0, 1);
     }
 
     #[test]
@@ -601,6 +1100,7 @@ mod tests {
             ],
             unreadable: Vec::new(),
             aliases: Vec::new(),
+            all: false,
         }
     }
 

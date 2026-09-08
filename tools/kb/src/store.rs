@@ -229,6 +229,9 @@ pub struct SyncReport {
     pub reindexed: usize,
     pub removed: usize,
     pub chunks: usize,
+    /// Source records seen in this base. Rebuilt wholesale, so this is a count of what is
+    /// on disk now rather than a count of what changed.
+    pub sources: usize,
 }
 
 /// Which files a query is allowed to see.
@@ -330,6 +333,32 @@ impl Store {
                 PRIMARY KEY (base, path)
             );
 
+            -- One row per source record on disk, derived from `sources/<KEY>.txt` by
+            -- ADR-0003 the same way every other row here is derived from a file.
+            --
+            -- **No migration and no wipe, and that is not an oversight.** The wipe below
+            -- exists because `sync` skips a file whose hash it already knows, so a column
+            -- added to `files` would stay NULL for every note already indexed, forever.
+            -- Sources are rebuilt wholesale on every sync: there are tens of them, not
+            -- thousands, so a delete and reinsert per base costs nothing and leaves no row
+            -- that can be stale. A table with no stale state has nothing to migrate.
+            CREATE TABLE IF NOT EXISTS sources (
+                base             TEXT NOT NULL,
+                key              TEXT NOT NULL,
+                type             TEXT NOT NULL,
+                title            TEXT NOT NULL,
+                author           TEXT,
+                year             TEXT,
+                container        TEXT,
+                url              TEXT,
+                doi              TEXT,
+                isbn             TEXT,
+                retrieved_on     TEXT NOT NULL,
+                retrieval_status TEXT NOT NULL,
+                replaces         TEXT,
+                PRIMARY KEY (base, key)
+            );
+
             CREATE VIRTUAL TABLE IF NOT EXISTS chunks USING fts5(
                 base         UNINDEXED,
                 path         UNINDEXED,
@@ -378,7 +407,8 @@ impl Store {
     pub fn sync(&mut self, base: &Base, base_name: &str) -> R<SyncReport> {
         // A sync can change every document frequency in the index.
         self.df_cache.borrow_mut().clear();
-        let mut report = SyncReport { unchanged: 0, reindexed: 0, removed: 0, chunks: 0 };
+        let mut report =
+            SyncReport { unchanged: 0, reindexed: 0, removed: 0, chunks: 0, sources: 0 };
         let tx = self.conn.transaction()?;
 
         let mut seen: Vec<String> = Vec::new();
@@ -463,8 +493,58 @@ impl Store {
             report.removed += 1;
         }
 
+        // **Wholesale, not by hash.** Two reasons and both are about the failure modes the
+        // hash path has. A source record is a few hundred bytes and a base has tens of them,
+        // so incremental sync buys microseconds; and a record deleted or renamed on disk
+        // leaves no row behind, which is the bug the `files` table needs the `seen` list
+        // above to avoid.
+        tx.execute("DELETE FROM sources WHERE base = ?1", params![base_name])?;
+        let (records, _bad) = crate::sources::load(&base.root);
+        for s in &records {
+            tx.execute(
+                "INSERT OR REPLACE INTO sources
+                     (base, key, type, title, author, year, container, url, doi, isbn,
+                      retrieved_on, retrieval_status, replaces)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13)",
+                params![
+                    base_name,
+                    s.key,
+                    s.kind,
+                    s.title,
+                    if s.authors.is_empty() { None } else { Some(s.authors.join("; ")) },
+                    s.year,
+                    s.container,
+                    s.url,
+                    s.doi,
+                    s.isbn,
+                    s.retrieved_on,
+                    s.retrieval_status,
+                    s.replaces,
+                ],
+            )?;
+        }
+        report.sources = records.len();
+
         tx.commit()?;
         Ok(report)
+    }
+
+    /// Every source in the index, newest retrieval first, optionally narrowed to one base.
+    ///
+    /// **The question this answers is "have we read this already".** Two units citing one
+    /// book produced two unrelated prose strings before, because nothing could be asked.
+    /// It reads the index rather than the disk so a caller holding a `Store` over a whole
+    /// fleet gets one answer across every base without walking fifteen directories.
+    pub fn sources(&self, base: Option<&str>) -> R<Vec<(String, String, String, String, String)>> {
+        let mut stmt = self.conn.prepare(
+            "SELECT base, key, type, title, retrieved_on FROM sources
+             WHERE (?1 IS NULL OR base = ?1)
+             ORDER BY retrieved_on DESC, key",
+        )?;
+        let rows = stmt.query_map(params![base], |row| {
+            Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?, row.get(4)?))
+        })?;
+        rows.collect::<Result<Vec<_>, _>>().map_err(Into::into)
     }
 
     /// Full text search, ranked by BM25.
@@ -660,6 +740,7 @@ mod tests {
             files,
             unreadable: Vec::new(),
             aliases: Vec::new(),
+            all: false,
         }
     }
 
@@ -699,6 +780,48 @@ mod tests {
         assert!(
             !only_common.is_empty(),
             "when every term would be pruned the original query stands: slow beats none"
+        );
+    }
+
+    /// **The sources table is rebuilt wholesale, so a record deleted on disk leaves no
+    /// row.** The `files` table needs a `seen` list and a stale sweep to get this right; a
+    /// table small enough to rewrite has the property for free, which is the reason it does
+    /// not take the wipe-on-migration treatment the columns above it took.
+    #[test]
+    fn source_records_are_indexed_and_a_deleted_record_leaves_no_row() {
+        let dir = scratch("sources-table");
+        let mut store = Store::open(&dir.join("i.db")).expect("open");
+        std::fs::create_dir_all(dir.join(crate::sources::DIR)).expect("mkdir");
+        let record = dir.join(crate::sources::DIR).join("K7M2QX4BTF.txt");
+        std::fs::write(
+            &record,
+            "type = article
+title = A Theory of Human Motivation
+author = Maslow, A. H.
+             year = 1943
+retrieved_on = 2026-09-06
+retrieval_status = full
+",
+        )
+        .expect("record");
+
+        let base = base_with(&dir, vec![md("knowledge/n.md", "# N
+
+body
+", false)]);
+        let report = store.sync(&base, "cosimo").expect("sync");
+        assert_eq!(report.sources, 1);
+
+        let rows = store.sources(Some("cosimo")).expect("read back");
+        assert_eq!(rows.len(), 1);
+        assert_eq!(rows[0].1, "K7M2QX4BTF");
+        assert_eq!(rows[0].3, "A Theory of Human Motivation");
+
+        std::fs::remove_file(&record).expect("delete");
+        store.sync(&base, "cosimo").expect("resync");
+        assert!(
+            store.sources(Some("cosimo")).expect("read back").is_empty(),
+            "a record deleted on disk must not survive in the index"
         );
     }
 

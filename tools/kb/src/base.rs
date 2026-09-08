@@ -130,6 +130,15 @@ pub struct Base {
     pub unreadable: Vec<(String, String)>,
     /// `alias -> canonical` pairs read from `kb-aliases.txt` at the root.
     pub aliases: Vec<(String, String)>,
+    /// Whether this base was discovered with the private layer included.
+    ///
+    /// **Carried because a consumer that reads something off disk itself has to make the
+    /// same decision the walk made.** `checks` reads `sources/` directly, and on a base
+    /// that declares itself private as a whole, discovering without this would leave the
+    /// notes filtered out and the source records still loaded, so every source would be
+    /// reported as cited by nobody. The walk's decision has to be legible to whoever asks
+    /// a second question of the same base.
+    pub all: bool,
 }
 
 /// Reads the alias table, if the base has one.
@@ -183,6 +192,7 @@ impl Base {
             files: Vec::new(),
             unreadable: Vec::new(),
             aliases: load_aliases(root),
+            all,
         };
 
         collect(root, root, &mut base)?;

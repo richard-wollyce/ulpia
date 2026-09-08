@@ -10,7 +10,7 @@ use kb::{
     abstain, answer, base, blocks, boot, capture, checks, classify, commit, eval, gate, index,
     init, ingest, json,
     list,
-    mcp, memory, misroute, misses, panel, promote, remember, store, ui, write,
+    mcp, memory, misroute, misses, panel, promote, remember, sources, store, ui, write,
 };
 use base::Base;
 use std::path::{Path, PathBuf};
@@ -31,6 +31,11 @@ usage:
     kb init --person [fleet-root]
     kb write <agent> <slug> [fleet-root] --keys <a, b> --summary <one line> [--folder F]
                 [--captured-from PATH]
+    kb source add [path] --type T --title X --retrieved-on DATE --retrieval-status S
+                  [--author A]... [--year Y] [--container C] [--volume V] [--pages P]
+                  [--publisher P] [--url U] [--doi D] [--isbn I] [--lang L]
+                  [--replaces KEY] [--note N]
+    kb sources [path]... [--json] [--all]
     kb fleet [path]... [--all]
     kb blocks [path] [--emit]
     kb eval <gold.tsv> [path]... [--top N] [--all] [--classify]
@@ -96,6 +101,21 @@ usage:
                 first non-space byte decides, and a message that is itself a JSON
                 object carrying a `prompt` key would be read as an envelope
     -m          commit: the message. Required, and so is at least one path
+
+source add mints an opaque key and writes `sources/<KEY>.txt`. The key is ten
+characters from an alphabet with 0, 1 and O removed, drawn from operating system
+entropy, never derived from the title, the author or the path, and never
+regenerated. A note cites it as [src:KEY] and carries one bibliography line
+`- [src:KEY] <what the record renders>`, which kb check compares byte for byte,
+so the reference list is a projection of the pointers and cannot disagree with
+the body. --type is one of book, chapter, article, report, webpage, recording.
+--retrieval-status is one of full, partial, metadata, unreachable, and it is
+required because a source nobody opened has to say so out loud.
+
+sources lists what a base has read. --json emits CSL JSON, which is the export
+format from day one: a stable published shape every processor already reads, so
+the sources can leave this system without a converter written under pressure.
+It is an export and not an import; nothing here reads CSL back.
 
 misses reads kb-misses.txt back: every question the free stage could not answer,
 most asked first, with the count, the dates and the vocabulary the base offered at
@@ -304,6 +324,12 @@ checks:
                         or valid_for
     W05 no-provenance   a note with no provenance or stage, so who wrote it is unknown
     E04 bad-provenance  provenance or stage carries a value outside the legal set
+    E05 dead-citation   a [src:KEY] with no record behind it in this base
+    E06 uncited-source  a source record no note points at
+    E08 bibliography    a cited key with no bibliography line, or one that drifted
+                        from the record
+    E09 source-record   a file in sources/ that is not a source record
+    W09 superseded      a citation of a source another record replaces
 
 E02, W06 and W07 are asked of every file the index walks, not only of the knowledge
 folder, and they skip the files nobody searches for: README.md, MAP.md, AGENTS.md, CLAUDE.md,
@@ -322,6 +348,11 @@ const VALUE_FLAGS: &[&str] = &[
     "--captured-from", "--agent", "--session", "--cwd",
     "-m", "--port", "--max", "--gold", "--chose", "--owner", "--why",
     "--reviewer", "--out", "--from", "--objection", "--resolve",
+    // `kb source add`. Every one takes a value, and `--author` is the only one that may
+    // be repeated, which `flag_values` already knows how to read.
+    "--type", "--title", "--author", "--year", "--container", "--volume", "--pages",
+    "--publisher", "--url", "--doi", "--isbn", "--lang", "--retrieved-on",
+    "--retrieval-status", "--replaces", "--note",
 ];
 
 /// What build this is, in one line: `kb 0.2.1 (2269ba0, x86_64 linux)`.
@@ -542,6 +573,17 @@ fn main() -> ExitCode {
             let paths = paths_or_default(&positional[1..]);
             cmd_eval(Path::new(gold), &paths, all, top, args.iter().any(|a| a == "--classify"))
         }
+        "source" => {
+            if positional.first() != Some(&"add") {
+                eprintln!("kb: the only source verb is `add`
+");
+                print!("{USAGE}");
+                return ExitCode::from(2);
+            }
+            let root = positional.get(1).copied().unwrap_or(".");
+            cmd_source_add(Path::new(root), &args)
+        }
+        "sources" => cmd_sources(&paths_or_default(&positional), all, json),
         "fleet" => cmd_fleet(&paths_or_default(&positional), all),
         "blocks" => {
             let paths = paths_or_default(&positional);
@@ -872,6 +914,101 @@ fn cmd_ingest(
 // ---------------------------------------------------------------------------
 // check
 // ---------------------------------------------------------------------------
+
+// ---------------------------------------------------------------------------
+// sources
+// ---------------------------------------------------------------------------
+
+/// The flags `kb source add` turns into record fields, and the whole argument surface.
+///
+/// A list rather than a signature, so the parser stays one loop and adding a field is one
+/// line here. `--author` is the only repeatable one; the rest take the first value given,
+/// which is what `flag_value` already does everywhere else in this file.
+const SOURCE_FIELDS: &[&str] = &[
+    "type", "title", "author", "year", "container", "volume", "pages", "publisher",
+    "url", "doi", "isbn", "lang", "retrieved-on", "retrieval-status", "replaces", "note",
+];
+
+/// Mints a key and writes a source record, then prints the line a note has to carry.
+///
+/// **The rendered bibliography line is printed here on purpose.** `kb check` compares that
+/// line byte for byte against the record, so a writer who has to invent it by hand fails the
+/// check on their first try and learns to distrust it. Printing it makes the copy a paste
+/// rather than a restatement, which is the difference between a projection and a fourth
+/// place the same facts are maintained.
+fn cmd_source_add(root: &Path, args: &[String]) -> ExitCode {
+    let mut given: Vec<(String, String)> = Vec::new();
+    for field in SOURCE_FIELDS {
+        let flag = format!("--{field}");
+        if *field == "author" {
+            for v in flag_values(args, &flag) {
+                given.push((field.to_string(), v));
+            }
+        } else if let Some(v) = flag_value(args, &flag) {
+            given.push((field.to_string(), v));
+        }
+    }
+
+    match sources::add(root, &given) {
+        Ok(s) => {
+            println!("wrote {}", s.path.display());
+            println!();
+            println!("Cite it as [src:{}], and carry one bibliography line:", s.key);
+            println!("- [src:{}] {}", s.key, sources::render_line(&s));
+            ExitCode::SUCCESS
+        }
+        Err(e) => {
+            eprintln!("kb: {e}");
+            // Exit 2 for a bad argument, the code every other argument failure uses here.
+            // An IO failure is the machine and not the caller, so it takes 1.
+            match e {
+                sources::AddError::Io(_, _) => ExitCode::from(1),
+                _ => ExitCode::from(2),
+            }
+        }
+    }
+}
+
+/// Lists a base's sources, or emits them as CSL JSON.
+///
+/// Read off disk rather than out of the index, deliberately: the records are the truth by
+/// ADR-0003 and the SQLite table is derived from them, so an export that read the index
+/// would be an export of a cache and would be stale exactly when somebody had just added
+/// something and not reindexed.
+fn cmd_sources(paths: &[&str], all: bool, json_out: bool) -> ExitCode {
+    let given: Vec<&Path> = paths.iter().map(Path::new).collect();
+    let bases = memory::expand_roots(&given);
+
+    let mut every = Vec::new();
+    let mut broken = 0usize;
+    for path in &bases {
+        // A base may declare `sources/` private, and the person's base is private as a
+        // whole. Listing it anyway would be `kb` publishing something the base said not to,
+        // which is the one thing ADR-0034 says it never does.
+        if !all && base::private_layer(path).covers(sources::DIR) {
+            continue;
+        }
+        let (found, bad) = sources::load(path);
+        broken += bad.len();
+        for b in &bad {
+            eprintln!("kb: {}/{}: {}", path.display(), b.path, b.problem);
+        }
+        every.extend(found);
+    }
+
+    if json_out {
+        println!("{}", sources::to_csl(&every).to_string());
+    } else if every.is_empty() {
+        println!("no source records");
+    } else {
+        for s in &every {
+            println!("[src:{}] {}", s.key, sources::render_line(s));
+        }
+        println!();
+        println!("{} sources in {} base(s)", every.len(), bases.len());
+    }
+    if broken > 0 { ExitCode::from(1) } else { ExitCode::SUCCESS }
+}
 
 /// Prints the fleet's own name and roster. The same text `kb_fleet` returns over MCP,
 /// so what a model sees and what a person sees cannot drift apart.

@@ -20,6 +20,8 @@ kb check [path]... [--strict] [--all]
 kb index [path]... [--json] [--all]
 kb list [path]... [--base B] [--folder F] [--kind K] [--stage S] [--provenance P] [--json] [--all]
 kb route <question> [path]... [--top N] [--hybrid] [--json]
+kb source add [path] --type T --title X --retrieved-on DATE --retrieval-status S [--author A]...
+kb sources [path]... [--json]
 ```
 
 ```
@@ -36,7 +38,7 @@ plainly when nothing matched rather than returning a confident guess.
 
 ## What is in the box, and the pain each piece answers
 
-Twenty-four verbs. Each exists because something went wrong without it, and the table says what.
+Twenty-six verbs. Each exists because something went wrong without it, and the table says what.
 A verb whose pain you do not have is a verb you do not need to learn.
 
 | Verb | The pain | What it does | What it never does |
@@ -47,7 +49,9 @@ A verb whose pain you do not have is a verb you do not need to learn.
 | `write` | A note without its keyword line is a note nothing can find, and people forget the line | Writes the note with its `Search for:` header and its map entry in one step, and refuses without keys | Writes half: a failed map entry deletes the note again |
 | `ingest` | A document on somebody's disk is not knowledge, and turning it into knowledge was seven prose steps that eleven of thirteen agents did not have | Moves the document into the owning agent's deposit, extracts its text through `tools/extract/<ext>.cmd`, distils it through the same `promote` the sweep uses, and then destroys the source | Deletes a document that produced no note. Deletes a path the caller typed: it only ever removes what it moved. Grows its own promoter, so ingestion and the nightly sweep cannot drift |
 | `promote` | Raw material piles up in an inbox and nobody distils it | Two promoters, three questions, unanimity: the first proposes notes without seeing the base, the second decides without seeing the first's reasoning. Writes at stage `captured` | Writes on a split decision. Starts over another run's lock when `--lock` is given |
-| `check` | A broken link, a missing keyword line, an em dash: each one is invisible until it costs an hour | Lints every base: E01 broken link, E02 not indexed, W06 thin keywords, and the house rules | Fixes anything. Touches a file |
+| `check` | A broken link, a missing keyword line, an em dash: each one is invisible until it costs an hour | Lints every base: E01 broken link, E02 not indexed, E05 a citation with no source behind it, E06 a source no note cites, E08 a bibliography line that drifted from its record, W06 thin keywords, and the house rules | Fixes anything. Touches a file |
+| `source` | A source restated in three places is three strings free to disagree, and every citation defect this project has shipped was two restatements drifting: a year wrong in the body, an author in no reference list, a template placeholder that survived because there was no field to leave empty | Mints an opaque ten character key, writes `sources/<KEY>.txt` with typed fields, and prints the one bibliography line a note has to carry so the reference list is a projection of the pointers | Derive the key from the title, the author, the path or a formula, all of which change when somebody fixes a typo. Format for a journal: that is CSL's job |
+| `sources` | "Have we read this already?" answered by grepping prose | Lists what a base has read, or emits CSL JSON, which is a published shape every processor reads | Read CSL back. An import is a translator, and this is an export |
 | `index` | Full text search needs an index, and an index that drifts from the files lies | Builds one SQLite file per base from the markdown, content hashed so unchanged files cost nothing, and counts what it could build no entry for: the files no question can reach, and the ones exempt by name | Holds anything that cannot be rebuilt from the files. Runs in the background |
 | `list` | A filter question has no ranking problem in it, so scoring it against a floor answers a guess | Lists the files a base holds, narrowed by base, folder, species, stage or provenance, with no score and no verdict | Rank anything. Take a question. Hide a file because no question can reach it |
 | `eval` | "Does retrieval work?" answered by feel | Grades the router against a gold file of questions and expected answers, including questions it is supposed to refuse, and prints hit, guess and refusal rates | Grades a gold file that names files the fleet does not have |

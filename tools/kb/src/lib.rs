@@ -37,6 +37,7 @@ pub mod panel;
 pub mod promote;
 pub mod remember;
 pub mod retrieve;
+pub mod sources;
 pub mod store;
 pub mod suggester;
 pub mod ui;
