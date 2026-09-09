@@ -22,6 +22,7 @@ use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 
 mod abstain;
+mod agree;
 mod engine;
 mod longmem;
 
@@ -36,6 +37,10 @@ usage:
     kb-bench latency <fleet-root> <labelled.tsv> [--host vendor=api.example.com]...
     kb-bench longmem <dataset.json> --answerer <cmd> [--judge <cmd>] [--limit N]
                      [--offset N] [--workers N] [--out hyp.jsonl] [--keep] [--mode fast|expanded|complete]
+    kb-bench judge  <dataset.json> --hyp <hypotheses.jsonl> --judge <cmd> --out <labels.jsonl>
+                    [--sample N] [--every N] [--workers N]
+    kb-bench agree  <primary-labels.jsonl> <second-labels.jsonl>
+                    [--primary NAME] [--second NAME]
 
     embed    rank the whole corpus by BGE-M3 similarity, grading the dense head
              and the learned lexical (sparse) head separately from one forward
@@ -52,6 +57,13 @@ usage:
     latency  the whole deterministic pipeline timed: cold start, warm p50
              and p95 in-process, and the TCP connect floor to the hosted
              competitors' real endpoints (no request sent, distance only)
+    judge    grade an existing hypotheses file with one judge and write the
+             per-question labels. The published run threw its labels away, so
+             a second judge had nothing to be compared against; this reads the
+             stored answers, so validating costs judge calls and not a re-run
+    agree    two judges' labels over the same questions: raw agreement,
+             Cohen's kappa, where the disagreements fall by ability, and every
+             disagreeing question named. Deterministic, no model call
 
 Models are downloaded once into %LOCALAPPDATA%/kb-bench and read from disk after
 that. Scores print per question; with --gold, a summary states top-1 accuracy and
@@ -98,6 +110,60 @@ fn main() -> ExitCode {
             },
         };
         return match longmem::run(&dataset, &opt) {
+            Ok(()) => ExitCode::SUCCESS,
+            Err(e) => {
+                eprintln!("kb-bench: {e}");
+                ExitCode::from(1)
+            }
+        };
+    }
+
+    if mode == "judge" {
+        let dataset = PathBuf::from(&args[1]);
+        let (Some(hyp), Some(judge), Some(out)) = (
+            flag_value(&args, "--hyp"),
+            flag_value(&args, "--judge"),
+            flag_value(&args, "--out"),
+        ) else {
+            eprintln!("kb-bench: judge needs --hyp <file> --judge <cmd> --out <file>");
+            return ExitCode::from(2);
+        };
+        let outcome = longmem::judge_file(
+            &dataset,
+            Path::new(&hyp),
+            &judge,
+            Path::new(&out),
+            flag_value(&args, "--sample").and_then(|v| v.parse().ok()).unwrap_or(0),
+            flag_value(&args, "--every").and_then(|v| v.parse().ok()).unwrap_or(1),
+            flag_value(&args, "--workers").and_then(|v| v.parse().ok()).unwrap_or(6),
+        );
+        return match outcome {
+            Ok(()) => ExitCode::SUCCESS,
+            Err(e) => {
+                eprintln!("kb-bench: {e}");
+                ExitCode::from(1)
+            }
+        };
+    }
+
+    if mode == "agree" {
+        let primary = PathBuf::from(&args[1]);
+        let second = PathBuf::from(&args[2]);
+        let outcome = agree::load(&primary).and_then(|(pl, pu)| {
+            agree::load(&second).map(|(sl, su)| {
+                print!(
+                    "{}",
+                    agree::report(
+                        &flag_value(&args, "--primary").unwrap_or_else(|| "primary".into()),
+                        &flag_value(&args, "--second").unwrap_or_else(|| "second".into()),
+                        &pl,
+                        &sl,
+                        (pu, su),
+                    )
+                );
+            })
+        });
+        return match outcome {
             Ok(()) => ExitCode::SUCCESS,
             Err(e) => {
                 eprintln!("kb-bench: {e}");

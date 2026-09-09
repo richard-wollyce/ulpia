@@ -2391,7 +2391,7 @@ fn panel_open(
             return ExitCode::from(2);
         }
     };
-    let cost = panel::cost(&booted, artifact_bytes);
+    let cost = panel::cost(&booted, Path::new(artifact), body.as_deref().unwrap_or(""));
     let key = panel::key_of(artifact);
 
     if json {
@@ -2419,7 +2419,7 @@ fn panel_open(
         c.set("reading", cost.reading.into());
         c.set("total", cost.total().into());
         c.set("reviewers", cost.reviewers.into());
-        c.set("artifact_tokens", blocks::tokens(artifact_bytes).into());
+        c.set("artifact_tokens", blocks::tokens_of_artifact(Path::new(artifact), body.as_deref().unwrap_or("")).into());
         v.set("cost", c);
         v.set("ask", panel_ask(artifact).into());
         v.set("log", panel::path_in(root).display().to_string().into());
@@ -2446,10 +2446,10 @@ fn panel_open(
             "  reading         {:>7}   {artifact} is not a readable file, so nothing was priced for it",
             0
         ),
-        n => println!(
+        _ => println!(
             "  reading         {:>7}   {} tokens of artifact, read once by each of {}",
             cost.reading,
-            blocks::tokens(n),
+            blocks::tokens_of_artifact(Path::new(artifact), body.as_deref().unwrap_or("")),
             cost.reviewers
         ),
     }
@@ -2528,7 +2528,7 @@ fn panel_propose(
         Some(b) => println!(
             "          {} bytes, about {} tokens, paid once by every reviewer",
             b.len(),
-            blocks::tokens(b.len())
+            blocks::tokens_of_artifact(Path::new(artifact), b)
         ),
         None => println!("          not a readable file, so it could not be scored or priced"),
     }
@@ -3910,7 +3910,7 @@ fn cmd_blocks(path: &str, emit: bool) -> ExitCode {
         println!("  lines, kept on disk for `kb check` and stripped out of the prompt.");
     }
     println!();
-    println!("  cost of changing a block, in tokens that have to be prefilled again:");
+    println!("  worst case cost of changing a block, in tokens prefilled again:");
     for (name, cost) in blocks::invalidation_cost(&blocks) {
         println!("    {name:<10} {cost:>7}");
     }
@@ -3918,6 +3918,12 @@ fn cmd_blocks(path: &str, emit: bool) -> ExitCode {
     println!("  A change invalidates its own block and everything after it, so the");
     println!("  first block is the most expensive to touch. That is why the order is");
     println!("  by how often a block changes, most stable first.");
+    println!();
+    println!("  Worst case because a prefix cache invalidates from the first byte that");
+    println!("  differs, not from the start of the block that holds it. Measured over");
+    println!("  the fleet's fifteen maps on 2026-09-08, a new entry lands at the end of");
+    println!("  its section with about 48% of the map behind it, so a note written today");
+    println!("  costs roughly half the map row above and not all of it.");
 
     ExitCode::SUCCESS
 }

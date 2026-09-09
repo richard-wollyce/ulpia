@@ -381,10 +381,14 @@ pub fn boot(agent: &str, agent_root: &Path, out_dir: &Path) -> Result<Booted, Er
 /// reviewer reads the piece too, once each, so a long artifact reviewed by four agents
 /// costs four times its own length on top of four constitutions, and the panel that looks
 /// cheap on a one page piece is not the same panel on a twelve page one.
-pub fn cost(booted: &[Booted], artifact_bytes: usize) -> Cost {
+///
+/// **It takes the path and the text, not a byte count**, because the reviewers read markup
+/// as often as prose and the two do not convert at the same rate. The path is what says
+/// which. See [`blocks::tokens_of_artifact`].
+pub fn cost(booted: &[Booted], path: &Path, artifact: &str) -> Cost {
     Cost {
         boot: booted.iter().map(|b| b.tokens).sum(),
-        reading: blocks::tokens(artifact_bytes) * booted.len(),
+        reading: blocks::tokens_of_artifact(path, artifact) * booted.len(),
         reviewers: booted.len(),
     }
 }
@@ -792,10 +796,39 @@ mod tests {
         let a = boot("a", &agent(&root, "a", 400), &out).expect("a");
         let b = boot("b", &agent(&root, "b", 800), &out).expect("b");
 
-        let c = cost(&[a, b], 4_000);
-        assert_eq!(c.boot, 300);
-        assert_eq!(c.reading, 2_000, "1000 tokens of artifact, read by each of the two");
-        assert_eq!(c.total(), 2_300);
+        let artifact = "p".repeat(4_000);
+        let c = cost(&[a, b], Path::new("draft.md"), &artifact);
+        assert_eq!(c.boot, blocks::tokens(400) + blocks::tokens(800));
+        assert_eq!(
+            c.reading,
+            blocks::tokens(4_000) * 2,
+            "the artifact is read by each of the two"
+        );
+        assert_eq!(c.total(), c.boot + c.reading);
+    }
+
+    /// **The case a byte count could not price.** An artifact under review is whatever
+    /// Richard points at, and half of what this repository publishes is markup. Measured
+    /// on this machine with `llama-tokenize`, `src/ui.html` is 2.98 characters per token
+    /// against 3.99 for prose, so a byte count prices a page of HTML about a quarter low
+    /// and every reviewer pays that error again.
+    #[test]
+    fn a_fenced_artifact_costs_its_reviewers_more_than_the_same_bytes_of_prose() {
+        let root = scratch("cost-fenced");
+        let out = root.join("out");
+        let a = boot("a", &agent(&root, "a", 400), &out).expect("a");
+
+        let fenced = format!("```html\n{}\n```\n", "<div class=\"x\">y</div>".repeat(52));
+        let prose = "p".repeat(fenced.len());
+
+        let plain = cost(std::slice::from_ref(&a), Path::new("d.md"), &prose);
+        let code = cost(std::slice::from_ref(&a), Path::new("d.md"), &fenced);
+        assert!(
+            code.reading > plain.reading,
+            "fenced: {} tokens, prose: {} tokens",
+            code.reading,
+            plain.reading
+        );
     }
 
     #[test]

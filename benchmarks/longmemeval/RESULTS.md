@@ -138,3 +138,106 @@ sample (57 percent) instead of flattering it.
 `hypotheses-s-declared.jsonl` is this run's file and the one worth judging
 officially. `hypotheses-s.jsonl` stays as the first run's, because a floor that
 was published stays published.
+
+## Addendum 2026-09-08: the judge, validated
+
+Every score above rests on one grader that nothing was checking. Graphify publishes
+90.6 percent agreement at Cohen's kappa 0.81 between its judge and a second independent
+one, and that is the difference between a number and an auditable number. This run closes
+half of that gap and reports honestly that the other half is still open.
+
+Two new deterministic subcommands do the work, and the arithmetic in them is tested rather
+than asserted: `kb-bench judge` grades an existing hypotheses file with any judge and
+**writes the per-question labels**, which the published run threw away, and
+`kb-bench agree` pairs two label files into raw agreement, Cohen's kappa, the 2x2 table,
+the split by ability, and every disagreeing question by id.
+
+**The sample, and why it is this one.** 125 of the 500 questions: every fifth question of
+`hypotheses-s-declared.jsonl` (100), plus all 30 abstention instances, because abstention
+is 6 percent of the set and the number this benchmark leads with, and a stride alone would
+have left six of them. At an expected agreement near 0.9 the standard error of kappa is
+about `0.6 / sqrt(n)`, so 125 questions place it within roughly plus or minus 0.11 at 95
+percent: enough to separate substantial from moderate, not enough to publish a figure to
+two decimals.
+
+### 1. The published judge is reproducible
+
+`claude-haiku-4-5`, the same `judge-claude.cmd` the published run used, over the same 125
+hypotheses twice:
+
+| | |
+|---|---|
+| questions graded in both runs | 122 |
+| raw agreement | **99.2%** |
+| Cohen's kappa | **0.981**, almost perfect |
+| disagreements | 1, on `knowledge-update` |
+| abstention disagreements | 0 of 29 |
+
+That number did not exist before tonight, and it is the one Graphify does not publish
+either. It bounds everything else: **no cross-judge kappa can exceed a judge's agreement
+with itself**, so measuring it first is what makes a cross-judge number readable.
+
+### 2. The cross-judge check did not validate, and the reason is the second judge
+
+`claude-sonnet-5` as the second grader, identical prompt through
+`longmem::judge_prompt`, because two judges given two prompts measure prompt sensitivity
+and not judge agreement:
+
+| | |
+|---|---|
+| questions graded by both | 123 |
+| raw agreement | 78.0% |
+| Cohen's kappa | 0.570, moderate |
+| disagreements | 27 |
+| direction | **27 of 27 the same way**: Haiku said correct, Sonnet said wrong. Never once the reverse |
+| abstention disagreements | 14 of 30 |
+
+A one-directional disagreement of that size reads as a leniency bias in the published
+judge, and on the sample the two graders score abstention 29/30 against 15/30. So the
+second judge was run twice over the 30 abstention questions before anything was concluded
+from that:
+
+| | |
+|---|---|
+| questions | 30 |
+| raw agreement with itself | **60.0%** |
+| Cohen's kappa with itself | **0.200**, slight |
+
+**`claude-sonnet-5` through this harness is not a usable judge**, and the 0.570 above is
+mostly its own noise rather than evidence about the primary judge. One case, worked
+by hand: `19b5f2b3_abs` asks how long the person was in Korea, the answer says the
+passages hold no Korea trip at all, and the second judge graded that same input `Yes`
+three times and `No` twice. The primary judge graded the whole 122 the same way twice.
+
+### What this changes, and what it does not
+
+- **Nothing above this addendum moves.** The scores were graded by the judge that has now
+  been measured as reproducible, and no more comparable judge has overturned any of them.
+- **We still cannot publish a Graphify-style independent-judge kappa.** The honest claim
+  today is test-retest reliability, not inter-rater reliability, and the two are not
+  interchangeable. Saying otherwise would be the exact thing this file exists to refuse.
+- **The unvalidated-judge gap named in `graphify-benchmark-claim` is half closed.** The
+  judge is stable. Whether it is right is a different question, and it is the one that
+  needs a second grader that can agree with itself.
+
+### The costed recommendation, not run
+
+The right second judge is the official protocol already sitting in this directory:
+`rejudge.cmd` runs the paper's own `evaluate_qa.py` with `gpt-4o` at `temperature: 0`,
+which is deterministic by construction and is the grader every published LongMemEval
+number is compared against. It needs `OPENAI_API_KEY`, which is the owner's and is never
+handled by an agent, so it is a decision and not a step.
+
+Costed, so the decision has a number: 500 hypotheses at roughly 285 tokens of prompt and
+10 of output is about 143k input and 5k output tokens, which is a few dollars at gpt-4o
+list rates. Judging only the 125-question validation subset is a quarter of that. The
+alternative, majority-voting three `claude-sonnet-5` calls per question to buy stability,
+costs three times the second-judge run and still leaves both graders inside one model
+family, which is a weaker independence claim than the official protocol for more money.
+
+**What tonight's judge calls cost, marked as an estimate.** One `claude -p` call on
+`claude-haiku-4-5` was measured through `--output-format json` at $0.0197, almost all of
+it the CLI's own system prompt rather than the 285-token grading prompt. 415 judge calls
+were made (260 Haiku, 155 Sonnet), so the run is on the order of ten dollars at list
+rates and less with prefix cache reads. That is arithmetic from one measured call, not a
+billed figure.

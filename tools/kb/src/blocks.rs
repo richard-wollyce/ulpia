@@ -14,18 +14,175 @@
 use std::fs;
 use std::path::Path;
 
-/// Prose in this base measures 4.06 characters per token with the real tokenizer, and
-/// code 2.7. Four is close enough for a budget and honest about being an estimate.
-const CHARS_PER_TOKEN: f64 = 4.0;
+/// Characters per token for ordinary prose, measured 2026-09-08 with the tokenizer the
+/// fleet actually runs, `qwen3.5-0.8b-q4_0` through `llama-tokenize`.
+///
+/// **The corpus is the thing being priced and not a sample of something else:** every
+/// resident file of all thirteen bases, after [`strip_keyword_lines`], with fenced blocks
+/// taken out. 340,553 bytes, 85,282 tokens, 3.993 characters per token.
+///
+/// This replaces a comment that claimed 4.06 for prose and 2.7 for code. The 4.06 was
+/// Zed's constitution alone in August and the fleet has since grown to thirteen bases;
+/// the 2.7 came from one HTML file, and it does not generalise. See
+/// [`CODE_CHARS_PER_TOKEN`].
+const PROSE_CHARS_PER_TOKEN: f64 = 3.99;
 
-/// Bytes to tokens, in the one place that does the arithmetic.
+/// Characters per token inside a fenced code block, same tokenizer and same day.
+///
+/// **Measured, and the number that was there before was not.** Every fenced block in
+/// every resident file of the fleet, 772 bytes, 261 tokens, 2.958 characters per token.
+/// The corpus is small because the constitutions carry almost no code, so this rate is
+/// carried by a second measurement over whole files of each kind on this machine:
+/// HTML 2.62 to 2.99, Rust 3.84 to 3.92, `Cargo.toml` 3.45, English markdown 3.95 to
+/// 4.20.
+///
+/// **"Code" is therefore not one rate, and the old comment's 2.7 was markup, not code.**
+/// 2.96 is the markup rate, and it is applied to a fence by [`tokens_of`] and to a whole
+/// markup file by [`tokens_of_artifact`]. A source file that is not markup keeps the prose
+/// rate, because that is what it measures.
+const CODE_CHARS_PER_TOKEN: f64 = 2.96;
+
+/// Bytes to tokens for text known to be prose, in the one place that does the arithmetic.
 ///
 /// A second caller wanted this the moment a panel had to price the artifact its reviewers
 /// read as well as the constitutions they boot with. Two estimates of the same thing drift
-/// by a factor nobody notices until a report and a budget disagree, so the constant stays
-/// private and this is how it is reached.
+/// by a factor nobody notices until a report and a budget disagree, so the constants stay
+/// private and this is how they are reached.
+///
+/// **This entry point exists for callers holding a byte count and no text.** Anything that
+/// still has the text calls [`tokens_of`], which is the same arithmetic with the fences
+/// priced at their own rate.
 pub fn tokens(bytes: usize) -> usize {
-    (bytes as f64 / CHARS_PER_TOKEN).round() as usize
+    (bytes as f64 / PROSE_CHARS_PER_TOKEN).round() as usize
+}
+
+/// Bytes to tokens for markdown, with fenced code priced at its own rate.
+///
+/// **The mechanism, and why it is worth a scanner.** A tokenizer merges frequent
+/// character runs, so English words come out near one token each and punctuation-dense
+/// text does not. Prose and code therefore convert at different rates, and a single
+/// constant is only ever right for the mix it was measured on. Splitting the file at its
+/// fences prices each part at the rate measured for that part.
+///
+/// **What this buys on today's fleet is small, and that is a finding rather than a
+/// disappointment.** Fenced code is 772 of 351,972 resident bytes, 0.22%, so the whole
+/// correction is 68 tokens on a fleet of 88,829. Measured against the real tokenizer the
+/// old single-constant estimate was 0.94% low overall; it is the per-file case that was
+/// wrong, not the fleet total, and the file that goes wrong is an artifact of markup
+/// handed to `kb panel`.
+///
+/// **What is deliberately not segmented, with the number, so the choice is auditable.**
+/// *Indented code blocks*: zero bytes across every resident file in the fleet, and the
+/// four-space rule cannot be told from a wrapped list item without a full block parser,
+/// so recognising them would invent code where the maps have bullets. *Inline spans*:
+/// 10,647 bytes, 3.0% of the resident set, measured at 3.10 characters per token back to
+/// back against 3.99 for the prose around them. Pricing them separately moves the fleet
+/// estimate by about 0.9% and needs a second scanner with its own escaping rules, which
+/// is complexity bought before the second use case.
+///
+/// **What actually drives the spread is language, and this function does not touch it.**
+/// Per base the real rate runs from 3.667 (`cosimo`) to 4.167 (`pegolotti`), and the
+/// bases at the dense end are the ones carrying Portuguese. `person/body.md`, prose with
+/// no code in it at all, measures 2.852 characters per token, denser than any fence in
+/// the fleet. A language dimension would cut the error several times more than this does
+/// and it is a separate decision, recorded here rather than smuggled in.
+pub fn tokens_of(text: &str) -> usize {
+    let code = code_bytes(text);
+    let prose = text.len() - code;
+    (prose as f64 / PROSE_CHARS_PER_TOKEN + code as f64 / CODE_CHARS_PER_TOKEN).round() as usize
+}
+
+/// Bytes to tokens for a whole file, priced by what the file is.
+///
+/// **Markup is the one extension family worth a rule, and the measurement says which.**
+/// Tokenized on this machine on 2026-09-08, whole files come out at: HTML 2.62 to 2.99
+/// characters per token (`src/ui.html` 2.98, `site` drafts 2.94 and 2.99), Rust 3.84 to
+/// 3.92 (`src/memory.rs`, 147,437 bytes, 37,661 tokens), `Cargo.toml` 3.45, English
+/// markdown 3.95 to 4.20. So "code" splits in two and only one half is dense: markup
+/// carries attribute punctuation and quoting on every line, while a commented source file
+/// is mostly English words and lands within four percent of prose.
+///
+/// The rule follows the numbers rather than the word "code". A markup file is priced whole
+/// at [`CODE_CHARS_PER_TOKEN`]; everything else goes through [`tokens_of`], which still
+/// finds a fence inside a markdown file. Pricing `memory.rs` as markup would overstate it
+/// by a third, which is the same error the old single constant made, pointing the other
+/// way.
+///
+/// **This exists because `kb panel` prices a real file.** A round on `src/ui.html` read by
+/// four reviewers used to be costed at 12,036 tokens against a measured 16,092, and every
+/// reviewer paid that error again.
+pub fn tokens_of_artifact(path: &Path, text: &str) -> usize {
+    const MARKUP: [&str; 5] = ["html", "htm", "xml", "svg", "xhtml"];
+
+    let markup = path
+        .extension()
+        .and_then(|e| e.to_str())
+        .is_some_and(|e| MARKUP.iter().any(|m| e.eq_ignore_ascii_case(m)));
+
+    if markup {
+        return (text.len() as f64 / CODE_CHARS_PER_TOKEN).round() as usize;
+    }
+    tokens_of(text)
+}
+
+/// The bytes of `text` that sit inside a fenced code block, markers included.
+///
+/// CommonMark's fence rules, and only those: an opening fence is three or more backticks
+/// or tildes at up to three spaces of indent, and it closes on a fence of the **same
+/// character** that is at least as long. Both halves matter, and getting either wrong is
+/// silent rather than loud: a tilde fence closed by a backtick line, or a four-backtick
+/// fence closed by a three-backtick line, swallows the rest of the file into the code
+/// rate and prices a constitution a third too high with nothing to see.
+///
+/// An unclosed fence runs to the end of the text, which is CommonMark's rule and the safe
+/// direction here: the alternative is deciding a fence was a typo and pricing a code
+/// listing as prose.
+pub fn code_bytes(text: &str) -> usize {
+    let mut code = 0usize;
+    let mut open: Option<(u8, usize)> = None;
+
+    for line in text.split_inclusive('\n') {
+        match (fence_of(line), open) {
+            // Inside a block: the line is code either way, and a matching fence ends it.
+            (Some((c, n)), Some((oc, on))) => {
+                code += line.len();
+                if c == oc && n >= on {
+                    open = None;
+                }
+            }
+            (Some(fence), None) => {
+                open = Some(fence);
+                code += line.len();
+            }
+            (None, Some(_)) => code += line.len(),
+            (None, None) => {}
+        }
+    }
+    code
+}
+
+/// The fence character and its run length, for a line that is one.
+///
+/// Up to three leading spaces, then three or more backticks or tildes. A backtick fence
+/// may not carry a backtick in its info string, because that is how CommonMark keeps an
+/// inline span from opening a block; a tilde fence has no such rule.
+fn fence_of(line: &str) -> Option<(u8, usize)> {
+    let trimmed = line.trim_start_matches(' ');
+    if line.len() - trimmed.len() > 3 {
+        return None;
+    }
+    let marker = trimmed.as_bytes().first().copied()?;
+    if marker != b'`' && marker != b'~' {
+        return None;
+    }
+    let run = trimmed.bytes().take_while(|b| *b == marker).count();
+    if run < 3 {
+        return None;
+    }
+    if marker == b'`' && trimmed[run..].contains('`') {
+        return None;
+    }
+    Some((marker, run))
 }
 
 #[derive(PartialEq, Clone, Copy, Debug)]
@@ -51,12 +208,19 @@ pub struct Block {
     /// reports read this output to catch: a size that dropped by a third with no column
     /// saying why is indistinguishable from files somebody deleted.
     pub file_bytes: usize,
+    /// **The part of [`Block::bytes`] that sits inside a fenced code block.** Kept as a
+    /// field rather than recomputed because the text is read once, in [`read`], and a
+    /// second scan would have to re-read every file off disk to answer the same question.
+    pub code_bytes: usize,
     pub missing: Vec<String>,
 }
 
 impl Block {
+    /// What this block costs in the prompt, with its fences priced at the code rate.
     pub fn tokens(&self) -> usize {
-        tokens(self.bytes)
+        let prose = self.bytes - self.code_bytes;
+        (prose as f64 / PROSE_CHARS_PER_TOKEN + self.code_bytes as f64 / CODE_CHARS_PER_TOKEN)
+            .round() as usize
     }
 
     /// Bytes on disk that never reach the prompt. Zero for a block with no keyword lines.
@@ -156,6 +320,7 @@ pub fn read(root: &Path) -> Option<Vec<Block>> {
                 files: Vec::new(),
                 bytes: 0,
                 file_bytes: 0,
+                code_bytes: 0,
                 missing: Vec::new(),
             });
             continue;
@@ -164,8 +329,10 @@ pub fn read(root: &Path) -> Option<Vec<Block>> {
         if let Some(block) = blocks.last_mut() {
             match fs::read_to_string(root.join(line)) {
                 Ok(content) => {
+                    let sent = strip_keyword_lines(&content);
                     block.file_bytes += content.len();
-                    block.bytes += strip_keyword_lines(&content).len();
+                    block.bytes += sent.len();
+                    block.code_bytes += code_bytes(&sent);
                     block.files.push(line.to_string());
                 }
                 // A manifest that points at a file nobody moved yet is a real finding,
@@ -262,6 +429,108 @@ pub fn assemble(root: &Path, blocks: &[Block]) -> String {
 mod tests {
     use super::*;
 
+    // -----------------------------------------------------------------------
+    // Fenced code is priced at its own rate
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn a_fence_is_priced_denser_than_the_prose_around_it() {
+        // Prose and a fence in one file, each long enough that the two rates are
+        // separable by arithmetic instead of by eyeballing a total.
+        let prose = "p".repeat(200);
+        let fence = format!("```rust\n{}\n```\n", "c".repeat(93));
+        let text = format!("{prose}\n{fence}");
+
+        let code = code_bytes(&text);
+        assert_eq!(code, fence.len(), "the fence, its markers included, is the code span");
+
+        let prose_part = text.len() - code;
+        let expected = (prose_part as f64 / PROSE_CHARS_PER_TOKEN
+            + code as f64 / CODE_CHARS_PER_TOKEN)
+            .round() as usize;
+        assert_eq!(tokens_of(&text), expected);
+        assert!(
+            tokens_of(&text) > tokens(text.len()),
+            "counting the fence at the code rate has to cost more than pricing it as prose"
+        );
+    }
+
+    #[test]
+    fn a_bare_markup_file_is_priced_as_markup_and_not_as_prose() {
+        // The case a fence-only rule misses, and it is the one `kb panel` actually meets:
+        // an artifact handed to a review round is a whole file, and half of what this
+        // repository publishes is markup with no fence anywhere in it. Measured on this
+        // machine, `src/ui.html` is 2.98 characters per token against 3.99 for prose.
+        let html = "<div class=\"card\"><p>hello</p></div>\n".repeat(40);
+        assert_eq!(code_bytes(&html), 0, "there is no fence in a bare .html file");
+
+        let priced = tokens_of_artifact(Path::new("site/index.html"), &html);
+        assert_eq!(
+            priced,
+            (html.len() as f64 / CODE_CHARS_PER_TOKEN).round() as usize,
+            "a markup file is markup all the way down"
+        );
+        assert!(priced > tokens(html.len()), "and it costs more than the same bytes of prose");
+    }
+
+    #[test]
+    fn a_markdown_artifact_still_goes_through_the_fence_rule() {
+        let md = format!("prose {}\n```\n{}\n```\n", "p".repeat(300), "c".repeat(300));
+        assert_eq!(tokens_of_artifact(Path::new("notes/x.md"), &md), tokens_of(&md));
+    }
+
+    #[test]
+    fn a_source_file_that_is_not_markup_keeps_the_prose_rate() {
+        // Not every file called code is dense. Measured whole-file on this machine, Rust
+        // runs 3.84 to 3.92 characters per token, within 4% of prose, because a
+        // well-commented source file is mostly English. Pricing it at the markup rate
+        // would overstate it by a third, which is the same error pointing the other way.
+        let rs = "pub fn thing(argument: usize) -> usize { argument + 1 }\n".repeat(30);
+        assert_eq!(tokens_of_artifact(Path::new("src/lib.rs"), &rs), tokens_of(&rs));
+    }
+
+    #[test]
+    fn a_file_with_no_fence_prices_exactly_as_prose() {
+        let text = "# Title\n\nA paragraph with an `inline span` in it.\n";
+        assert_eq!(code_bytes(text), 0, "an inline span is not a fenced block");
+        assert_eq!(tokens_of(text), tokens(text.len()));
+    }
+
+    #[test]
+    fn a_fence_closes_only_on_its_own_marker() {
+        // A tilde fence is not closed by a backtick line, and a longer opening fence is
+        // not closed by a shorter one. Getting either wrong swallows the rest of the file
+        // into the code rate, which is a third too much and it is silent.
+        let text = "a\n~~~\n```\nstill code\n~~~\nb\n";
+        assert_eq!(code_bytes(text), "~~~\n```\nstill code\n~~~\n".len());
+
+        let longer = "````\n```\nx\n````\n";
+        assert_eq!(code_bytes(longer), longer.len(), "a shorter fence closes nothing");
+    }
+
+    #[test]
+    fn an_unclosed_fence_runs_to_the_end_of_the_file() {
+        // CommonMark's rule, and the safe direction: the alternative is deciding a fence
+        // was a typo and pricing a code listing as prose.
+        let text = "intro\n```\ncode\nmore code\n";
+        assert_eq!(code_bytes(text), "```\ncode\nmore code\n".len());
+    }
+
+    #[test]
+    fn the_block_prices_the_fences_its_files_carry() {
+        let dir = scratch("fenced-block");
+        fs::write(dir.join("blocks.txt"), "[identity]\ni.md\n").unwrap();
+        let file = format!("prose {}\n```\n{}\n```\n", "p".repeat(400), "c".repeat(400));
+        fs::write(dir.join("i.md"), &file).unwrap();
+
+        let blocks = read(&dir).expect("manifest");
+        assert_eq!(blocks[0].code_bytes, "```\n".len() * 2 + 401);
+        assert!(
+            blocks[0].tokens() > tokens(blocks[0].bytes),
+            "a block holding a fence costs more than the same bytes of prose"
+        );
+    }
+
     fn scratch(name: &str) -> std::path::PathBuf {
         let dir = std::env::temp_dir()
             .join("kb-block-tests")
@@ -305,14 +574,16 @@ mod tests {
 
     #[test]
     fn changing_the_first_block_costs_the_most() {
-        // 400 + 800 + 1200 characters, all resident, at 4 characters per token.
+        // 400 + 800 + 1200 characters of prose, all resident. The literals used to be
+        // 600, 500 and 300, which was 4.0 characters per token; they are written through
+        // `tokens` now because the rate is a measurement and measurements move.
         let dir = base("cost", "[identity]\na.md\n\n[user]\nb.md\n\n[map]\nc.md\n");
         let blocks = read(&dir).expect("manifest");
         let cost = invalidation_cost(&blocks);
 
-        assert_eq!(cost[0].1, 600, "identity invalidates everything after it too");
-        assert_eq!(cost[1].1, 500);
-        assert_eq!(cost[2].1, 300, "the last block invalidates only itself");
+        assert_eq!(cost[0].1, tokens(400) + tokens(800) + tokens(1200), "identity pays for all");
+        assert_eq!(cost[1].1, tokens(800) + tokens(1200));
+        assert_eq!(cost[2].1, tokens(1200), "the last block invalidates only itself");
         assert!(cost[0].1 > cost[1].1 && cost[1].1 > cost[2].1);
     }
 

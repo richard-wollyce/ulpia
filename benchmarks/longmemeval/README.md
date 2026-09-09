@@ -37,4 +37,30 @@ kb-bench longmem data/longmemeval_s_cleaned.json \
   model to say what the passages lack. Nothing special-cases the `_abs` questions on
   the answering side; only the judge knows which they are.
 
+## Validating the judge
+
+The judge is graded too, by two subcommands whose arithmetic is tested:
+
+```
+# grade a stored hypotheses file and keep the per-question labels
+kb-bench judge data/longmemeval_s_cleaned.json   --hyp hypotheses-s-declared.jsonl --judge judge-claude.cmd   --out labels-haiku.jsonl --workers 6
+
+# two label files -> agreement, Cohen's kappa, the split by ability, every
+# disagreeing question named
+kb-bench agree labels-haiku.jsonl labels-sonnet.jsonl   --primary claude-haiku-4-5 --second claude-sonnet-5
+```
+
+`judge` reads stored answers, so validating costs judge calls and not a re-run of
+the answerer. `--sample N` and `--every N` take a bounded, deterministic slice
+rather than a seeded shuffle, so a second run reproduces the same subset from the
+command line alone.
+
+**Run the judge against itself before running it against another judge.** No
+cross-judge kappa can exceed a judge's agreement with itself, so the test-retest
+number is what makes the cross-judge number readable. Measured 2026-09-08: the
+published judge is at 99.2 percent and kappa 0.981 with itself, and a
+`claude-sonnet-5` second judge is at 60 percent and kappa 0.200 with itself, which
+disqualified it. The numbers and what they change are in
+[RESULTS.md](RESULTS.md).
+
 Results with the full configuration header: [RESULTS.md](RESULTS.md)

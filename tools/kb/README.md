@@ -279,24 +279,41 @@ nothing.
 The report prints exactly that asymmetry:
 
 ```
-  #   block      mode       files     bytes   ~tokens  cumulative
-  1   identity   resident       3     23643      5911        5911
-  2   user       resident       1      9595      2399        8310
-  3   map        resident       1     25617      6404       14714
+  #   block      mode       files   on disk      sent   ~tokens  cumulative
+  1   identity   resident       3     26552     24653      6179        6179
+  2   user       resident       1      4164      3437       861        7040
+  3   map        resident       1     36541     22547      5651       12691
+  4   project    on-demand      0         0         0         0           -
+  5   session    on-demand      0         0         0         0           -
+
+  resident total: about 12691 tokens
+  of the resident files, 16620 bytes (about 4165 tokens) are `Search for:`
+  lines, kept on disk for `kb check` and stripped out of the prompt.
 
   cost of changing a block, in tokens that have to be prefilled again:
-    identity     14714
-    user          8803
-    map           6404
+    identity     12691
+    user          6512
+    map           5651
 ```
 
-**The measurement it produced immediately:** the map is 44% of Zed's resident set and **69% of
+**Two size columns, because one number that quietly changed meaning is the drift this report exists
+to catch.** `sent` is what the model is handed; `on disk` is what the files measure. The gap is the
+`Search for:` lines, which the router reads out of the index and the model never scores against.
+
+**The measurement it produced immediately:** the map is 45% of Zed's resident set and **57% of
 Steve's**, after the map was already cut from 99 KB to 24 KB. It is the largest resident block and the
 one that changes most often, which is the worst combination available.
 
 It is still resident only because the agent routes by reading it. **The moment `kb route` is wired
-into the loop, the map becomes on-demand and the resident set drops by 46% across the fleet**, because
+into the loop, the map becomes on-demand and the resident set drops by 38% across the fleet**, because
 routing is the map's whole job and it will be happening outside the model by then.
+
+**`~tokens` is an estimate and it carries its own measurement.** Prose converts at 3.99 characters per
+token and fenced code at 2.96, both measured on 2026-09-08 over every resident file in the fleet with
+`llama-tokenize` on `qwen3.5-0.8b-q4_0`. Against that tokenizer the estimate above reads 1.5% low
+across the fleet, and the residual is language rather than code: the bases carrying Portuguese
+tokenize denser than the estimate expects, and `person/body.md` at 2.85 characters per token is
+denser than any code fence in the fleet.
 
 ### `kb boot`: who answers, and the two shapes it accepts
 

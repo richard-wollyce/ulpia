@@ -252,15 +252,14 @@ pub fn answer_one(
         .ok_or_else(|| "the answerer did not reply".into())
 }
 
-/// The local judge, clearly labelled non-official.
-fn judge_one(
-    judge: &Classifier,
-    root: &Path,
-    inst: &Instance,
-    hypothesis: &str,
-) -> Option<bool> {
-    let abstention = inst.question_id.ends_with("_abs");
-    let prompt = if abstention {
+/// The grading prompt, in the one place that builds it.
+///
+/// **It is public and separate from the call for one reason: a second judge validates
+/// nothing unless it reads the identical prompt.** Two judges given two prompts measure
+/// prompt sensitivity, not judge agreement, and the difference is invisible in the
+/// resulting kappa. `kb-bench judge` and the run loop both come through here.
+pub fn judge_prompt(inst: &Instance, hypothesis: &str) -> String {
+    if inst.question_id.ends_with("_abs") {
         format!(
             "The following question is UNANSWERABLE from the person's history, so the \
              correct behaviour is to say the information is not available. Does the \
@@ -279,10 +278,181 @@ fn judge_one(
              Response: {}\n\nAnswer strictly yes or no.",
             inst.question, inst.answer, hypothesis
         )
-    };
+    }
+}
+
+/// A judge's reply reduced to a verdict, or `None` when it said neither.
+///
+/// **`None` and not `false`.** A judge that returned an empty string, a refusal, or a
+/// transport error has produced no evidence, and scoring that as "wrong" both lowers the
+/// benchmark score and, in a validation run, invents a disagreement out of a failed call.
+pub fn verdict_of(reply: &str) -> Option<bool> {
+    let r = reply.trim().to_lowercase();
+    if r.starts_with("yes") || r.contains("\nyes") {
+        return Some(true);
+    }
+    if r.starts_with("no") || r.contains("\nno") {
+        return Some(false);
+    }
+    None
+}
+
+/// The local judge, clearly labelled non-official.
+fn judge_one(
+    judge: &Classifier,
+    root: &Path,
+    inst: &Instance,
+    hypothesis: &str,
+) -> Option<bool> {
+    let prompt = judge_prompt(inst, hypothesis);
     let reply = kb::promote::ask_model(judge, root, &prompt)?;
+    // The run loop's historical behaviour: anything that is not a yes counted as wrong,
+    // and it is kept so that a re-run of the published scores reproduces them. The
+    // validation path uses `verdict_of`, which refuses to invent a verdict.
     let r = reply.trim().to_lowercase();
     Some(r.starts_with("yes") || r.contains("\nyes"))
+}
+
+/// Grades an existing hypotheses file with one judge, and writes the labels.
+///
+/// **This is the command that makes validation affordable.** The published run threw its
+/// judge's labels away: `hypotheses-s.jsonl` carries the answers and no verdicts, so
+/// there was nothing to compare a second judge against without paying for 500 answers
+/// again. Judging a stored hypotheses file costs judge calls only, which is roughly two
+/// orders of magnitude less than re-answering, and it is the only way the same answers
+/// can be put in front of two graders.
+pub fn judge_file(
+    dataset: &Path,
+    hyp_file: &Path,
+    judge_cmd: &str,
+    out: &Path,
+    sample: usize,
+    every: usize,
+    workers: usize,
+) -> Result<(), String> {
+    let text = std::fs::read_to_string(dataset).map_err(|e| format!("{}: {e}", dataset.display()))?;
+    let all: Vec<Instance> = serde_json::from_str(&text).map_err(|e| e.to_string())?;
+    let by_id: std::collections::BTreeMap<&str, &Instance> =
+        all.iter().map(|i| (i.question_id.as_str(), i)).collect();
+
+    let hyps = std::fs::read_to_string(hyp_file).map_err(|e| format!("{}: {e}", hyp_file.display()))?;
+    let mut rows: Vec<(String, String)> = Vec::new();
+    for line in hyps.lines().filter(|l| !l.trim().is_empty()) {
+        let v: serde_json::Value = serde_json::from_str(line).map_err(|e| e.to_string())?;
+        let (Some(id), Some(h)) = (v["question_id"].as_str(), v["hypothesis"].as_str()) else {
+            continue;
+        };
+        rows.push((id.to_string(), h.to_string()));
+    }
+
+    // **A deterministic stride, not a random sample.** The file is in question_id order,
+    // which is unrelated to ability and to difficulty, so every Nth row is a spread across
+    // the whole set that a second run reproduces exactly. A seeded shuffle would need the
+    // seed carried in the report to mean anything; this needs the stride, which is already
+    // in the command line.
+    let step = every.max(1);
+    let selected: Vec<(String, String)> = rows
+        .into_iter()
+        .step_by(step)
+        .take(if sample == 0 { usize::MAX } else { sample })
+        .collect();
+
+    eprintln!(
+        "judging {} hypothes(es) with `{judge_cmd}`, {workers} worker(s) -> {}",
+        selected.len(),
+        out.display()
+    );
+
+    let judge = Classifier::Command(absolute_command(judge_cmd));
+    let scratch = std::env::temp_dir().join(format!("kb-judge-{}", std::process::id()));
+    std::fs::create_dir_all(&scratch).map_err(|e| e.to_string())?;
+
+    let done = AtomicUsize::new(0);
+    let next = AtomicUsize::new(0);
+    let results: Mutex<Vec<serde_json::Value>> = Mutex::new(Vec::new());
+
+    std::thread::scope(|s| {
+        for _ in 0..workers.max(1) {
+            s.spawn(|| loop {
+                let i = next.fetch_add(1, Ordering::SeqCst);
+                let Some((id, hyp)) = selected.get(i) else { break };
+                let Some(inst) = by_id.get(id.as_str()) else { continue };
+                let prompt = judge_prompt(inst, hyp);
+                let reply = kb::promote::ask_model(&judge, &scratch, &prompt).unwrap_or_default();
+                let verdict = verdict_of(&reply);
+                let n = done.fetch_add(1, Ordering::SeqCst) + 1;
+                eprintln!(
+                    "  [{n}/{}] {id} {}",
+                    selected.len(),
+                    match verdict {
+                        Some(true) => "correct",
+                        Some(false) => "wrong",
+                        None => "UNPARSED",
+                    }
+                );
+                results.lock().unwrap().push(serde_json::json!({
+                    "question_id": id,
+                    "question_type": inst.question_type,
+                    "abstention": id.ends_with("_abs"),
+                    "correct": verdict,
+                    "reply": reply.trim(),
+                }));
+            });
+        }
+    });
+
+    let _ = std::fs::remove_dir_all(&scratch);
+
+    let mut rows = results.into_inner().unwrap();
+    rows.sort_by(|a, b| a["question_id"].as_str().cmp(&b["question_id"].as_str()));
+    let unparsed = rows.iter().filter(|r| r["correct"].is_null()).count();
+    let mut f = std::fs::File::create(out).map_err(|e| e.to_string())?;
+    for r in &rows {
+        writeln!(f, "{r}").map_err(|e| e.to_string())?;
+    }
+    eprintln!("wrote {} label(s) to {}", rows.len(), out.display());
+
+    // **A judge that never answered is a broken command, not a judge with no opinion.**
+    // The first run of this path wrote 3 of 3 nulls because the command was relative and
+    // the child process could not find it, and the only sign was the word UNPARSED going
+    // past in a progress line. A validation run built on that file would have reported an
+    // empty table as a result.
+    if unparsed == rows.len() && !rows.is_empty() {
+        return Err(format!(
+            "every one of the {} replies was empty or unparseable. The judge command \
+             probably did not run: check that `{judge_cmd}` exists and is executable from \
+             here, and note that a relative path is resolved against this process and not \
+             against the scratch directory the judge runs in",
+            rows.len()
+        ));
+    }
+    if unparsed > 0 {
+        eprintln!("  {unparsed} reply(ies) parsed as neither yes nor no, written as null");
+    }
+    Ok(())
+}
+
+/// The judge command with its program made absolute, when that program is a file here.
+///
+/// **The mechanism, and it is a Windows one.** `CreateProcess` resolves a bare program
+/// name against the *calling* process's directory and current directory, not against the
+/// working directory the child is given. The judge runs in a scratch directory, so
+/// `--judge judge-claude.cmd` from the benchmark folder found nothing, produced an empty
+/// stdout, and looked exactly like a judge that declined to answer. Making the program
+/// absolute before the call removes the ambiguity; arguments are left alone.
+pub fn absolute_command(cmd: &str) -> String {
+    let mut parts = cmd.splitn(2, char::is_whitespace);
+    let Some(program) = parts.next() else { return cmd.to_string() };
+    let rest = parts.next();
+
+    let resolved = match std::path::Path::new(program).canonicalize() {
+        Ok(p) => p.to_string_lossy().trim_start_matches(r"\\?\").to_string(),
+        Err(_) => return cmd.to_string(),
+    };
+    match rest {
+        Some(r) => format!("{resolved} {r}"),
+        None => resolved,
+    }
 }
 
 pub struct Options {
@@ -408,4 +578,44 @@ pub fn run(dataset: &Path, opt: &Options) -> Result<(), String> {
         println!("  {:<24} {ok}/{n} ({:.0}%)", "TOTAL", 100.0 * ok as f64 / n.max(1) as f64);
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_relative_judge_command_is_made_absolute_before_it_is_run() {
+        // The failure this prevents is silent: on Windows a bare program name is looked
+        // up against this process, not against the scratch directory the judge is given,
+        // so a relative path produces an empty stdout instead of an error.
+        let dir = std::env::temp_dir().join(format!("kb-judgecmd-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let cmd = dir.join("j.cmd");
+        std::fs::write(&cmd, "@echo off\n").unwrap();
+
+        let prev = std::env::current_dir().unwrap();
+        std::env::set_current_dir(&dir).unwrap();
+        let out = absolute_command("j.cmd");
+        std::env::set_current_dir(prev).unwrap();
+
+        assert!(std::path::Path::new(&out).is_absolute(), "not absolute: {out}");
+        assert!(out.ends_with("j.cmd"), "{out}");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn a_command_that_is_not_a_file_here_is_left_alone() {
+        // `claude -p --model x` is resolved by the OS from PATH and must not be mangled.
+        assert_eq!(absolute_command("claude -p --model x"), "claude -p --model x");
+    }
+
+    #[test]
+    fn a_judge_reply_that_is_neither_yes_nor_no_produces_no_verdict() {
+        assert_eq!(verdict_of("Yes"), Some(true));
+        assert_eq!(verdict_of("no, the response misses the date"), Some(false));
+        assert_eq!(verdict_of("Yes\n\nThe response names the cartoon."), Some(true));
+        assert_eq!(verdict_of(""), None, "an empty reply is not a `wrong`");
+        assert_eq!(verdict_of("I cannot judge this."), None);
+    }
 }

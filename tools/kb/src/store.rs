@@ -16,10 +16,13 @@ use std::path::Path;
 
 type R<T> = Result<T, Box<dyn std::error::Error>>;
 
-/// Roughly 512 tokens of prose. Code tokenises denser, at about 2.7 characters per
-/// token against 4 for prose, so a code heavy chunk lands nearer 650 tokens. That is
-/// acceptable: the cost of a slightly large chunk is context budget, and the cost of
-/// a small one is a fact split across two chunks and found by neither.
+/// Roughly 450 tokens of prose, at the 3.99 characters per token measured 2026-09-08
+/// over the fleet's resident files with `llama-tokenize` on `qwen3.5-0.8b-q4_0`. Markup
+/// tokenises denser, near 2.96, so a chunk that is all fenced HTML lands nearer 610
+/// tokens. That is acceptable: the cost of a slightly large chunk is context budget, and
+/// the cost of a small one is a fact split across two chunks and found by neither.
+/// The constants themselves live in [`crate::blocks`], which is the one place that prices
+/// bytes as tokens.
 const MAX_CHARS: usize = 1800;
 
 /// Overlap between windows of an oversized section, so a fact sitting on the seam is
