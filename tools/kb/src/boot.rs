@@ -541,8 +541,36 @@ pub fn brief(memory: &Memory, root: &Path, req: &Request, top: usize) -> Briefin
         text.push_str(&panel_instruction(&agent, &panel, boot_cost));
     }
 
+    // **What the verdict buys, spent here rather than reported here.**
+    //
+    // This block emitted paths for every verdict, and a path is an invitation to `cat`.
+    // Measured on 2026-09-10 in a live session: the agent read no passage through the
+    // MCP for three turns and answered entirely out of `grep`, with the server running
+    // the whole time. It was not disobedience. A path costs a tool call to follow, and
+    // the constitutions send a session to `MAP.md` first, which is 24,045 bytes in the
+    // smallest base here and 37,285 in the largest. Against that on-ramp, one more
+    // round trip to the library never wins.
+    //
+    // So the fix is not to ask the model to call the library. It is to stop making it
+    // ask. On `hit` the passages arrive already read, and the turn starts with the
+    // answer in context and zero tool calls.
+    //
+    // **The floor is what makes this affordable**, which is why it is gated on the
+    // verdict and not on a flag. ADR-0036 scales the floor with the corpus and ADR-0032
+    // puts the answerer after the verdict; both already exist, and a `hit` is exactly
+    // the claim that the top file is above the noise and separated from the runner-up.
+    // A `guess` gets paths, unchanged, because paying passage tokens for a coincidence
+    // of vocabulary is how this becomes the most expensive thing in the loop.
+    let vouched = if answer.confidence.verdict == Verdict::Hit {
+        hit_briefing(memory, &answer, top)
+    } else {
+        None
+    };
+
     if files.is_empty() {
         text.push_str("No file ranked for this message.\n");
+    } else if let Some(briefing) = vouched {
+        text.push_str(&briefing);
     } else {
         text.push_str("Open these before answering:\n");
         text.push_str(&files.join("\n"));
@@ -550,6 +578,192 @@ pub fn brief(memory: &Memory, root: &Path, req: &Request, top: usize) -> Briefin
     }
 
     Briefing { agent: Some(agent), panel, switched, text }
+}
+
+/// How much of the library one `hit` may put in front of a session, in characters.
+///
+/// **A character budget and not a passage count**, because passage length is bounded by
+/// nothing. The notes in this fleet run from a single table row to a hundred sections,
+/// so `take(n)` bounds how many pieces arrive and says nothing at all about how large
+/// they are. The only thing that bounds an injection is a budget measured in the unit
+/// the injection is billed in.
+///
+/// **6000 was chosen against what it replaces, not against what sounds small.** The
+/// thing it grows from is the path list, roughly 600 bytes on this fleet. The thing it
+/// makes unnecessary is the `MAP.md` read at the top of every constitution, measured on
+/// 2026-09-10 at 24,045 bytes for the smallest base and 37,285 for the largest. This
+/// sits an order of magnitude under the cheapest read it removes and an order of
+/// magnitude over the list it extends, which is the range where it is worth doing at
+/// all.
+///
+/// Raise it and every `hit` message pays more, including the ones where the first
+/// passage was already enough. Lower it and long notes arrive cut, which is worse than
+/// a path: a path admits it is not the answer, and half an argument does not.
+const HIT_BUDGET: usize = 6000;
+
+/// The passages a `hit` puts in front of the session, from the one file the verdict is
+/// actually about. `None` when there is no such file, and the caller falls back to the
+/// path list.
+///
+/// **Only `keyword_top` gets text, and finding that out cost a wrong first version.**
+/// The first draft here emitted passages from the fused top five, which is the list
+/// `files` is built from, and running it on 2026-09-10 against this fleet produced six
+/// kilobytes about a transcription tool's `--model` flag under the question "why is
+/// there no embedding model in the retrieval path". The verdict had said `hit`, and the
+/// verdict was not wrong.
+///
+/// The verdict is a claim about the **keyword** ranking's top file, which [`Answer`]
+/// says in as many words and carries separately as `keyword_top` because it is
+/// frequently not the fused first choice. Measured on three questions the same day, it
+/// differed on two, and on both it was the better file:
+/// `zed/knowledge/systems/fine-tuning-versus-retrieval.md` against
+/// `cicero/knowledge/ulpia/ulpia-differentiators.md`, and `zed/fleet/roster.md` against
+/// `aldus/knowledge/design-system.md`.
+///
+/// Emitting the fused list under that verdict was borrowing a judgement about one file
+/// to vouch for four others. **A path is an offer and text is an assertion**, so the
+/// widening that was harmless while this printed paths stopped being harmless the moment
+/// it printed passages. Everything the verdict did not vouch for goes back to being an
+/// offer.
+///
+/// The rendering follows [`crate::answer::prompt`] deliberately, header for header:
+/// path, heading, short-memory label, captured-from. Two surfaces showing the same
+/// passages in two shapes is how a reader comes to trust one and not the other, and the
+/// labels are load bearing. `SHORT MEMORY` says nobody has judged this yet, and
+/// `captured from` is the answer to every question about where a claim came from.
+///
+/// **What the budget drops is named, never dropped quietly**, and it drops a tail rather
+/// than a selection: once a passage does not fit, no later one is tried. Continuing
+/// would admit short passages from further down while the long one above them is
+/// missing, which silently reorders the file by length.
+fn hit_briefing(memory: &Memory, answer: &crate::memory::Answer, top: usize) -> Option<String> {
+    let vouched = answer.keyword_top.as_deref()?;
+    let file = answer
+        .found
+        .iter()
+        .take(top)
+        .find(|f| format!("{}/{}", f.base, f.path) == vouched)?;
+
+    // **The vouched file usually has no passages, which is not a coincidence and was the
+    // difference between a feature that fires half the time and one that fires.**
+    //
+    // `Retrieved.passages` is empty when only the keyword scorer ranked the file, and
+    // the file this briefing is about is the keyword scorer's own first choice, so it is
+    // the file most likely in the whole result set to have been ranked that way. Measured
+    // end to end on 2026-09-10 over the 18 `hit` verdicts in the abstention set: the
+    // briefing fired 9 times, and 7 of the 9 misses were exactly this.
+    //
+    // The text is not missing, only unretrieved: the text scorer did not rank this file
+    // for these terms, so no chunk came back with it. Chunking it off disk costs one
+    // small file read in a hook that already reads several, and `store::chunk` is the
+    // same splitter the index was built with, so the headings match what every other
+    // surface shows.
+    //
+    // **It is labelled differently on purpose.** Retrieved passages are the sections that
+    // matched the question. These are the front of the file, which is merely where this
+    // fleet's notes put their own summary. Presenting the second as the first would be
+    // claiming a relevance nothing measured.
+    let head;
+    let (passages, matched) = if file.passages.is_empty() {
+        head = head_of(memory, &file.base, &file.path)?;
+        (&head[..], false)
+    } else {
+        (&file.passages[..], true)
+    };
+    if passages.is_empty() {
+        return None;
+    }
+
+    let mut out = String::from(if matched {
+        "The library answered this one. Below are the passages that matched, from the \
+         single file the verdict is about, already read for you. Open it only when you \
+         need more than what is here. The files listed after them are ranked leads and \
+         nothing vouches for them.\n"
+    } else {
+        "The library answered this one. The file the verdict is about ranked on its keys \
+         alone, so nothing matched inside it and what follows is the front of that file, \
+         not the part that answers. Read it as a strong lead. The files listed after it \
+         are weaker leads and nothing vouches for them.\n"
+    });
+    let mut spent = 0usize;
+    let mut cut = 0usize;
+
+    for (i, p) in passages.iter().enumerate() {
+        let body = p.text.trim();
+        if spent + body.len() > HIT_BUDGET {
+            cut = passages.len() - i;
+            break;
+        }
+        let layer = match file.layer {
+            crate::retrieve::Layer::Short => " [SHORT MEMORY: recent, not distilled]",
+            crate::retrieve::Layer::Long => "",
+        };
+        let origin = match &p.captured_from {
+            Some(src) if !src.is_empty() => format!(" [captured from {src}]"),
+            _ => String::new(),
+        };
+        out.push_str(&format!(
+            "\n--- {}/{} ({}){}{}\n{}\n",
+            file.base,
+            file.path,
+            if p.heading_path.is_empty() { "top" } else { &p.heading_path },
+            layer,
+            origin,
+            body
+        ));
+        spent += body.len();
+    }
+
+    if spent == 0 {
+        return None;
+    }
+    if cut > 0 {
+        out.push_str(&format!(
+            "\n({cut} more passage(s) in that file did not fit the boot budget. Open it \
+             if what is above stops short.)\n"
+        ));
+    }
+
+    let leads: Vec<String> = answer
+        .found
+        .iter()
+        .take(top)
+        .filter(|f| format!("{}/{}", f.base, f.path) != vouched)
+        .map(|f| format!("  {}/{}", f.base, f.path))
+        .collect();
+    if !leads.is_empty() {
+        out.push_str(&format!("\nRanked leads, unvouched:\n{}\n", leads.join("\n")));
+    }
+    Some(out)
+}
+
+/// The front of a file, chunked the way the index chunks it, for the case where the
+/// verdict vouches for a file the text scorer never ranked.
+///
+/// `store::chunk` rather than a byte slice of the head, because the heading path is what
+/// makes a passage citable and a raw slice would cut mid-section and mid-character. It is
+/// the same function the index is built with, so what a reader sees here and what they
+/// would see from [`crate::answer::prompt`] are the same shapes with the same headings.
+///
+/// `None` on any read failure, and the caller falls back to the path list. A file the
+/// index knows and the disk does not is a real state, since the index is a cache, and it
+/// is not this function's job to report it.
+fn head_of(memory: &Memory, base: &str, path: &str) -> Option<Vec<crate::retrieve::Passage>> {
+    let root = &memory.agents.iter().find(|a| a.name.eq_ignore_ascii_case(base))?.root;
+    let text = std::fs::read_to_string(root.join(path)).ok()?;
+    Some(
+        crate::store::chunk(&text)
+            .into_iter()
+            .map(|c| crate::retrieve::Passage {
+                heading_path: c.heading_path,
+                text: c.text,
+                excerpt: String::new(),
+                provenance: None,
+                stage: None,
+                captured_from: None,
+            })
+            .collect(),
+    )
 }
 
 /// What the owner is told when the router judged the work to need more than one agent.
@@ -699,6 +913,184 @@ mod tests {
             text.contains("blocking is not yours to refuse"),
             "the one thing the owner may not do has to be in the briefing: {text}"
         );
+    }
+
+    /// A base with nothing in it, for the tests whose vouched file already carries
+    /// passages and so never reaches the disk.
+    fn empty_memory() -> Memory {
+        let root = std::env::temp_dir().join(format!("kb-brief-{}", std::process::id()));
+        let agent = root.join("fleet").join("zed");
+        std::fs::create_dir_all(agent.join("knowledge")).expect("dirs");
+        std::fs::write(agent.join("agent.txt"), "name = Zed
+role = The architect
+").expect("agent");
+        std::fs::write(agent.join("knowledge").join("a.md"), "# A
+
+**Search for:** `floor`
+
+body
+")
+            .expect("note");
+        Memory::open(&[root.as_path()], true).expect("memory")
+    }
+
+    fn retrieved(base: &str, path: &str, passages: Vec<(&str, &str)>) -> crate::retrieve::Retrieved {
+        crate::retrieve::Retrieved {
+            base: base.into(),
+            path: path.into(),
+            layer: crate::retrieve::Layer::Long,
+            title: "T".into(),
+            purpose: "exists to test".into(),
+            score: 1.0,
+            keyword_score: 40.0,
+            why: vec!["keywords #1".into()],
+            matched: vec!["floor".into()],
+            passages: passages
+                .into_iter()
+                .map(|(heading, text)| crate::retrieve::Passage {
+                    heading_path: heading.into(),
+                    text: text.into(),
+                    excerpt: String::new(),
+                    provenance: None,
+                    stage: None,
+                    captured_from: None,
+                })
+                .collect(),
+        }
+    }
+
+    /// The fused list is deliberately not in the same order as `keyword_top`, because
+    /// that gap is the defect these tests exist to hold shut.
+    fn hit_answer(found: Vec<crate::retrieve::Retrieved>, keyword_top: Option<&str>) -> crate::memory::Answer {
+        crate::memory::Answer {
+            found,
+            confidence: crate::memory::Confidence {
+                verdict: Verdict::Hit,
+                agreement: 2,
+                keyword_score: 40.0,
+                margin: 2.0,
+                floor: 18.9,
+            },
+            agent: None,
+            keyword_top: keyword_top.map(str::to_string),
+        }
+    }
+
+    /// The whole point of the change: on a hit the session is handed the text, not a
+    /// path it has to spend a tool call following.
+    #[test]
+    fn a_hit_hands_over_the_passages_of_the_file_the_verdict_is_about() {
+        let answer = hit_answer(
+            vec![
+                retrieved("cicero", "knowledge/noise.md", vec![("Noise", "a --model flag")]),
+                retrieved("zed", "knowledge/a.md", vec![("The floor", "The floor scales with the corpus.")]),
+            ],
+            Some("zed/knowledge/a.md"),
+        );
+        let text = hit_briefing(&empty_memory(), &answer, 5).expect("a vouched file with passages briefs");
+
+        assert!(
+            text.contains("The floor scales with the corpus."),
+            "the vouched passage body is the deliverable: {text}"
+        );
+        assert!(text.contains("zed/knowledge/a.md (The floor)"), "the citation has to survive: {text}");
+        assert!(
+            !text.contains("a --model flag"),
+            "the fused top file is not vouched for and must not arrive as text: {text}"
+        );
+        assert!(
+            text.contains("Ranked leads, unvouched:") && text.contains("cicero/knowledge/noise.md"),
+            "the rest stay offers, and stay visible: {text}"
+        );
+    }
+
+    /// The regression that running it caught on 2026-09-10: six kilobytes about a
+    /// transcription tool's `--model` flag, injected under a correct `hit`, because the
+    /// verdict judges the keyword ranking and the passages came from the fused one.
+    #[test]
+    fn the_fused_top_file_is_never_briefed_on_the_strength_of_another_file_s_verdict() {
+        let answer = hit_answer(
+            vec![retrieved("poggio", "tools/transcribe.md", vec![("The tool", "`--model` defaults to medium")])],
+            Some("zed/knowledge/systems/fine-tuning-versus-retrieval.md"),
+        );
+
+        assert!(
+            hit_briefing(&empty_memory(), &answer, 5).is_none(),
+            "the vouched file is not in the result set, so nothing here is vouched for"
+        );
+    }
+
+    /// The budget is the only thing standing between this and a boot that costs more
+    /// than the read it replaced, and a cap nobody can see is a cap that lies.
+    #[test]
+    fn the_budget_drops_a_tail_says_how_much_and_never_cherry_picks() {
+        let long = "x".repeat(HIT_BUDGET - 10);
+        let answer = hit_answer(
+            vec![retrieved(
+                "zed",
+                "knowledge/a.md",
+                vec![("First", &long), ("Second", &"y".repeat(100)), ("Third", "short enough")],
+            )],
+            Some("zed/knowledge/a.md"),
+        );
+        let text = hit_briefing(&empty_memory(), &answer, 5).expect("the first passage fits");
+
+        assert!(text.contains(&long), "the first passage fits and must be emitted: {text}");
+        assert!(
+            !text.contains("short enough"),
+            "a later short passage must not jump the one that did not fit: {text}"
+        );
+        assert!(text.contains("2 more passage(s)"), "the size of the tail is stated: {text}");
+    }
+
+    /// A file that ranked on its keys alone carries no chunk, and it is the file the
+    /// verdict is about, so the text is fetched off disk rather than surrendered. It has
+    /// to arrive labelled as the front of the file and not as the part that matched.
+    #[test]
+    fn a_vouched_file_with_no_passages_is_read_off_disk_and_says_so() {
+        let answer = hit_answer(vec![retrieved("zed", "knowledge/a.md", vec![])], Some("zed/knowledge/a.md"));
+        let text = hit_briefing(&empty_memory(), &answer, 5).expect("the file is on disk");
+
+        assert!(text.contains("body"), "the file's own text is the briefing: {text}");
+        assert!(
+            text.contains("ranked on its keys alone") && text.contains("not the part that answers"),
+            "the reader has to be told this is the front and not the match: {text}"
+        );
+    }
+
+    /// The two states where nothing is vouched for, and both have to fall back rather
+    /// than print a header over nothing.
+    #[test]
+    fn nothing_vouched_and_nothing_on_disk_both_brief_nothing() {
+        let no_top = hit_answer(vec![retrieved("zed", "knowledge/a.md", vec![("H", "body")])], None);
+        assert!(
+            hit_briefing(&empty_memory(), &no_top, 5).is_none(),
+            "no keyword_top means nothing is vouched for"
+        );
+
+        let missing = hit_answer(
+            vec![retrieved("zed", "knowledge/not-on-disk.md", vec![])],
+            Some("zed/knowledge/not-on-disk.md"),
+        );
+        assert!(
+            hit_briefing(&empty_memory(), &missing, 5).is_none(),
+            "the index is a cache and the disk is the truth; a stale entry falls back"
+        );
+    }
+
+    /// `top` is the caller's cap on files and it governs here too, on both halves: the
+    /// vouched file has to be inside it, and so do the leads.
+    #[test]
+    fn the_briefing_respects_the_caller_s_file_cap() {
+        let mut found = vec![retrieved("zed", "knowledge/a.md", vec![("H", "body")])];
+        for n in 0..6 {
+            found.push(retrieved("zed", &format!("knowledge/lead-{n}.md"), vec![]));
+        }
+        let text = hit_briefing(&empty_memory(), &hit_answer(found, Some("zed/knowledge/a.md")), 3)
+            .expect("the vouched file is first and inside the cap");
+
+        assert!(text.contains("lead-1.md"), "the second lead is inside the cap: {text}");
+        assert!(!text.contains("lead-5.md"), "a file past --top must not reach the session: {text}");
     }
 
     #[test]
