@@ -638,11 +638,46 @@ const HIT_BUDGET: usize = 6000;
 /// missing, which silently reorders the file by length.
 fn hit_briefing(memory: &Memory, answer: &crate::memory::Answer, top: usize) -> Option<String> {
     let vouched = answer.keyword_top.as_deref()?;
-    let file = answer
+    let (base, path) = vouched.split_once('/')?;
+    let ranked = answer
         .found
         .iter()
         .take(top)
-        .find(|f| format!("{}/{}", f.base, f.path) == vouched)?;
+        .find(|f| format!("{}/{}", f.base, f.path) == vouched);
+
+    // **The vouched file does not have to have survived fusion**, and insisting that it
+    // did was the last thing keeping this from firing. Measured over the abstention
+    // set's 18 `hit` verdicts on 2026-09-10: two of them ranked a file first on keywords
+    // that fusion then left out of the top five, and the briefing gave up on both.
+    //
+    // Giving up was never necessary. `keyword_top` is a `base/path`, which is everything
+    // needed to read the file, and the case is the keyword-only case again by
+    // construction: had the text scorer ranked this file, both scorers would agree on it
+    // and fusion would have put it near the front rather than off the end. So there were
+    // never matched passages to lose here, and the same disk read answers it.
+    //
+    // Backlog Z55 proposed fixing this by widening the fusion instead. That would have
+    // meant changing what `classify::dossier` sees, which is a change to routing, to
+    // recover a file this already holds the address of.
+    let owned;
+    let file = match ranked {
+        Some(f) => f,
+        None => {
+            owned = crate::retrieve::Retrieved {
+                base: base.to_string(),
+                path: path.to_string(),
+                layer: crate::retrieve::layer_of(path),
+                title: String::new(),
+                purpose: String::new(),
+                score: 0.0,
+                keyword_score: answer.confidence.keyword_score,
+                why: vec!["keywords #1".into()],
+                matched: Vec::new(),
+                passages: Vec::new(),
+            };
+            &owned
+        }
+    };
 
     // **The vouched file usually has no passages, which is not a coincidence and was the
     // difference between a feature that fires half the time and one that fires.**
@@ -1009,14 +1044,36 @@ body
     /// verdict judges the keyword ranking and the passages came from the fused one.
     #[test]
     fn the_fused_top_file_is_never_briefed_on_the_strength_of_another_file_s_verdict() {
+        // The vouched file here exists on disk in the fixture, so the briefing does fire.
+        // What it must never do is fire with the *other* file's text, which is the six
+        // kilobytes about a `--model` flag that this whole guard exists for.
         let answer = hit_answer(
             vec![retrieved("poggio", "tools/transcribe.md", vec![("The tool", "`--model` defaults to medium")])],
-            Some("zed/knowledge/systems/fine-tuning-versus-retrieval.md"),
+            Some("zed/knowledge/a.md"),
         );
+        let text = hit_briefing(&empty_memory(), &answer, 5).expect("the vouched file is on disk");
 
         assert!(
-            hit_briefing(&empty_memory(), &answer, 5).is_none(),
-            "the vouched file is not in the result set, so nothing here is vouched for"
+            !text.contains("`--model` defaults to medium"),
+            "the fused file is not vouched for and its text must not arrive: {text}"
+        );
+        assert!(text.contains("body"), "the vouched file's own text is what arrives: {text}");
+    }
+
+    /// Z55, and the reason it did not need the fusion widened: `keyword_top` is a
+    /// `base/path`, so a file fusion left out is still a file this can read.
+    #[test]
+    fn a_vouched_file_that_fused_out_is_still_briefed_from_its_path() {
+        let answer = hit_answer(
+            vec![retrieved("poggio", "tools/transcribe.md", vec![("The tool", "noise")])],
+            Some("zed/knowledge/a.md"),
+        );
+        let text = hit_briefing(&empty_memory(), &answer, 5).expect("it is read off disk by path");
+
+        assert!(text.contains("zed/knowledge/a.md"), "the vouched file is cited: {text}");
+        assert!(
+            text.contains("Ranked leads, unvouched:") && text.contains("poggio/tools/transcribe.md"),
+            "the fused result set stays visible as leads: {text}"
         );
     }
 
