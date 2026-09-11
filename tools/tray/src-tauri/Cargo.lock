@@ -1050,21 +1050,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "fleet-tray"
-version = "0.1.0"
-dependencies = [
- "kb",
- "serde",
- "serde_json",
- "tauri",
- "tauri-build",
- "tauri-plugin-autostart",
- "tauri-plugin-dialog",
- "tauri-plugin-global-shortcut",
- "tauri-plugin-notification",
-]
-
-[[package]]
 name = "fnv"
 version = "1.0.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2023,7 +2008,7 @@ dependencies = [
 
 [[package]]
 name = "kb"
-version = "0.1.0"
+version = "0.4.0"
 dependencies = [
  "rusqlite",
 ]
@@ -4337,6 +4322,21 @@ dependencies = [
  "memoffset",
  "tempfile",
  "windows-sys 0.61.2",
+]
+
+[[package]]
+name = "ulpia-tray"
+version = "0.1.0"
+dependencies = [
+ "kb",
+ "serde",
+ "serde_json",
+ "tauri",
+ "tauri-build",
+ "tauri-plugin-autostart",
+ "tauri-plugin-dialog",
+ "tauri-plugin-global-shortcut",
+ "tauri-plugin-notification",
 ]
 
 [[package]]

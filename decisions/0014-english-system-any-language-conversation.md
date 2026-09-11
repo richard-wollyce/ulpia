@@ -87,10 +87,12 @@ because it is evidence.
 - **Private layers were not touched and will not be.** Steve's private layer and Yaron's private layer are Portuguese, they are somebody's private work, and
   `limits-and-autonomy` forbids writing into them. They are named here so that their exclusion is a
   decision rather than an oversight.
-- The tray's name is still `Fleet` and its bundle identifier `com.fleet.tray`, while
+- ~~The tray's name is still `Fleet` and its bundle identifier `com.fleet.tray`, while
   [[0012-naming-and-hosting]] named the system Vesta. **Not fixed here**, because the identifier
   decides where `fleet-root.txt` lives and renaming it orphans the pointer. It needs its own migration
-  and it is open.
+  and it is open.~~ **Closed on 2026-09-11**, to `Ulpia` and `io.ulpia.tray` rather than to Vesta,
+  because [[0019-the-system-is-ulpia]] superseded the name in between. The migration it was waiting
+  for shipped with it; the reasoning is in that ADR.
 
 ## Revisit trigger
 

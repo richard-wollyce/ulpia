@@ -74,9 +74,16 @@ and the skeleton documentation now say `fleet/`.
 - Both directory renames could not be executed from inside the running session, because the serving
   process holds the index files open. They are the one manual step, documented in the migration
   notes, and everything else shipped ready for them.
-- The tray still carries the identifier `com.fleet.tray` (Z16) and now also a stale product name;
+- ~~The tray still carries the identifier `com.fleet.tray` (Z16) and now also a stale product name;
   its rename remains a separate migration because the identifier decides where the pointer file
-  lives.
+  lives.~~ **Done on 2026-09-11.** `productName` is `Ulpia`, the identifier is `io.ulpia.tray`, the
+  crate and the npm package are `ulpia-tray`, and the separate migration this line was waiting for
+  is `adopt_previous_pointer` in the tray's `main.rs`: on startup, when the new config directory has
+  no `fleet-root.txt`, it copies the one under `com.fleet.tray` after checking the path still points
+  at a directory. It copies rather than moves, so a rollback to any earlier build still finds its
+  pointer. **`fleet-root.txt` keeps its name and so does the `Fleet` struct**, because this ADR is
+  the one that says the system is Ulpia and the fleet is the folder the agents live in: the product
+  was renamed, the concept was not.
 - `hello@ulpia.io` is the public address, with `security@ulpia.io` aliased from day one, because a
   software project heading to public needs a disclosure door before it needs anything else.
 

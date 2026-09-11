@@ -1,4 +1,4 @@
-// Fleet, the tray shell.
+// Ulpia, the tray shell.
 //
 // A tray application rather than a window one, deliberately. The thing it has to
 // support first is dragging a file onto it, and that means the user is in Explorer
@@ -77,6 +77,52 @@ const SPIN_INTERVAL: Duration = Duration::from_millis(80);
 /// fleet so that moving the fleet is a directory move with nothing to edit inside it.
 fn pointer_file(app: &AppHandle) -> Option<PathBuf> {
     app.path().app_config_dir().ok().map(|d| d.join("fleet-root.txt"))
+}
+
+/// The bundle identifier this app shipped under until the rename on 2026-09-11.
+///
+/// A historical fact rather than configuration, which is why it is a literal. After the
+/// rename `app_config_dir()` resolves to the new identifier by definition, so nothing
+/// left in the running app can still derive where the old directory was. Delete this
+/// constant and the only surviving record of it goes with it.
+const PREVIOUS_IDENTIFIER: &str = "com.fleet.tray";
+
+/// Carries the fleet pointer across the rename, once.
+///
+/// **The identifier is not cosmetic, it is the directory name.** Tauri resolves
+/// `app_config_dir()` to `<config dir>/<identifier>`, and that directory holds
+/// `fleet-root.txt`, which ADR-0011 makes the one absolute path in the whole system. So
+/// renaming `com.fleet.tray` to `io.ulpia.tray` moves the tray's memory of where the
+/// fleet is, and without this a returning user is met by an app that has forgotten. That
+/// is the migration backlog item Z16 said this rename needed, and it is the entire cost
+/// of the rename.
+///
+/// **Copy, never move.** The file is thirty bytes and leaving it means a rollback to any
+/// build from before this commit still finds its pointer. Moving it would turn a rename
+/// into a one way door in exchange for tidying up thirty bytes.
+///
+/// **Silent on every failure**, deliberately. This runs in `setup`, before any window
+/// exists. A tray that refuses to start because it could not read an old file is worse
+/// than a tray that starts and asks where the fleet is, and asking is a state the app
+/// already handles because it is the state every first run is in.
+fn adopt_previous_pointer(app: &AppHandle) {
+    let Some(current) = pointer_file(app) else { return };
+    if current.exists() {
+        return;
+    }
+    let Ok(config) = app.path().config_dir() else { return };
+    let previous = config.join(PREVIOUS_IDENTIFIER).join("fleet-root.txt");
+    let Ok(text) = std::fs::read_to_string(&previous) else { return };
+    // The same test `read_fleet_root` applies. A pointer to a directory that is no
+    // longer there is not worth carrying across a rename, and adopting it would make
+    // the new install look broken in a way the old one was not.
+    if !PathBuf::from(text.trim()).is_dir() {
+        return;
+    }
+    if let Some(parent) = current.parent() {
+        let _ = std::fs::create_dir_all(parent);
+    }
+    let _ = std::fs::write(&current, text);
 }
 
 fn read_fleet_root(app: &AppHandle) -> Option<PathBuf> {
@@ -582,6 +628,9 @@ fn main() {
         .setup(move |app| {
             let handle = app.handle().clone();
 
+            // Before anything reads the pointer, and before a window exists to ask in.
+            adopt_previous_pointer(&handle);
+
             let open = MenuItem::with_id(app, "open", "Open panel", true, None::<&str>)?;
             let compose = MenuItem::with_id(app, "compose", "Write a question", true, None::<&str>)?;
             let quit = MenuItem::with_id(app, "quit", "Quit", true, None::<&str>)?;
@@ -593,7 +642,7 @@ fn main() {
             TrayIconBuilder::with_id("fleet")
                 .icon(Image::from_bytes(IDLE_ICON)?)
                 .icon_as_template(true)
-                .tooltip("Fleet")
+                .tooltip("Ulpia")
                 .menu(&menu)
                 // False, or the left click is swallowed by the menu and the panel
                 // can never be summoned with one click.

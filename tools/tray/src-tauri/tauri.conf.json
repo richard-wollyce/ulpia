@@ -1,8 +1,8 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "Fleet",
+  "productName": "Ulpia",
   "version": "0.1.0",
-  "identifier": "com.fleet.tray",
+  "identifier": "io.ulpia.tray",
   "build": {
     "frontendDist": "../ui"
   },
@@ -11,7 +11,7 @@
     "windows": [
       {
         "label": "panel",
-        "title": "Fleet",
+        "title": "Ulpia",
         "width": 360,
         "height": 420,
         "resizable": false,
@@ -24,7 +24,7 @@
       },
       {
         "label": "compose",
-        "title": "Fleet",
+        "title": "Ulpia",
         "width": 560,
         "height": 300,
         "minWidth": 380,
