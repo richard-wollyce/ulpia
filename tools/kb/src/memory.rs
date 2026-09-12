@@ -1428,6 +1428,26 @@ impl Memory {
         self.manifest_command("answerer")
     }
 
+    /// The runtime the reading room holds a conversation with, for `kb ui`.
+    ///
+    /// **Added 2026-09-12, and it closes the one call site that had escaped ADR-0027.**
+    /// The other four models here have been commands since the decision was made; this one
+    /// spawned `claude` by name, in Rust, with Claude Code's own flags baked in. Nothing
+    /// was wrong with it except that it was the newest call site and the most conversational
+    /// one, which is to say the one most likely to be copied when a desktop shell is built.
+    ///
+    /// The contract is narrower than the other four and it is worth stating: this child
+    /// streams, so its stdout is one JSON object per line in Claude Code's `stream-json`
+    /// shape, and a session is resumed by id. A runtime that does not stream that shape
+    /// needs a translating adapter rather than a different flag, which is exactly why this
+    /// is a command and not a provider: the adapter is a file, not a release of `kb`.
+    ///
+    /// Absent the key, `ui.rs` falls back to spawning `claude` as it always did, so an
+    /// install that never edits its manifest sees no change at all.
+    pub fn chat(&self) -> crate::classify::Classifier {
+        self.manifest_command("chat")
+    }
+
     /// The model that decides, three times, on a proposal it did not write.
     ///
     /// Configured separately from the promoter on purpose: this one is meant to be the

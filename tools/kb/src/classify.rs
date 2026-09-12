@@ -658,6 +658,49 @@ mod split_command_tests {
     fn nothing_at_all_yields_nothing() {
         assert!(split_command("   ").is_empty());
     }
+
+    /// The half that is easy to leave out of a second copy: a command in the manifest is
+    /// written relative to the fleet root, and every caller moves the child's working
+    /// directory, so the name has to be resolved before that happens.
+    #[test]
+    fn a_relative_program_resolves_against_the_root_and_a_bare_name_does_not() {
+        use std::path::Path;
+        let root = std::env::temp_dir().join(format!("kb-resolve-{}", std::process::id()));
+        std::fs::create_dir_all(root.join("tools")).expect("dirs");
+        let script = root.join("tools").join("chat-x.cmd");
+        std::fs::write(&script, "@echo off\n").expect("script");
+
+        let (program, args) =
+            super::resolve(&root, r"tools\chat-x.cmd -p --stream").expect("splits");
+        assert_eq!(program, script, "a file under the root resolves to it: {program:?}");
+        assert_eq!(args, vec!["-p", "--stream"]);
+
+        let (bare, _) = super::resolve(Path::new("."), "claude -p").expect("splits");
+        assert_eq!(bare, Path::new("claude"), "a name on PATH passes through untouched");
+
+        assert!(super::resolve(&root, "   ").is_none(), "an empty command is not a command");
+    }
+}
+
+/// Splits a configured command line and resolves its program against the fleet root.
+///
+/// Extracted from [`run`] when the reading room's chat became configurable, because the
+/// two were about to hold separate opinions about the same two questions: how a quoted
+/// path is split, and what a relative program name is relative to. A second copy of this
+/// is how one surface comes to accept `"C:\Program Files\..."` and the other does not.
+///
+/// The root resolution is the half that is easy to omit and impossible to notice: commands
+/// are written relative to the fleet root in `fleet.txt`, and every caller changes the
+/// child's working directory, so the name has to be resolved before that happens. An
+/// absolute path, or a bare name that lives on PATH, passes through untouched.
+pub fn resolve(root: &Path, cmd: &str) -> Option<(PathBuf, Vec<String>)> {
+    let parts = split_command(cmd);
+    let mut parts = parts.into_iter();
+    let program = parts.next()?;
+    let args: Vec<String> = parts.collect();
+    let candidate = root.join(&program);
+    let resolved = if candidate.is_file() { candidate } else { PathBuf::from(program) };
+    Some((resolved, args))
 }
 
 /// Runs the classifier and returns its verdict, or None when it cannot be reached.

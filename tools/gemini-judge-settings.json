@@ -1,0 +1,25 @@
+{
+  "_comment_1": "The isolation the classifier, the promoters and the answerer need, for the Gemini CLI. See tools/classify-gemini.cmd for why this is a file and not flags.",
+  "_comment_2": "NOTHING HERE WAS RUN. Read from the gemini-cli source at v0.59.0 and its docs on 2026-09-12. Every key below was traced to the code that consumes it, but the assembled child was never spawned. Verify before trusting it with a real base: see the checks at the bottom of classify-gemini.cmd.",
+
+  "hooksConfig": { "enabled": false },
+
+  "tools": { "core": [] },
+
+  "context": {
+    "fileName": "ULPIA_JUDGE_NO_CONTEXT.md",
+    "includeDirectoryTree": false
+  },
+
+  "model": { "maxSessionTurns": 1 },
+
+  "skills": { "enabled": false },
+
+  "advanced": { "ignoreLocalEnv": true },
+  "privacy": { "usageStatisticsEnabled": false },
+  "general": {
+    "enableAutoUpdate": false,
+    "enableAutoUpdateNotification": false,
+    "checkpointing": { "enabled": false }
+  }
+}

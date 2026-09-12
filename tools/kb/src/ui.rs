@@ -169,9 +169,15 @@ fn handle(
             let resume = chats.lock().ok().and_then(|m| m.get(&chat).cloned());
             let chats = Arc::clone(chats);
             let root = root.to_path_buf();
+            // Resolved here, where the manifest is already open, and moved in as an owned
+            // string: the thread outlives this borrow of `state`.
+            let runtime = match state.memory.chat() {
+                crate::classify::Classifier::Command(cmd) => Some(cmd),
+                crate::classify::Classifier::None => None,
+            };
             let stream = stream.try_clone()?;
             std::thread::spawn(move || {
-                let _ = chat_stream(stream, &root, &chat, &msg, resume, &chats);
+                let _ = chat_stream(stream, &root, &chat, &msg, resume, runtime, &chats);
             });
             Ok(())
         }
@@ -240,6 +246,7 @@ fn chat_stream(
     chat: &str,
     message: &str,
     resume: Option<String>,
+    runtime: Option<String>,
     chats: &Arc<Mutex<HashMap<String, String>>>,
 ) -> std::io::Result<()> {
     stream.set_read_timeout(None).ok();
@@ -272,12 +279,36 @@ fn chat_stream(
     // .cmd, which CreateProcess hands to cmd.exe. Every argument below is a fixed
     // string for exactly that reason; the message goes in on stdin, where there is
     // no quoting layer to exploit (the BatBadBut class of bug).
-    let spawn_with = |program: &str| {
+    //
+    // **The session id moved off the command line when this became configurable.** It
+    // used to be `--resume <sid>`, which was safe because the id comes from the child's
+    // own output and is validated on capture, but it is safe only for as long as every
+    // argument is written here. The moment the argument list comes from a manifest, the
+    // rule "nothing from outside this function is ever an argument" is the only one that
+    // survives someone editing that file. So the id goes in the environment as
+    // `KB_CHAT_RESUME` and the adapter decides what its runtime calls that flag.
+    let spawn_configured = |cmd: &str| {
+        let (program, args) = crate::classify::resolve(root, cmd)
+            .ok_or_else(|| std::io::Error::other("the chat command in fleet.txt is empty"))?;
+        let mut c = crate::base::quiet(&program.to_string_lossy());
+        c.args(&args);
+        if let Some(sid) = &resume {
+            c.env("KB_CHAT_RESUME", sid);
+        }
+        c.current_dir(root)
+            .stdin(std::process::Stdio::piped())
+            .stdout(std::process::Stdio::piped())
+            .stderr(std::process::Stdio::null());
+        c.spawn()
+    };
+
+    // The fallback, for an install whose manifest has no `chat` line. Identical to what
+    // this function did before the key existed, flags and all, so nobody has to edit a
+    // file to keep what they already had.
+    let spawn_default = |program: &str| {
         let mut cmd = crate::base::quiet(program);
         cmd.arg("-p").arg("--output-format").arg("stream-json").arg("--verbose");
         if let Some(sid) = &resume {
-            // The session id came from the child's own earlier output, validated on
-            // capture below, never from the browser.
             cmd.arg("--resume").arg(sid);
         }
         cmd.current_dir(root)
@@ -288,14 +319,21 @@ fn chat_stream(
     };
 
     // The shim name differs across installs; the bare name covers the unix shape.
-    let mut child = match spawn_with("claude.cmd").or_else(|_| spawn_with("claude")) {
+    let spawned = match &runtime {
+        Some(cmd) => spawn_configured(cmd),
+        None => spawn_default("claude.cmd").or_else(|_| spawn_default("claude")),
+    };
+    let mut child = match spawned {
         Ok(c) => c,
         Err(e) => {
-            return send(
-                &mut stream,
-                "error",
-                &format!("the runtime did not start: {e}. Is Claude Code on PATH?"),
-            );
+            let what = match &runtime {
+                Some(cmd) => format!("the chat runtime did not start: {e}. fleet.txt names `{cmd}`."),
+                None => format!(
+                    "the runtime did not start: {e}. Is Claude Code on PATH? \
+                     Name another one with a `chat =` line in fleet.txt."
+                ),
+            };
+            return send(&mut stream, "error", &what);
         }
     };
 

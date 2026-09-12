@@ -65,3 +65,12 @@ reviewer = tools\review-claude.cmd
 # only, refusal carried through. Absent this line, `kb answer` prints the reading
 # list instead. See decisions/0032.
 answerer = tools\answer-claude.cmd
+
+# The reading room's conversation, for `kb ui`. Message on stdin, one JSON object per
+# line on stdout in Claude Code's stream-json shape, and the session to resume arrives
+# in the environment as KB_CHAT_RESUME rather than on the command line.
+#
+# Unlike the four above, this one is NOT isolated: it is the agent the person is talking
+# to, so it keeps its hooks, its MCP servers and its constitution. Absent this line,
+# `kb ui` spawns `claude` exactly as it did before the line existed.
+chat = tools\chat-claude.cmd
