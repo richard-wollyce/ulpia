@@ -1,0 +1,47 @@
+[package]
+name = "model-call"
+version = "0.1.0"
+edition = "2024"
+license = "Apache-2.0"
+description = "One model call to any of four providers: prompt on stdin, answer on stdout"
+
+# A separate crate, and that is the decision rather than an accident of layout.
+#
+# `kb` has one dependency and zero network code, and ADR-0027 names that as the reason
+# the model contract is a process at all: "any model behind any runtime satisfies it, and
+# `kb` gains no dependency and no network code." Putting an HTTP client and a TLS stack
+# into `kb` would spend exactly the property that sentence defends, and it would spend it
+# on every install, including the ones that never call a hosted model.
+#
+# So the dependency lives here, in a binary that only the adapter path runs. `kb` is
+# untouched. This crate does not depend on `kb` either: linking it to reuse its JSON module
+# would drag `rusqlite` with its bundled SQLite amalgamation into a program whose entire
+# job is one HTTPS POST.
+#
+# Two dependencies, and no more:
+#
+#   ureq       blocking HTTP with rustls. Blocking on purpose: this process makes one call
+#              and exits, so an async runtime would be a scheduler with nothing to schedule.
+#   serde_json the response shapes are four vendors' and they nest. Hand parsing them is
+#              how a silent wrong answer gets shipped, and `ureq`'s json feature is
+#              serde_json anyway.
+[dependencies]
+ureq = { version = "3", features = ["json", "rustls"], default-features = false }
+serde_json = "1"
+
+[lib]
+name = "model_call"
+path = "src/lib.rs"
+
+# A library as well as a binary, following ADR-0009's precedent with `kb`: the Tauri
+# backend links the memory rather than shelling out and parsing stdout. The desktop app
+# will want the key store and the provider table in process, and the manifest wants a
+# spawnable command. Same code, both surfaces, no second implementation to drift.
+[[bin]]
+name = "model-call"
+path = "src/main.rs"
+
+[profile.release]
+opt-level = "z"
+lto = true
+strip = true
