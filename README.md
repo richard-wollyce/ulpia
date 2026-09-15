@@ -39,22 +39,33 @@ place in an ordinary day:
   declares, in whatever language they were written, so a Portuguese question reaches an
   English note when its keys say it should.
 - **Keep several specialists and get the right one.** `kb boot` scores a message across
-  every base and hands the conversation to the one that owns the subject, so the
-  architect does not end up answering a security question.
-- **Get more than one specialist on the work that needs it.** When the router judges a
-  message to land in a second agent's domain, it names the owner and the panel, and
-  `kb panel` boots each reviewer from its own constitution, prices the round before it is
-  spent, and keeps a ledger where every objection is taken, refused with a reason, or
-  escalated. One agent stays accountable; nobody votes.
-- **Get prose when a file list is not what you wanted.** `kb answer` puts a reader after
-  the verdict, and the retrieval underneath it stays deterministic.
+  every base, decomposes compound multi-domain questions into atomic sub-queries, and
+  hands the conversation to the one that owns the subject, so the architect does not end up
+  answering a security question.
+- **Get more than one specialist on the work that needs it.** When a decomposed query or
+  router verdict crosses domains, Vesta seats the primary agent as owner and convenes a panel.
+  `kb panel` boots each reviewer from its own constitution, enforces constitutional
+  self-critique protocols where objections must be mechanism-backed (filtering out subjective
+  stylistic noise), prices the round before it is spent, and keeps a ledger where every
+  objection is taken, refused with a reason, or escalated. One agent stays accountable;
+  nobody votes.
+- **Get prose with clean section hierarchy.** `kb answer` puts a reader after the verdict
+  using small-to-big section windowing: it expands chunk hits to their enclosing section
+  and paragraph boundaries (up to 1,800 characters) without bloating prefill latency.
+- **Consolidate patterns across sessions.** `kb consolidate <agent>` discovers recurrent
+  cross-session architectural decisions, invariant changes, and blockers, validating that
+  every candidate pattern cites at least two distinct real sessions before admitting it.
+- **Save session handoffs for the next agent.** `kb handoff save <agent>` records tasks,
+  decisions, blockers, and next steps into structured markdown for seamless continuity.
 - **Write in a tree several sessions are editing at once.** `kb commit <paths>` builds the
   commit from your paths alone, then reads it back off git and prints what it left dirty.
 - **Keep part of the library private by layout rather than by promise.** Each base
   declares its own private layer, and nothing inside it is served, indexed or suggested
   unless you ask for it with `--all`.
-- **Grade your own retrieval.** `kb eval` runs your own answer key and refuses to run
-  against a stale one; `kb check` names the notes nothing can reach.
+- **Grade your own retrieval and generation offline.** `kb eval` runs your own answer key,
+  refuses to run against a stale one, and grades answer quality with offline RAGAS-style
+  triads (`--triad`: faithfulness, answer relevance, context relevancy) with zero API tokens;
+  `kb check` names the notes nothing can reach.
 - **Do all of it on a plane.** Nothing in the retrieval path touches a network, so the
   library works the same in a tunnel as it does at your desk.
 
@@ -254,8 +265,11 @@ Claude CLI). The answer must ground every claim in the served passages and cite 
 and when the library does not hold the answer it says so instead of inventing one; the
 model sits after retrieval's verdict, never inside retrieval.
 
-`kb answer` reads five files by default. Two wider modes are the caller's choice and never
-an automatic switch: `--expanded` reads up to twelve, and `--complete` reads every keyed
+`kb answer` reads five files by default using **small-to-big section windowing**: instead of
+dumping entire markdown files or isolated sentence snippets, it expands matched chunks to
+their enclosing section and paragraph boundaries up to 1,800 characters (~450 tokens), merging
+contiguous chunks under the same section heading cleanly. Two wider modes are the caller's choice
+and never an automatic switch: `--expanded` reads up to twelve, and `--complete` reads every keyed
 file in batches of ten. Complete mode prints a time estimate before the first model call
 and restates it after the first batch, because a whole-base read costs minutes and nobody
 should pay that without the number first.
@@ -301,6 +315,12 @@ kb index .                      build one index per agent
 kb route "your question" .      your own fleet; the dot is the repo root, the demo uses examples/demo
 kb route "your question" . --hybrid   fuse the keyword scorer with full text search
 kb route "your question" . --json     the same answer as one line of JSON, for a program
+kb answer "your question" .     answer with small-to-big section windowing
+kb boot .                       route with sub-question query decomposition across fleet agents
+kb panel <artifact> .           convene multi-agent review with constitutional self-critique
+kb eval gold.tsv . --triad      grade retrieval and generation with offline RAGAS metrics
+kb consolidate <agent> .        consolidate patterns across past sessions with multi-session proof
+kb handoff save <agent> .       persist session tasks, decisions, and blockers for next agent
 kb check .                      lint every agent, including keys no question can reach
 kb fleet .                      who is in the fleet
 kb eval examples/demo/gold.tsv examples/demo    the graded demo above
@@ -602,7 +622,7 @@ Early, used daily, and honest about which is which.
 | `kb ui` | The reading room, set in the site's own type and palette: the fleet, the catalog, the stacks (shelves and book spines, ribbons where another agent works the document), the desk (chat routed by the same boot hook as every session), block budgets, doctor. One embedded page plus three Garamond faces, loopback only. |
 | `tools/tray` | Windows only, and young. |
 | `site` | The page at [ulpia.io](https://ulpia.io). Static front, one Rust binary behind it. |
-| Local model routing | Not built. |
+| Local model routing | Documented in ADR-0043: 4-bit AWQ Gemma-2 2B / Qwen 2.5 3B under 2 GB RAM budget for standalone UI mode (Ulpia Tray), with zero API costs and zero background daemon overhead in agent harnesses. |
 | Voice | Not built. |
 | Licence | **Apache 2.0.** Use it, fork it, build on it; keep the notice and the attribution. The private layer under `fleet/` is not part of the repository and is not licensed, because it is not here. |
 

@@ -33,6 +33,8 @@ target/
 # is new and nothing else in this file covers it, so without it the first install would put
 # a binary in `git status` looking like untracked work.
 tools/kb/bin/
+tools/model-call/bin/
+
 
 # The derived index, wherever it lands. Disposable by ADR-0003.
 .kb/
