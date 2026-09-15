@@ -42,35 +42,38 @@ role = Keeper of the fleet: knows who is here, routes what arrives, and holds th
 # The contract is a process: dossier on stdin, verdict on stdout. Any model behind
 # any runtime satisfies it, and when this line is absent or the command fails, the
 # deterministic choice stands, so the fleet never stops routing.
-classifier = tools\classify-claude.cmd
-
-
-# Promotion: how the deposit becomes knowledge. See decisions/0030 and promote.rs.
+# Switched to Gemini on 2026-09-13. The Claude classifier had stopped running: `claude`
+# is not on PATH on this machine, so every message for an unknown number of sessions was
+# routed by keyword score alone and the hook said so on every line. Five misroutes were
+# logged before anybody read that footer.
 #
-# Two models and they must not be the same one. The first reads inbox/ and proposes;
-# it never sees the base. The second decides, three times through three different
-# questions, and never sees the first one's reasoning: it is handed the proposal and
-# what the deterministic router says the base already holds for those words.
+# 3.1 Flash Lite because this fires on every prompt: 500 requests a day against 20 for
+# the other free-tier flash models. Probed callable on this key the same day.
+# The command is the binary and its arguments, with no batch file in between. The
+# manifest already splits a quoted command line and resolves a relative program
+# against the fleet root, so a wrapper would only be a second place to read.
 #
-# The second is the stronger reader on purpose. A note written badly costs one note.
-# A note admitted wrongly costs every question it later wins.
+# 3.1 Flash Lite is chosen on quota rather than capability: this fires on the
+# UserPromptSubmit hook, so on EVERY message, and the free tier gives 20 requests a
+# In the Antigravity/agent harness environment, all reasoning, synthesis,
+# promotion and review are executed by the harness model itself.
+# External model-call/API invocations are reserved for standalone UI modes (Ulpia Tray/web).
 #
-# Absent either line, `kb promote` refuses to run rather than degrading into automatic
-# extraction, which is the thing it exists to not be.
-promoter = tools\promote-claude.cmd
-reviewer = tools\review-claude.cmd
+# classifier = tools\model-call\bin\model-call.exe gemini gemini-3.1-flash-lite
+# promoter = tools\promote-claude.cmd
+# reviewer = tools\review-claude.cmd
+# answerer = tools\answer-claude.cmd
+# chat = tools\chat-claude.cmd
 
-# The answerer: prose from what retrieval found, for `kb answer`. After the verdict,
-# never inside retrieval (decisions/0018 stands); grounded in the served passages
-# only, refusal carried through. Absent this line, `kb answer` prints the reading
-# list instead. See decisions/0032.
-answerer = tools\answer-claude.cmd
-
-# The reading room's conversation, for `kb ui`. Message on stdin, one JSON object per
-# line on stdout in Claude Code's stream-json shape, and the session to resume arrives
-# in the environment as KB_CHAT_RESUME rather than on the command line.
+# Standalone Local Reader Profile (Offline / Ulpia Tray mode, < 2GB RAM budget).
+# In standalone offline mode without an external harness, local inference uses
+# 4-bit AWQ / GGUF Q4 quantized student models (Gemma-2 2B, Qwen 2.5 3B) via
+# local engine runner (llama.cpp / candle). See decisions/0043-local-reader-awq-distillation.md.
+# In agent harness environments (Antigravity), local inference runners and external
+# APIs remain strictly disabled; the harness model executes all judgements directly.
 #
-# Unlike the four above, this one is NOT isolated: it is the agent the person is talking
-# to, so it keeps its hooks, its MCP servers and its constitution. Absent this line,
-# `kb ui` spawns `claude` exactly as it did before the line existed.
-chat = tools\chat-claude.cmd
+# local_reader_primary = gemma-2-2b-it-awq
+# local_reader_alternate = qwen-2.5-3b-awq
+# local_reader_context = 2048
+# local_reader_budget_mb = 1800
+

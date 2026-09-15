@@ -569,3 +569,16 @@
   Search for: `fonte`, `source`, `citacao`, `citation`, `bibliografia`, `bibliography`,
   `chave opaca`, `opaque key`, `src:`, `kb source add`, `kb sources`, `CSL JSON`, `Zotero`,
   `retrieval_status`, `registro de catalogo`, `fonte nao lida`, `dc:replaces`, `E05`, `E06`, `E08`, `W04`, `W09`.
+
+- **[[0043-local-reader-awq-distillation]]** 🟢 accepted 2026-09-14. **A local student model
+  profile and 4-bit AWQ quantization under a strict 2 GB RAM budget for standalone offline UI mode,
+  with an invariant of zero API calls and zero background daemons when running in an agent harness.**
+  Builds on ADR-0004's physical hardware measurements on the Dell Latitude 3420 (Tiger Lake i5,
+  16 GB/s single-channel RAM). Adopts Activation-aware Weight Quantization (AWQ) over naive RTN and
+  GPTQ to protect salient attention channels without perplexity collapse. Selects Google Gemma-2 2B
+  and Qwen 2.5 3B as student models with bounded KV caches (sliding window / hybrid attention).
+  Binds the separation between the standalone offline reader and harness execution.
+  Search for: `local reader`, `AWQ`, `quantizacao 4 bit`, `Gemma-2`, `Qwen 2.5`, `destilacao`,
+  `distillation`, `student model`, `limite de memoria`, `memory budget`, `2GB RAM`, `Ulpia Tray`,
+  `harness invariant`, `zero API cost`, `antigravity`, `ADR-0043`.
+

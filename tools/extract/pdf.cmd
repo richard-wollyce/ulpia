@@ -26,4 +26,5 @@ REM The trailing - means stdout. pdftotext writes a file otherwise.
 REM
 REM Needs poppler. It ships with Git for Windows at /mingw64/bin/pdftotext, and is
 REM `poppler-utils` on Debian and `poppler` in Homebrew.
+if exist "C:\Program Files\Git\mingw64\bin\pdftotext.exe" set "PATH=C:\Program Files\Git\mingw64\bin;%PATH%"
 pdftotext -layout -enc UTF-8 %1 -
