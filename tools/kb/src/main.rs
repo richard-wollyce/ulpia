@@ -7,7 +7,7 @@
 
 use kb::checks::{Finding, Level};
 use kb::{
-    abstain, answer, base, blocks, boot, capture, checks, classify, commit, eval, gate, index,
+    abstain, answer, base, blocks, boot, capture, checks, classify, commit, consolidate, eval, gate, handoff, index,
     init, ingest, json,
     list,
     mcp, memory, misroute, misses, panel, promote, remember, sources, store, ui, write,
@@ -38,17 +38,21 @@ usage:
     kb sources [path]... [--json] [--all]
     kb fleet [path]... [--all]
     kb blocks [path] [--emit]
-    kb eval <gold.tsv> [path]... [--top N] [--all] [--classify]
+    kb eval <gold.tsv> [path]... [--top N] [--all] [--classify] [--triad]
     kb commit <path>... -m <message>
     kb boot [path]... [--top N] [--all] [--session ID] [--cwd DIR] [--text]
     kb ingest <file> [path]... [--agent NAME] [--keep] [--dry-run] [--top N] [--all]
     kb promote [path]... [--top N] [--all] [--dry-run] [--max N] [--lock]
+    kb consolidate <agent> [path] [--sessions N] [--top N] [--dry-run] [--json]
     kb ui [path]... [--port N] [--all]
     kb capture [path] [--session ID]
+    kb handoff [path] [--session ID] [--show] [--json]
+    kb handoff save <agent> --task <task> [--decision <d>]... [--blocker <b>]... [--next <n>]... [--ref <r>]... [--session ID] [path]
     kb serve [path]... [--top N] [--all]
     kb misses [path]... [--all] [--top N] [--json] [--apply --gold <tsv>]
     kb misroute <message> --chose <agent> --owner <agent|none> [--why <text>] [path]
     kb misroutes [path] [--top N]
+    kb rejections [path]... [--top N] [--agent A] [--lens L] [--json]
     kb abstentions [path] [--top N] [--all]
     kb panel <artifact> [path] --owner <agent> [--reviewer <agent>]... [--out D] [--json]
     kb panel <artifact> [path] --from <agent> (--objection <text> [--blocking]
@@ -91,10 +95,17 @@ usage:
                 a writer must not be able to award itself
     --base      list: one agent, by its directory name
     --kind      list: the species read from the folder: memory, skills or tools
-    --session   boot, capture: the conversation this message belongs to. boot uses
-                it to emit a constitution only when the routed agent changes, so
-                without it the constitution is emitted every time. capture files
-                the deposit under it and refuses without one
+    --session   boot, capture, handoff: the conversation this message belongs to.
+                boot uses it to emit a constitution only when the routed agent changes.
+                capture files the deposit under it and refuses without one.
+                handoff reads or writes task continuity for that session
+    --task      handoff: the active task or work in progress. Required for save
+    --decision  handoff: key architectural decision or constraint decided in the session
+    --blocker   handoff: active blocker or unresolved question
+    --next      handoff: immediate next action to take
+    --ref       handoff: relevant note stem, source key, or file path
+    --lens      rejections: filter by lens: contradiction, duplication, or scope
+    --sessions  consolidate: number of recent sessions to inspect, default 5
     --cwd       boot: the fleet root, when no path is named. A host with no config
                 file needs no config file: `kb boot --cwd $PWD` is complete
     --text      boot: stdin is the message and never a hook payload. Without it the
@@ -275,6 +286,14 @@ proposal refused three times is a gap in the base rather than a bad proposal.
                 and two runs over one deposit both propose the same note before either
                 has written it, which is a duplicate no lens can see
 
+consolidate compares records across multiple past sessions side-by-side to discover
+recurrent patterns, cross-session architectural decisions, and common blockers. Every
+recurrent proposal must cite at least two distinct sessions that genuinely exist in
+the recorded session history, and must pass the same three independent review lenses
+(contradiction, duplication, scope) against the base.
+    --sessions N how many past sessions to gather experience from, default 5
+    --dry-run    decide everything and write nothing
+
 write reads the note body from stdin and writes the keys twice: into the note's own
 `**Search for:**` header, which since ADR-0028 is the only thing the router indexes,
 and into an entry in the agent's MAP.md, which is a reading list for a person. Keys
@@ -345,7 +364,7 @@ const LINES_SHOWN: usize = 3;
 /// Flags that consume the argument after them.
 const VALUE_FLAGS: &[&str] = &[
     "--top", "--keys", "--summary", "--folder", "--provenance", "--stage", "--base", "--kind",
-    "--captured-from", "--agent", "--session", "--cwd",
+    "--captured-from", "--agent", "--session", "--sessions", "--cwd",
     "-m", "--port", "--max", "--gold", "--chose", "--owner", "--why",
     "--reviewer", "--out", "--from", "--objection", "--resolve",
     // `kb source add`. Every one takes a value, and `--author` is the only one that may
@@ -353,6 +372,8 @@ const VALUE_FLAGS: &[&str] = &[
     "--type", "--title", "--author", "--year", "--container", "--volume", "--pages",
     "--publisher", "--url", "--doi", "--isbn", "--lang", "--retrieved-on",
     "--retrieval-status", "--replaces", "--note",
+    // `kb handoff save` and `kb rejections`
+    "--task", "--decision", "--blocker", "--next", "--ref", "--reference", "--lens",
 ];
 
 /// What build this is, in one line: `kb 0.2.1 (2269ba0, x86_64 linux)`.
@@ -504,12 +525,25 @@ fn main() -> ExitCode {
             flag_value(&args, "--why").as_deref(),
         ),
         "misroutes" => cmd_misroutes(paths_or_default(&positional)[0], top),
+        "rejections" => cmd_rejections(
+            &paths_or_default(&positional),
+            top,
+            flag_value(&args, "--agent").as_deref(),
+            flag_value(&args, "--lens").as_deref(),
+            json,
+        ),
         "abstentions" => cmd_abstentions(paths_or_default(&positional)[0], all, top),
         "panel" => cmd_panel(&args, &positional, all, top, json),
         "capture" => {
             let paths = paths_or_default(&positional);
             cmd_capture(paths[0], flag_value(&args, "--session").as_deref())
         }
+        "handoff" => cmd_handoff(
+            &args,
+            &positional,
+            json,
+            flag_value(&args, "--session").as_deref(),
+        ),
         "answer" => {
             if positional.is_empty() {
                 eprintln!("kb: answer needs a question\n");
@@ -551,6 +585,27 @@ fn main() -> ExitCode {
             flag_value(&args, "--max").and_then(|v| v.parse().ok()),
             args.iter().any(|a| a == "--lock"),
         ),
+        "consolidate" => {
+            if positional.is_empty() {
+                eprintln!("kb: consolidate needs an agent name\n");
+                print!("{USAGE}");
+                return ExitCode::from(2);
+            }
+            let agent = positional[0];
+            let paths = paths_or_default(&positional[1..]);
+            let sessions = flag_value(&args, "--sessions")
+                .and_then(|v| v.parse().ok())
+                .unwrap_or(5);
+            cmd_consolidate(
+                agent,
+                paths[0],
+                all,
+                sessions,
+                top,
+                args.iter().any(|a| a == "--dry-run"),
+                json,
+            )
+        },
         "ui" => {
             let port = flag_value(&args, "--port")
                 .and_then(|v| v.parse().ok())
@@ -571,7 +626,14 @@ fn main() -> ExitCode {
             }
             let gold = positional[0];
             let paths = paths_or_default(&positional[1..]);
-            cmd_eval(Path::new(gold), &paths, all, top, args.iter().any(|a| a == "--classify"))
+            cmd_eval(
+                Path::new(gold),
+                &paths,
+                all,
+                top,
+                args.iter().any(|a| a == "--classify"),
+                args.iter().any(|a| a == "--triad"),
+            )
         }
         "source" => {
             if positional.first() != Some(&"add") {
@@ -2181,6 +2243,56 @@ fn cmd_misroutes(path: &str, top: usize) -> ExitCode {
     ExitCode::SUCCESS
 }
 
+/// Reads `kb-rejections.txt`, most refused first, filtering by agent and lens if requested.
+fn cmd_rejections(
+    paths: &[&str],
+    top: usize,
+    agent_filter: Option<&str>,
+    lens_filter: Option<&str>,
+    as_json: bool,
+) -> ExitCode {
+    let root = Path::new(paths.first().copied().unwrap_or("."));
+    let path = root.join(promote::REJECTIONS_TXT);
+    let mut rows = promote::read_rejections(root);
+
+    if let Some(agent) = agent_filter {
+        rows.retain(|r| r.agent.eq_ignore_ascii_case(agent));
+    }
+    if let Some(lens) = lens_filter {
+        rows.retain(|r| r.lens.eq_ignore_ascii_case(lens));
+    }
+
+    if as_json {
+        let json_arr = json::Value::Arr(rows.iter().map(|r| r.as_json()).collect());
+        println!("{}", json_arr.to_string());
+        return ExitCode::SUCCESS;
+    }
+
+    println!("log:      {}", path.display());
+    if rows.is_empty() {
+        println!();
+        println!("  no rejections recorded.");
+        return ExitCode::SUCCESS;
+    }
+
+    let total: usize = rows.iter().map(|r| r.count).sum();
+    println!("refused:  {} distinct, {total} in total", rows.len());
+
+    for r in rows.iter().take(top.max(1) * 4) {
+        println!();
+        println!(
+            "   {}x  {}/{} ({}, {} to {})",
+            r.count, r.agent, r.slug, r.lens, r.first_seen, r.last_seen
+        );
+        println!("        why: {}", r.reason);
+    }
+
+    println!();
+    println!("  A proposal refused repeatedly for the same reason is a gap in the base rather");
+    println!("  than a bad proposal. Delete or resolve once addressed in the corpus.");
+    ExitCode::SUCCESS
+}
+
 /// Reads the abstention log back, and re-scores each gap against the fleet as it stands now.
 ///
 /// **The recomputed line is the whole reason this is a verb and not `cat`.** The stored
@@ -3133,7 +3245,7 @@ fn cmd_answer_complete(question: &str, memory: &memory::Memory, root: &Path) -> 
     let started = std::time::Instant::now();
     let mut first_batch_ms: Option<u128> = None;
 
-    let mut flush = |batch: &mut Vec<(String, String)>, facts: &mut String, done: &mut usize| -> u128 {
+    let flush = |batch: &mut Vec<(String, String)>, facts: &mut String, done: &mut usize| -> u128 {
         if batch.is_empty() {
             return 0;
         }
@@ -3456,6 +3568,103 @@ fn today() -> String {
     format!("{y:04}-{m:02}-{d:02}")
 }
 
+/// Cross-session experience consolidation pass.
+///
+/// Gathers experience records across multiple past sessions (handoffs and deposits),
+/// synthesizes recurrent patterns across at least 2 distinct sessions, enforces
+/// the multi-session invariant in code, and runs candidate proposals through the
+/// three independent review lenses against the durable base.
+fn cmd_consolidate(
+    agent: &str,
+    path: &str,
+    all: bool,
+    sessions: usize,
+    top: usize,
+    dry_run: bool,
+    as_json: bool,
+) -> ExitCode {
+    let fleet_root = Path::new(path);
+    let mut memory = match memory::Memory::open(&[fleet_root], all) {
+        Ok(m) => m,
+        Err(e) => {
+            eprintln!("kb: {e}");
+            return ExitCode::from(1);
+        }
+    };
+
+    let synthesizer = memory.promoter();
+    let reviewer = memory.reviewer();
+
+    if matches!(synthesizer, classify::Classifier::None) {
+        eprintln!("kb consolidate: no `promoter = ...` in the fleet manifest, so there is nothing to propose with.");
+        return ExitCode::from(2);
+    }
+    if matches!(reviewer, classify::Classifier::None) {
+        eprintln!(
+            "kb consolidate: no `reviewer = ...` in the fleet manifest. Running the proposer alone \
+             would write straight into the base from unreviewed material, which is what this \
+             command exists to not do."
+        );
+        return ExitCode::from(2);
+    }
+
+    let today = today();
+    let outcome = consolidate::run(
+        &mut memory,
+        fleet_root,
+        agent,
+        &synthesizer,
+        &reviewer,
+        sessions,
+        top,
+        dry_run,
+        &today,
+    );
+
+    if as_json {
+        println!("{}", outcome.as_json().to_string());
+        return ExitCode::SUCCESS;
+    }
+
+    if dry_run {
+        println!("dry run: nothing was written and no refusal was recorded.\n");
+    }
+
+    println!(
+        "consolidate {agent}: consulted {} session(s), generated {} candidate(s).",
+        outcome.sessions_consulted, outcome.proposals_generated
+    );
+
+    for (slug, reason) in &outcome.rejected_evidence {
+        println!("  rejected proposal {slug}: {reason}");
+    }
+
+    for d in &outcome.decided {
+        let head = format!("{}/{}", d.proposal.agent, d.proposal.slug);
+        if d.accepted() {
+            match &d.written {
+                Some(p) => println!("  wrote   {head}\n          {}", p.display()),
+                None => println!("  would write {head}"),
+            }
+        } else {
+            println!("  refused {head}");
+            for r in d.refusals() {
+                println!("          {} says: {}", r.lens.name(), r.reason);
+            }
+        }
+        println!("          from {}", d.proposal.source);
+    }
+
+    println!(
+        "\n{} proposal(s) evaluated: {} written, {} refused.",
+        outcome.decided.len(),
+        outcome.written(),
+        outcome.refused()
+    );
+
+    ExitCode::SUCCESS
+}
+
 /// `kb boot`: who answers this message, decided before the model sees it.
 ///
 /// **Two input shapes, and the flags are how a host with no hook says the same things.**
@@ -3564,6 +3773,107 @@ fn cmd_capture(root: &str, session: Option<&str>) -> ExitCode {
 }
 
 // ---------------------------------------------------------------------------
+// handoff
+// ---------------------------------------------------------------------------
+
+/// `kb handoff`: inspect or record session continuity and active task handoffs.
+fn cmd_handoff(
+    args: &[String],
+    positional: &[&str],
+    as_json: bool,
+    session_arg: Option<&str>,
+) -> ExitCode {
+    if positional.first() == Some(&"save") {
+        if positional.len() < 2 {
+            eprintln!("kb handoff save: name the agent and provide --task <text>\n");
+            print!("{USAGE}");
+            return ExitCode::from(2);
+        }
+        let agent = positional[1];
+        let task = match flag_value(args, "--task") {
+            Some(t) if !t.trim().is_empty() => t,
+            _ => {
+                eprintln!("kb handoff save: missing required --task <text>\n");
+                return ExitCode::from(2);
+            }
+        };
+        let root = positional.get(2).copied().unwrap_or(".");
+        let session = session_arg
+            .map(|s| s.to_string())
+            .unwrap_or_else(|| format!("s-{}", misses::today().replace('-', "")));
+
+        let decisions = flag_values(args, "--decision");
+        let blockers = flag_values(args, "--blocker");
+        let next_steps = flag_values(args, "--next");
+        let mut references = flag_values(args, "--ref");
+        references.extend(flag_values(args, "--reference"));
+
+        let record = handoff::HandoffRecord {
+            session: session.clone(),
+            agent: agent.to_string(),
+            task,
+            decisions,
+            blockers,
+            next_steps,
+            references,
+            updated_at: misses::today(),
+        };
+
+        match handoff::save(Path::new(root), &record) {
+            Ok(path) => {
+                if as_json {
+                    println!("{}", record.as_json().to_string());
+                } else {
+                    println!(
+                        "saved handoff for session {} ({}) into {}",
+                        session,
+                        agent,
+                        path.display()
+                    );
+                }
+                ExitCode::SUCCESS
+            }
+            Err(e) => {
+                eprintln!("kb handoff: {e}");
+                ExitCode::from(1)
+            }
+        }
+    } else {
+        let root = if positional.first() == Some(&"show") {
+            positional.get(1).copied().unwrap_or(".")
+        } else {
+            positional.first().copied().unwrap_or(".")
+        };
+
+        let record = match session_arg {
+            Some(s) => handoff::load(Path::new(root), s),
+            None => handoff::latest(Path::new(root)),
+        };
+
+        match record {
+            Some(r) => {
+                if as_json {
+                    println!("{}", r.as_json().to_string());
+                } else {
+                    print!("{}", r.render());
+                }
+                ExitCode::SUCCESS
+            }
+            None => {
+                if as_json {
+                    println!("null");
+                } else if let Some(s) = session_arg {
+                    println!("no handoff record for session '{s}'");
+                } else {
+                    println!("no handoff records found");
+                }
+                ExitCode::SUCCESS
+            }
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
 // commit
 // ---------------------------------------------------------------------------
 
@@ -3600,7 +3910,14 @@ left untouched, still dirty ({}):", done.left_alone.len());
 // eval
 // ---------------------------------------------------------------------------
 
-fn cmd_eval(gold_path: &Path, paths: &[&str], all: bool, top: usize, classify: bool) -> ExitCode {
+fn cmd_eval(
+    gold_path: &Path,
+    paths: &[&str],
+    all: bool,
+    top: usize,
+    classify: bool,
+    triad: bool,
+) -> ExitCode {
     let rows = match eval::read_gold(gold_path) {
         Ok(r) => r,
         Err(e) => {
@@ -3842,6 +4159,56 @@ fn cmd_eval(gold_path: &Path, paths: &[&str], all: bool, top: usize, classify: b
             "Release binary."
         }
     );
+
+    if triad {
+        let mut sum_faith = 0.0;
+        let mut sum_relevance = 0.0;
+        let mut sum_context = 0.0;
+        let mut count = 0;
+
+        println!();
+        println!("TRIAD  offline RAGAS-style evaluation:");
+        println!("  {:<6} {:<6} {:<6} {:<6} question", "faith", "relev", "ctx", "comp");
+        for (q, _) in &rows {
+            let ans = memory.ask(q, top);
+            let passages: Vec<String> = ans
+                .found
+                .iter()
+                .flat_map(|f| f.passages.iter().map(|p| p.text.clone()))
+                .collect();
+            let served_text = if ans.confidence.verdict == memory::Verdict::Nothing {
+                "The library does not hold this.".to_string()
+            } else if let Some(p) = passages.first() {
+                p.clone()
+            } else {
+                ans.keyword_top.clone().unwrap_or_default()
+            };
+            let score = eval::evaluate_triad(q, &passages, &served_text);
+            println!(
+                "  {:<6.2} {:<6.2} {:<6.2} {:<6.2} {}",
+                score.faithfulness,
+                score.answer_relevance,
+                score.context_relevancy,
+                score.composite(),
+                q
+            );
+            sum_faith += score.faithfulness;
+            sum_relevance += score.answer_relevance;
+            sum_context += score.context_relevancy;
+            count += 1;
+        }
+        if count > 0 {
+            let avg_faith = sum_faith / count as f64;
+            let avg_relevance = sum_relevance / count as f64;
+            let avg_context = sum_context / count as f64;
+            let avg_composite = (avg_faith + avg_relevance + avg_context) / 3.0;
+            println!();
+            println!(
+                "TRIAD  averages ({count} questions): Faithfulness {:.2} | Relevance {:.2} | Context {:.2} | Composite {:.2}",
+                avg_faith, avg_relevance, avg_context, avg_composite
+            );
+        }
+    }
 
     ExitCode::SUCCESS
 }
@@ -5131,5 +5498,78 @@ with a body"];
             "the mechanism travels with the feature:
 {USAGE}"
         );
+    }
+
+    #[test]
+    fn handoff_usage_and_flags_are_registered() {
+        assert!(
+            USAGE.contains("kb handoff [path] [--session ID] [--show] [--json]"),
+            "handoff show command must be in USAGE"
+        );
+        assert!(
+            USAGE.contains("kb handoff save <agent> --task <task>"),
+            "handoff save command must be in USAGE"
+        );
+        assert!(VALUE_FLAGS.contains(&"--task"), "--task must be in VALUE_FLAGS");
+        assert!(VALUE_FLAGS.contains(&"--decision"), "--decision must be in VALUE_FLAGS");
+        assert!(VALUE_FLAGS.contains(&"--blocker"), "--blocker must be in VALUE_FLAGS");
+        assert!(VALUE_FLAGS.contains(&"--next"), "--next must be in VALUE_FLAGS");
+        assert!(VALUE_FLAGS.contains(&"--ref"), "--ref must be in VALUE_FLAGS");
+    }
+
+    #[test]
+    fn handoff_positionals_and_flag_values_parse_correctly() {
+        let raw = vec![
+            "save", "zed", "--task", "Ship phase 2",
+            "--decision", "Atomic write", "--decision", "FTS5 index",
+            "--blocker", "None",
+            "--next", "Verify everything",
+            "--ref", "reports/akita.md",
+            "."
+        ];
+        let pos = positionals(&raw);
+        assert_eq!(pos, vec!["save", "zed", "."]);
+
+        let raw_owned: Vec<String> = raw.iter().map(|s| s.to_string()).collect();
+        let decisions = flag_values(&raw_owned, "--decision");
+        assert_eq!(decisions, vec!["Atomic write", "FTS5 index"]);
+
+        let task = flag_value(&raw_owned, "--task");
+        assert_eq!(task, Some("Ship phase 2".to_string()));
+    }
+
+    #[test]
+    fn rejections_usage_and_flags_are_registered() {
+        assert!(
+            USAGE.contains("kb rejections [path]... [--top N] [--agent A] [--lens L] [--json]"),
+            "rejections command must be in USAGE"
+        );
+        assert!(VALUE_FLAGS.contains(&"--lens"), "--lens must be in VALUE_FLAGS");
+    }
+
+    #[test]
+    fn consolidate_usage_and_flags_are_registered() {
+        assert!(
+            USAGE.contains("kb consolidate <agent> [path] [--sessions N] [--top N] [--dry-run] [--json]"),
+            "consolidate command must be in USAGE"
+        );
+        assert!(VALUE_FLAGS.contains(&"--sessions"), "--sessions must be in VALUE_FLAGS");
+    }
+
+    #[test]
+    fn consolidate_positionals_and_flag_values_parse_correctly() {
+        let raw = vec![
+            "consolidate", "zed", ".",
+            "--sessions", "10",
+            "--top", "3",
+            "--dry-run",
+            "--json",
+        ];
+        let pos = positionals(&raw);
+        assert_eq!(pos, vec!["consolidate", "zed", "."]);
+
+        let raw_owned: Vec<String> = raw.iter().map(|s| s.to_string()).collect();
+        let sessions = flag_value(&raw_owned, "--sessions");
+        assert_eq!(sessions, Some("10".to_string()));
     }
 }

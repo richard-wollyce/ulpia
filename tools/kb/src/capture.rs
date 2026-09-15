@@ -251,6 +251,8 @@ pub fn write_deposit(root: &Path, session: &str, today: &str) -> Result<Vec<Outc
 
     let routed = record.routed();
     let mut out = Vec::new();
+    let mut successful_agents = std::collections::HashSet::new();
+
     for (agent, questions) in &owned {
         let base = crate::write::agent_root(root, agent);
         if !base.is_dir() {
@@ -265,18 +267,75 @@ pub fn write_deposit(root: &Path, session: &str, today: &str) -> Result<Vec<Outc
             out.push(Outcome::Nothing(format!("cannot create {}: {e}", inbox.display())));
             continue;
         }
-        let path = inbox.join(format!("{today}-session-{}.md", safe_session(session)));
-        match std::fs::write(&path, render(session, today, questions, &routed)) {
-            Ok(()) => out.push(Outcome::Written(path)),
-            Err(e) => out.push(Outcome::Nothing(format!("cannot write {}: {e}", path.display()))),
+        
+        let filename = format!("{today}-session-{}.md", safe_session(session));
+        let path = inbox.join(&filename);
+        if path.exists() {
+            successful_agents.insert(agent.clone());
+            out.push(Outcome::Written(path));
+            continue;
+        }
+
+        let tmp_path = inbox.join(format!("{}.tmp", filename));
+        match std::fs::write(&tmp_path, render(session, today, questions, &routed)) {
+            Ok(()) => {
+                match std::fs::rename(&tmp_path, &path) {
+                    Ok(()) => {
+                        successful_agents.insert(agent.clone());
+                        out.push(Outcome::Written(path));
+                    }
+                    Err(e) => {
+                        let _ = std::fs::remove_file(&tmp_path);
+                        out.push(Outcome::Nothing(format!("cannot rename to {}: {e}", path.display())));
+                    }
+                }
+            }
+            Err(e) => {
+                let _ = std::fs::remove_file(&tmp_path);
+                out.push(Outcome::Nothing(format!("cannot write {}: {e}", tmp_path.display())));
+            }
         }
     }
 
-    // Only when at least one deposit landed. A record consumed after writing nothing is a
-    // session lost to a directory that did not exist.
-    if out.iter().any(|o| matches!(o, Outcome::Written(_))) {
-        let _ = std::fs::remove_file(events_file(root, session));
+    let file = events_file(root, session);
+    if successful_agents.len() == owned.len() {
+        let _ = std::fs::remove_file(file);
+    } else if !successful_agents.is_empty() {
+        let mut remaining = String::new();
+        for (i, event) in record.events.iter().enumerate() {
+            match event {
+                Event::Routed(agent) => {
+                    remaining.push_str(&format!("routed\t{}\n", field(agent)));
+                }
+                Event::Refused { question, looked_like } => {
+                    let in_force = || {
+                        record.events[..i].iter().rev().find_map(|e| match e {
+                            Event::Routed(a) => Some(a.clone()),
+                            _ => None,
+                        })
+                    };
+                    let taken_later = || {
+                        record.events[i..].iter().find_map(|e| match e {
+                            Event::Routed(a) => Some(a.clone()),
+                            _ => None,
+                        })
+                    };
+                    let owner = in_force().or_else(taken_later).or_else(|| crate::boot::last_agent_of(root, session));
+                    
+                    let should_keep = match owner {
+                        Some(ref o) => !successful_agents.contains(o),
+                        None => true,
+                    };
+                    
+                    if should_keep {
+                        remaining.push_str(&format!("refused\t{}\t{}\n", field(question), field(&looked_like.join(", "))));
+                    }
+                }
+            }
+        }
+        let _ = std::fs::write(file, remaining);
     }
+
     Ok(out)
 }
 
@@ -504,6 +563,49 @@ mod tests {
             write_deposit(&root, "s3", "2026-09-01").expect("fine"),
             vec![Outcome::Nothing("the session produced nothing to capture".into())]
         );
-        assert!(!root.join("fleet").join("zed").join("inbox").exists(), "no empty deposit, no empty folder");
+        assert!(!root.join("fleet").join("zed").join("inbox").exists(), "no empty folder");
+    }
+
+    #[test]
+    fn a_partial_write_preserves_the_events_for_the_agent_that_failed() {
+        let root = scratch("partial_write");
+        // agent zed has a base, agent ghost doesn't
+        note_routed(&root, "s-partial", "zed");
+        note_refused(&root, "s-partial", "question 1", &[]);
+        note_routed(&root, "s-partial", "ghost");
+        note_refused(&root, "s-partial", "question 2", &[]);
+
+        let out = write_deposit(&root, "s-partial", "2026-09-14").expect("captures");
+        assert_eq!(out.len(), 2);
+        
+        let zed_deposit = root.join("fleet").join("zed").join("inbox").join("2026-09-14-session-s-partial.md");
+        assert!(zed_deposit.exists(), "zed's deposit should exist");
+        
+        let remaining = read(&root, "s-partial");
+        assert!(!remaining.is_empty(), "events file should not be empty");
+        assert_eq!(remaining.refused(), vec![("question 2".to_string(), vec![])]);
+    }
+
+    #[test]
+    fn a_retry_after_partial_failure_writes_the_remaining_deposit() {
+        let root = scratch("retry_partial");
+        note_routed(&root, "s-retry", "zed");
+        note_refused(&root, "s-retry", "question 1", &[]);
+        note_routed(&root, "s-retry", "ghost");
+        note_refused(&root, "s-retry", "question 2", &[]);
+
+        let _ = write_deposit(&root, "s-retry", "2026-09-14").expect("first capture");
+
+        make_agent(&root, "ghost");
+
+        let _ = write_deposit(&root, "s-retry", "2026-09-14").expect("second capture");
+
+        let ghost_deposit = root.join("fleet").join("ghost").join("inbox").join("2026-09-14-session-s-retry.md");
+        assert!(ghost_deposit.exists(), "ghost's deposit should exist after retry");
+        
+        let zed_deposit = root.join("fleet").join("zed").join("inbox").join("2026-09-14-session-s-retry.md");
+        assert!(zed_deposit.exists(), "zed's deposit should still exist");
+        
+        assert!(!events_file(&root, "s-retry").exists(), "events file should be gone after full success");
     }
 }

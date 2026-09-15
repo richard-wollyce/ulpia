@@ -119,6 +119,112 @@ pub enum Outcome {
     Escalated,
 }
 
+/// Category of an objection in constitutional self-critique.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ObjectionCategory {
+    /// Grounded in explicit mechanisms, invariants, rules, or failure modes.
+    /// Eligible to be marked blocking.
+    Constitutional,
+    /// Constructive improvement or suggestion without invariant violation.
+    /// Non-blocking.
+    Advisory,
+}
+
+impl ObjectionCategory {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            ObjectionCategory::Constitutional => "constitutional",
+            ObjectionCategory::Advisory => "advisory",
+        }
+    }
+}
+
+/// Validates that an objection adheres to constitutional self-critique standards:
+/// - Rejects vague, purely subjective, or ungrounded complaints.
+/// - Classifies objections into `Constitutional` (mechanism-based, invariant-grounded)
+///   versus `Advisory` (constructive stylistic/refactoring suggestions).
+pub fn validate_objection_constitutional(
+    agent_constitution: &str,
+    objection: &str,
+) -> Result<ObjectionCategory, String> {
+    let text = objection.trim();
+    if text.len() < 10 {
+        return Err("objection is too brief to state a concrete mechanism or invariant".into());
+    }
+
+    let lower = text.to_lowercase();
+
+    // Purely subjective/vague phrases without mechanism
+    let vague_starters = [
+        "i don't like the tone",
+        "i don't like this approach",
+        "feels wrong",
+        "feels weird",
+        "looks ugly",
+        "feels a bit wordy",
+        "needs more flair",
+        "not a fan",
+    ];
+    for vague in vague_starters {
+        if lower.contains(vague) && !lower.contains("because") && !lower.contains("violates") {
+            return Err(format!(
+                "objection '{text}' is purely subjective; constitutional critique requires stating a concrete mechanism, failure mode, or invariant"
+            ));
+        }
+    }
+
+    // Mechanism and invariant markers
+    let constitutional_markers = [
+        "invariant",
+        "violates",
+        "violation",
+        "mechanism",
+        "failure mode",
+        "use-after-free",
+        "memory",
+        "leak",
+        "race condition",
+        "concurrency",
+        "deadlock",
+        "overflow",
+        "underflow",
+        "rule",
+        "adr-",
+        "w03",
+        "citation",
+        "unbounded",
+        "backpressure",
+        "correctness",
+        "security",
+        "contract",
+        "broken",
+        "regression",
+        "crash",
+        "panic",
+        "false",
+        "incorrect",
+        "error",
+        "untrue",
+        "claim",
+        "latency",
+    ];
+
+    let matches_marker = constitutional_markers.iter().any(|m| lower.contains(m));
+    let matches_constitution = if !agent_constitution.is_empty() {
+        agent_constitution
+            .lines()
+            .any(|l| !l.trim().is_empty() && lower.contains(&l.trim().to_lowercase()))
+    } else {
+        false
+    };
+
+    if matches_marker || matches_constitution {
+        Ok(ObjectionCategory::Constitutional)
+    } else {
+        Ok(ObjectionCategory::Advisory)
+    }
+}
+
 /// What a reviewer came back with, or did not.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Answer {
@@ -172,6 +278,7 @@ pub enum Error {
     AlreadyBlockedOnce(String, u32),
     AlreadyAccounted(u32, State),
     NotOnPanel(String, String),
+    UnconstitutionalBlocking(String),
     Io(PathBuf, std::io::Error),
 }
 
@@ -239,6 +346,11 @@ impl std::fmt::Display for Error {
                 "{agent} is not on the panel for '{artifact}'. An answer from an agent \
                  nobody asked is not a review; add it to the panel first, which costs its \
                  constitution and says so."
+            ),
+            Error::UnconstitutionalBlocking(msg) => write!(
+                f,
+                "blocking objection refused: a blocking objection must be constitutionally \
+                 grounded in a mechanism, invariant, or failure mode. {msg}"
             ),
             Error::Io(p, e) => write!(f, "{}: {e}", p.display()),
         }
@@ -514,6 +626,14 @@ pub fn record(
                     r.artifact == artifact && r.reviewer == reviewer && r.blocking && r.seq > 0
                 }) {
                     return Err(Error::AlreadyBlockedOnce(reviewer, prior.seq));
+                }
+
+                let category = validate_objection_constitutional("", text)
+                    .map_err(Error::UnconstitutionalBlocking)?;
+                if category != ObjectionCategory::Constitutional {
+                    return Err(Error::UnconstitutionalBlocking(format!(
+                        "objection '{text}' is advisory; blocking objections must be constitutional"
+                    )));
                 }
             }
             let seq = rows
@@ -1057,4 +1177,58 @@ mod tests {
         let rows = load(&path_in(&root));
         assert!(ledger(&rows, "a.md").silent().is_empty(), "{rows:?}");
     }
+
+    #[test]
+    fn test_validate_objection_constitutional_rejects_vague_or_pure_stylistic() {
+        assert!(validate_objection_constitutional("", "bad").is_err());
+        assert!(validate_objection_constitutional("", "I don't like the tone").is_err());
+        assert!(validate_objection_constitutional("", "feels a bit wordy, simplify it").is_err());
+    }
+
+    #[test]
+    fn test_validate_objection_constitutional_accepts_mechanism_grounded() {
+        let res = validate_objection_constitutional(
+            "",
+            "Violates memory invariant: borrows across yield point can cause use-after-free",
+        );
+        assert_eq!(res, Ok(ObjectionCategory::Constitutional));
+
+        let res2 = validate_objection_constitutional(
+            "",
+            "Missing citation for benchmark claim violates rule W03 and verification integrity",
+        );
+        assert_eq!(res2, Ok(ObjectionCategory::Constitutional));
+
+        let res3 = validate_objection_constitutional(
+            "",
+            "Consider renaming the variable for clearer readability in future refactoring",
+        );
+        assert_eq!(res3, Ok(ObjectionCategory::Advisory));
+    }
+
+    #[test]
+    fn test_blocking_objection_requires_constitutional_grounding() {
+        let root = scratch("constitutional-blocking");
+        open(&root, "a.md", "goldoni", &["zed".into()], "2026-09-04").expect("open");
+
+        // Vague blocking objection must be refused by constitutional validator
+        let vague_blocking = Answer::Objection {
+            text: "I don't like this approach, feels wrong".into(),
+            blocking: true,
+        };
+        let err = record(&root, "a.md", "zed", &vague_blocking, "2026-09-04");
+        assert!(
+            matches!(err, Err(Error::UnconstitutionalBlocking(_))),
+            "vague blocking objection must be rejected: {err:?}"
+        );
+
+        // Grounded blocking objection must be accepted
+        let grounded_blocking = Answer::Objection {
+            text: "Unbounded memory allocation in loop without backpressure violates memory invariant".into(),
+            blocking: true,
+        };
+        let ok = record(&root, "a.md", "zed", &grounded_blocking, "2026-09-04");
+        assert!(ok.is_ok(), "grounded blocking objection must be accepted");
+    }
 }
+

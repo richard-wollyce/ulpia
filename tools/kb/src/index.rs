@@ -80,7 +80,7 @@ pub struct Hit<'a> {
 /// being frequent is not. Every extension re-runs `kb eval` before it lands;
 /// this one was measured at file 18/19 and agent 12/13, unchanged from before
 /// the extension, with the three live misroutes all corrected.
-const STOPWORDS: &[&str] = &[
+pub const STOPWORDS: &[&str] = &[
     // English: articles, copulas, auxiliaries, modals
     "the", "a", "an", "is", "are", "was", "were", "am", "be", "been", "being",
     "do", "does", "did", "have", "has", "had", "will", "would", "can", "could",

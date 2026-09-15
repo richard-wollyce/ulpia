@@ -543,9 +543,25 @@ pub fn evidence_for(memory: &Memory, proposal: &Proposal, top: usize) -> String 
 
 /// The reviewer's prompt.
 ///
-/// Built from [`Proposal`] and [`evidence_for`] and nothing else, which is what keeps
-/// promoter one's reasoning out of it.
-pub fn review_prompt(proposal: &Proposal, evidence: &str, lens: Lens) -> String {
+/// Built from [`Proposal`], [`evidence_for`], and optional prior rejection history,
+/// which keeps promoter one's reasoning out of it while carrying empirical failure evidence.
+pub fn review_prompt(
+    proposal: &Proposal,
+    evidence: &str,
+    lens: Lens,
+    prior: Option<&PriorRejection>,
+) -> String {
+    let prior_block = match prior {
+        Some(p) if !p.reason.trim().is_empty() => format!(
+            "PRIOR REJECTION UNDER THIS LENS ({count} time(s), last {date}):\n\
+             \"{reason}\"\n\
+             Judge whether this proposal resolves the previous objection or repeats the defect.\n\n",
+            count = p.count,
+            date = p.last_seen,
+            reason = p.reason.trim()
+        ),
+        _ => String::new(),
+    };
     format!(
         "You are reviewing ONE proposed note against a knowledge base that already exists. \
          You did not write it and you are not being shown who did or why. Judge the note and \
@@ -558,6 +574,7 @@ pub fn review_prompt(proposal: &Proposal, evidence: &str, lens: Lens) -> String 
          keys: {keys}\n\
          ---\n{body}\n---\n\n\
          {evidence}\n\
+         {prior_block}\
          Answer in exactly two lines and nothing else:\n\
          VERDICT: accept\n\
          REASON: one sentence\n\n\
@@ -574,6 +591,7 @@ pub fn review_prompt(proposal: &Proposal, evidence: &str, lens: Lens) -> String 
         keys = proposal.keys.join(", "),
         body = proposal.body,
         evidence = evidence,
+        prior_block = prior_block,
     )
 }
 
@@ -744,6 +762,75 @@ pub fn record_rejection(fleet_root: &Path, decided: &Decided, today: &str) {
     let _ = std::fs::write(&path, out);
 }
 
+/// A parsed record of a previously refused proposal from `kb-rejections.txt`.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PriorRejection {
+    pub count: usize,
+    pub first_seen: String,
+    pub last_seen: String,
+    pub agent: String,
+    pub slug: String,
+    pub lens: String,
+    pub reason: String,
+}
+
+impl PriorRejection {
+    /// Serializes this rejection into a structured JSON value.
+    pub fn as_json(&self) -> crate::json::Value {
+        let mut obj = crate::json::Value::obj();
+        obj.set("count", crate::json::Value::Num(self.count as f64));
+        obj.set("first_seen", crate::json::Value::Str(self.first_seen.clone()));
+        obj.set("last_seen", crate::json::Value::Str(self.last_seen.clone()));
+        obj.set("agent", crate::json::Value::Str(self.agent.clone()));
+        obj.set("slug", crate::json::Value::Str(self.slug.clone()));
+        obj.set("lens", crate::json::Value::Str(self.lens.clone()));
+        obj.set("reason", crate::json::Value::Str(self.reason.clone()));
+        obj
+    }
+}
+
+/// Reads and parses all prior rejections recorded in `kb-rejections.txt`.
+pub fn read_rejections(fleet_root: &Path) -> Vec<PriorRejection> {
+    let path = fleet_root.join(REJECTIONS_TXT);
+    let text = match std::fs::read_to_string(path) {
+        Ok(t) => t,
+        Err(_) => return Vec::new(),
+    };
+    parse_rejections(&text)
+}
+
+/// Parses the tab-separated rows of `kb-rejections.txt`.
+pub fn parse_rejections(text: &str) -> Vec<PriorRejection> {
+    let mut out = Vec::new();
+    for line in text.lines() {
+        let line = line.trim();
+        if line.starts_with('#') || line.is_empty() {
+            continue;
+        }
+        let parts: Vec<&str> = line.split('\t').collect();
+        // count, first, last, agent, slug, lens, reason
+        if parts.len() >= 7 {
+            let count = parts[0].trim().parse::<usize>().unwrap_or(1);
+            let first_seen = parts[1].trim().to_string();
+            let last_seen = parts[2].trim().to_string();
+            let agent = parts[3].trim().to_string();
+            let slug = parts[4].trim().to_string();
+            let lens = parts[5].trim().to_string();
+            let reason = parts[6..].join("\t").trim().to_string();
+            out.push(PriorRejection {
+                count,
+                first_seen,
+                last_seen,
+                agent,
+                slug,
+                lens,
+                reason,
+            });
+        }
+    }
+    out
+}
+
 // -- the run -----------------------------------------------------------------
 
 /// `ends = ` from an agent's card, read here rather than threaded through `Memory` because
@@ -881,6 +968,7 @@ pub fn run(
     only: Option<&Path>,
 ) -> Outcome {
     let mut outcome = Outcome::default();
+    let mut prior_rejections = read_rejections(fleet_root);
 
     // The roster is taken once, by value, and the loop walks that rather than the memory.
     // **This is what lets the memory be re-read mid run**, which the duplication lens needs
@@ -973,6 +1061,41 @@ pub fn run(
                     };
                     if !dry_run {
                         record_rejection(fleet_root, &decided, today);
+                        prior_rejections = read_rejections(fleet_root);
+                    }
+                    outcome.decided.push(decided);
+                    continue;
+                }
+
+                let proposal_priors: Vec<&PriorRejection> = prior_rejections
+                    .iter()
+                    .filter(|r| r.agent.eq_ignore_ascii_case(&proposal.agent) && r.slug == proposal.slug)
+                    .collect();
+
+                // Deterministic repetition filter: if this exact (agent, slug) proposal was repeatedly
+                // refused (3 or more times) under the same lens, refuse it immediately without burning
+                // model calls. (Inspired by auto_improve rejection memory).
+                if let Some(repeat) = proposal_priors.iter().find(|r| r.count >= 3) {
+                    let lens = match repeat.lens.as_str() {
+                        "contradiction" => Lens::Contradiction,
+                        "scope" => Lens::Scope,
+                        _ => Lens::Duplication,
+                    };
+                    let decided = Decided {
+                        proposal,
+                        reviews: vec![Review {
+                            lens,
+                            accept: false,
+                            reason: format!(
+                                "deterministic repetition filter: refused {} times (last {}): {}",
+                                repeat.count, repeat.last_seen, repeat.reason
+                            ),
+                        }],
+                        written: None,
+                    };
+                    if !dry_run {
+                        record_rejection(fleet_root, &decided, today);
+                        prior_rejections = read_rejections(fleet_root);
                     }
                     outcome.decided.push(decided);
                     continue;
@@ -984,7 +1107,11 @@ pub fn run(
                 let mut reviews = Vec::new();
                 let mut reachable = true;
                 for lens in Lens::ALL {
-                    let p = review_prompt(&proposal, &evidence, lens);
+                    let prior_for_lens = proposal_priors
+                        .iter()
+                        .find(|r| r.lens.eq_ignore_ascii_case(lens.name()))
+                        .copied();
+                    let p = review_prompt(&proposal, &evidence, lens, prior_for_lens);
                     match ask_model(reviewer, fleet_root, &p) {
                         Some(r) => reviews.push(parse_review(&r, lens)),
                         None => {
@@ -1066,11 +1193,13 @@ pub fn run(
                                 reason: format!("refused at the write: {e}"),
                             });
                             record_rejection(fleet_root, &decided, today);
+                            prior_rejections = read_rejections(fleet_root);
                         }
                         Err(e) => outcome.unreachable.push(format!("write {}: {e}", decided.proposal.slug)),
                     }
                 } else if !decided.accepted() && !dry_run {
                     record_rejection(fleet_root, &decided, today);
+                    prior_rejections = read_rejections(fleet_root);
                 }
 
                 outcome.decided.push(decided);
@@ -1382,5 +1511,59 @@ mod tests {
         assert_eq!(got[0].keys, vec!["sono", "sleep", "dormir"]);
         assert_eq!(got[0].body, "Eight hours.");
         assert_eq!(got[0].agent, "yaron");
+    }
+
+    #[test]
+    fn parse_rejections_reads_lines_and_ignores_comments() {
+        let sample = "\
+# Header comment
+# count, first, last, agent, slug, lens, reason
+16\t2026-08-21\t2026-09-04\tapelles\tattention-and-symbols\tduplication\talready holds this
+2\t2026-09-01\t2026-09-02\tzed\trust-ownership\tcontradiction\tconflicts with borrow checker
+";
+        let parsed = parse_rejections(sample);
+        assert_eq!(parsed.len(), 2);
+        assert_eq!(parsed[0].count, 16);
+        assert_eq!(parsed[0].first_seen, "2026-08-21");
+        assert_eq!(parsed[0].last_seen, "2026-09-04");
+        assert_eq!(parsed[0].agent, "apelles");
+        assert_eq!(parsed[0].slug, "attention-and-symbols");
+        assert_eq!(parsed[0].lens, "duplication");
+        assert_eq!(parsed[0].reason, "already holds this");
+
+        assert_eq!(parsed[1].count, 2);
+        assert_eq!(parsed[1].agent, "zed");
+        assert_eq!(parsed[1].slug, "rust-ownership");
+        assert_eq!(parsed[1].lens, "contradiction");
+        assert_eq!(parsed[1].reason, "conflicts with borrow checker");
+    }
+
+    #[test]
+    fn review_prompt_includes_prior_rejection_context() {
+        let proposal = Proposal {
+            agent: "zed".into(),
+            slug: "rust-ownership".into(),
+            folder: "knowledge/languages".into(),
+            summary: "Rust ownership".into(),
+            keys: vec!["rust".into(), "ownership".into()],
+            body: "Content".into(),
+            source: "zed/inbox/notes.md".into(),
+        };
+        let evidence = "Some evidence from base";
+        let prompt_without = review_prompt(&proposal, evidence, Lens::Duplication, None);
+        assert!(!prompt_without.contains("PRIOR REJECTION UNDER THIS LENS"));
+
+        let prior = PriorRejection {
+            count: 2,
+            first_seen: "2026-09-10".into(),
+            last_seen: "2026-09-12".into(),
+            agent: "zed".into(),
+            slug: "rust-ownership".into(),
+            lens: "duplication".into(),
+            reason: "file already covers ownership".into(),
+        };
+        let prompt_with = review_prompt(&proposal, evidence, Lens::Duplication, Some(&prior));
+        assert!(prompt_with.contains("PRIOR REJECTION UNDER THIS LENS (2 time(s), last 2026-09-12)"));
+        assert!(prompt_with.contains("file already covers ownership"));
     }
 }

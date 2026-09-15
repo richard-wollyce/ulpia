@@ -216,6 +216,97 @@ pub fn without_machine_blocks(prompt: &str) -> String {
     strip_blocks(&s, "<task-notification>", "</task-notification>")
 }
 
+/// Decomposes a compound or multi-clause prompt into atomic sub-questions.
+/// Splits on punctuation marks (?, ;, newlines) and multi-clause conjunctions
+/// (e.g. " e como ", " and what ", " alem disso ", " furthermore ").
+pub fn decompose_query(prompt: &str) -> Vec<String> {
+    let clean = prompt.trim();
+    if clean.is_empty() {
+        return Vec::new();
+    }
+
+    // Punctuation split: newlines, semicolons, question marks
+    let mut clauses: Vec<String> = Vec::new();
+    for line in clean.lines() {
+        let line = line.trim();
+        if line.is_empty() {
+            continue;
+        }
+        for chunk in line.split(&['?', ';', '!'][..]) {
+            let chunk = chunk.trim();
+            if !chunk.is_empty() {
+                clauses.push(chunk.to_string());
+            }
+        }
+    }
+
+    // Conjunction patterns within clauses
+    let conjunctions = [
+        " e como ",
+        " e qual ",
+        " e quanto ",
+        " e onde ",
+        " e por que ",
+        " e quem ",
+        " alem disso ",
+        " além disso ",
+        " and how ",
+        " and what ",
+        " and why ",
+        " and where ",
+        " and when ",
+        " and who ",
+        " furthermore ",
+        " moreover ",
+    ];
+
+    let mut expanded = Vec::new();
+    for clause in clauses {
+        let mut sub_parts = vec![clause];
+        for conj in &conjunctions {
+            let mut next_parts = Vec::new();
+            for part in sub_parts {
+                let lower = part.to_lowercase();
+                if let Some(idx) = lower.find(conj) {
+                    let first = part[..idx].trim().to_string();
+                    let second = part[idx + conj.len() - conj.trim_start().len()..].trim().to_string();
+                    if !first.is_empty() {
+                        next_parts.push(first);
+                    }
+                    if !second.is_empty() {
+                        next_parts.push(second);
+                    }
+                } else {
+                    next_parts.push(part);
+                }
+            }
+            sub_parts = next_parts;
+        }
+        expanded.extend(sub_parts);
+    }
+
+    // Filter and clean sub-parts
+    let filtered: Vec<String> = expanded
+        .into_iter()
+        .map(|s| {
+            let mut t = s.trim();
+            if let Some(rest) = t.strip_prefix("and ") {
+                t = rest.trim();
+            } else if let Some(rest) = t.strip_prefix("e ") {
+                t = rest.trim();
+            }
+            t.trim_matches(|c: char| !c.is_alphanumeric() && c != ' ' && c != '?').trim().to_string()
+        })
+        .filter(|s| s.chars().count() >= 10 && s.split_whitespace().count() >= 2)
+        .collect();
+
+    if filtered.is_empty() {
+        vec![clean.to_string()]
+    } else {
+        filtered
+    }
+}
+
 /// Routes one message and produces what the runtime should inject.
 pub fn brief(memory: &Memory, root: &Path, req: &Request, top: usize) -> Briefing {
     // An empty prompt is a session opening rather than a question. Routing it would rank
@@ -345,9 +436,53 @@ pub fn brief(memory: &Memory, root: &Path, req: &Request, top: usize) -> Briefin
         .as_ref()
         .is_some_and(|v| v.reason == crate::classify::FellBack::DidNotAnswer.reason());
 
-    let chosen = verdict.as_ref().and_then(|v| v.owner.clone());
-    let panel: Vec<crate::classify::Reviewer> =
+    let mut chosen = verdict.as_ref().and_then(|v| v.owner.clone());
+    let mut panel: Vec<crate::classify::Reviewer> =
         verdict.as_ref().map(|v| v.reviewers.clone()).unwrap_or_default();
+
+    let subqueries = decompose_query(&asked);
+    let mut decomposition_note = String::new();
+
+    if subqueries.len() > 1 {
+        let mut sub_routed: Vec<(String, String)> = Vec::new();
+        for sub in &subqueries {
+            let sub_ans = memory.ask(sub, top);
+            if sub_ans.confidence.verdict == Verdict::Hit {
+                if let Some(agent_choice) = sub_ans.agent {
+                    let agent_name = agent_choice.agent;
+                    if !sub_routed.iter().any(|(a, _)| a.eq_ignore_ascii_case(&agent_name)) {
+                        sub_routed.push((agent_name, sub.clone()));
+                    }
+                }
+            }
+        }
+
+        if sub_routed.len() > 1 {
+            if chosen.is_none() {
+                chosen = Some(sub_routed[0].0.clone());
+            }
+            let primary = chosen.clone().unwrap_or_else(|| sub_routed[0].0.clone());
+            for (sub_agent, sub_q) in &sub_routed {
+                if !sub_agent.eq_ignore_ascii_case(&primary)
+                    && !panel.iter().any(|r| r.agent.eq_ignore_ascii_case(sub_agent))
+                {
+                    panel.push(crate::classify::Reviewer {
+                        agent: sub_agent.clone(),
+                        why: format!("cross-domain sub-question: {sub_q}"),
+                    });
+                }
+            }
+            decomposition_note = format!(
+                "VESTA: decomposed compound inquiry across {} domains:\n{}",
+                sub_routed.len(),
+                sub_routed
+                    .iter()
+                    .map(|(a, q)| format!("  - [{a}]: \"{q}\""))
+                    .collect::<Vec<_>>()
+                    .join("\n")
+            );
+        }
+    }
 
     let Some(agent) = chosen else {
         // **No agent owns it, and that has two meanings the fleet used to run together.**
@@ -507,6 +642,30 @@ pub fn brief(memory: &Memory, root: &Path, req: &Request, top: usize) -> Briefin
              keyword score alone. Routing is degraded, not stopped. Say so if the choice \
              looks wrong.\n\n",
         );
+    }
+
+    // Handoff continuity: if a recent handoff exists for this session or agent,
+    // inject its summary into the briefing.
+    let handoff = req
+        .session
+        .as_deref()
+        .and_then(|s| crate::handoff::load(root, s))
+        .or_else(|| {
+            if switched {
+                crate::handoff::latest(root)
+            } else {
+                None
+            }
+        });
+
+    if let Some(h) = handoff {
+        text.push_str(&h.format_for_briefing(2000));
+        text.push_str("\n\n");
+    }
+
+    if !decomposition_note.is_empty() {
+        text.push_str(&decomposition_note);
+        text.push_str("\n\n");
     }
 
     // **The panel, when the router judged there is one, and it is an instruction rather
@@ -950,10 +1109,13 @@ mod tests {
         );
     }
 
+    static EMPTY_MEMORY_COUNTER: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+
     /// A base with nothing in it, for the tests whose vouched file already carries
     /// passages and so never reaches the disk.
     fn empty_memory() -> Memory {
-        let root = std::env::temp_dir().join(format!("kb-brief-{}", std::process::id()));
+        let count = EMPTY_MEMORY_COUNTER.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        let root = std::env::temp_dir().join(format!("kb-brief-{}-{}", std::process::id(), count));
         let agent = root.join("fleet").join("zed");
         std::fs::create_dir_all(agent.join("knowledge")).expect("dirs");
         std::fs::write(agent.join("agent.txt"), "name = Zed
@@ -1461,4 +1623,121 @@ body
         remember_agent(&dir, "s1", "yaron");
         assert_eq!(last_agent(&dir, "s1").as_deref(), Some("yaron"), "a switch is recorded");
     }
+
+    #[test]
+    fn a_boot_briefing_includes_handoff_continuity_when_present() {
+        let root = std::env::temp_dir().join(format!("kb-boot-handoff-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&root);
+        let agent = root.join("fleet").join("zed");
+        std::fs::create_dir_all(agent.join("knowledge")).expect("scratch");
+        std::fs::write(agent.join("agent.txt"), "name = Zed\nrole = software\n").expect("agent");
+        std::fs::write(
+            agent.join("knowledge").join("architecture.md"),
+            "# Architecture\n\n**Search for:** `rust`, `systems`, `compiler`\n\n**Exists to:** architecture\n\nRust compiler architecture.\n",
+        )
+        .expect("note");
+        std::fs::write(
+            agent.join("knowledge").join("craft.md"),
+            "# Craft\n\n**Search for:** `testing`, `tdd`, `refactoring`\n\n**Exists to:** craft\n\nTesting craft.\n",
+        )
+        .expect("note");
+        let memory = Memory::open(&[root.as_path()], true).expect("opens");
+
+        let record = crate::handoff::HandoffRecord {
+            session: "s-handoff".into(),
+            agent: "zed".into(),
+            task: "Build feature X with TDD".into(),
+            decisions: vec!["Store in .kb/sessions".into()],
+            blockers: vec!["None".into()],
+            next_steps: vec!["Implement green phase".into()],
+            references: vec![],
+            updated_at: "2026-09-14".into(),
+        };
+        crate::handoff::save(&root, &record).expect("save handoff");
+
+        let req = Request {
+            prompt: "como construir em rust".into(),
+            session: Some("s-handoff".into()),
+            cwd: None,
+        };
+        let brief = brief(&memory, &root, &req, 5);
+
+        assert!(
+            brief.text.contains("VESTA: CONTINUITY (session s-handoff):"),
+            "expected continuity header in briefing text: {}",
+            brief.text
+        );
+        assert!(
+            brief.text.contains("Active task: Build feature X with TDD"),
+            "expected active task in briefing text: {}",
+            brief.text
+        );
+    }
+
+    #[test]
+    fn test_decompose_query_splits_on_compound_conjunctions_and_punctuation() {
+        let compound = "como compilar rust para webassembly e como precificar o aplicativo para lancamento";
+        let parts = decompose_query(compound);
+        assert_eq!(parts.len(), 2);
+        assert!(parts[0].contains("como compilar rust para webassembly"));
+        assert!(parts[1].contains("como precificar o aplicativo"));
+
+        let punctuated = "how to optimize sqlite index? and what is our marketing strategy?";
+        let parts2 = decompose_query(punctuated);
+        assert_eq!(parts2.len(), 2);
+        assert!(parts2[0].contains("how to optimize sqlite index"));
+        assert!(parts2[1].contains("what is our marketing strategy"));
+
+        let single = "como funciona o borrow checker";
+        let parts3 = decompose_query(single);
+        assert_eq!(parts3.len(), 1);
+        assert_eq!(parts3[0], "como funciona o borrow checker");
+    }
+
+    #[test]
+    fn test_brief_decomposes_multi_domain_query_and_convenes_panel() {
+        let root = std::env::temp_dir().join(format!("kb-test-boot-decomp-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&root);
+
+        let zed = root.join("fleet").join("zed");
+        std::fs::create_dir_all(zed.join("knowledge")).expect("scratch");
+        std::fs::write(zed.join("agent.txt"), "name = Zed\nrole = systems architect\n").expect("agent");
+        std::fs::write(
+            zed.join("knowledge").join("compiler.md"),
+            "# Compiler\n\n**Search for:** `rust`, `compiler`, `webassembly`\n\n**Exists to:** compiler\n\nRust compiler and wasm.\n",
+        )
+        .expect("note");
+
+        let steve = root.join("fleet").join("steve");
+        std::fs::create_dir_all(steve.join("knowledge")).expect("scratch");
+        std::fs::write(steve.join("agent.txt"), "name = Steve\nrole = business and marketing\n").expect("agent");
+        std::fs::write(
+            steve.join("knowledge").join("pricing.md"),
+            "# Pricing\n\n**Search for:** `precificacao`, `pricing`, `marketing`\n\n**Exists to:** pricing\n\nPricing strategy.\n",
+        )
+        .expect("note");
+
+        let memory = Memory::open(&[root.as_path()], true).expect("opens");
+
+        let req = Request {
+            prompt: "como compilar rust para webassembly e como precificar produto com marketing".into(),
+            session: None,
+            cwd: None,
+        };
+
+        let brief = brief(&memory, &root, &req, 5);
+
+        assert_eq!(brief.agent, Some("zed".into()));
+        assert!(
+            brief.panel.iter().any(|r| r.agent.eq_ignore_ascii_case("steve")),
+            "expected steve on panel due to query decomposition: {:?}",
+            brief.panel
+        );
+        assert!(
+            brief.text.contains("decomposed compound inquiry") || brief.text.contains("cross-domain"),
+            "expected decomposition mention in briefing text: {}",
+            brief.text
+        );
+    }
 }
+

@@ -34,6 +34,10 @@ pub struct Chunk {
     /// carries context the chunk itself usually does not repeat.
     pub heading_path: String,
     pub text: String,
+    /// Parent heading in the document hierarchy, if any.
+    pub parent_heading: Option<String>,
+    /// Chunk sequence index within the section.
+    pub sequence: usize,
 }
 
 // ---------------------------------------------------------------------------
@@ -74,7 +78,7 @@ pub fn chunk(text: &str) -> Vec<Chunk> {
         // A `#` inside a fenced block is a comment in someone's code, not a heading.
         if !in_fence {
             if let Some((level, title)) = heading(line) {
-                flush(&mut buffer, &path_of(&stack), &mut out);
+                flush(&mut buffer, &stack, &mut out);
                 stack.retain(|(l, _)| *l < level);
                 stack.push((level, title));
                 continue;
@@ -95,7 +99,7 @@ pub fn chunk(text: &str) -> Vec<Chunk> {
         buffer.push(line);
     }
 
-    flush(&mut buffer, &path_of(&stack), &mut out);
+    flush(&mut buffer, &stack, &mut out);
     out
 }
 
@@ -151,7 +155,7 @@ fn path_of(stack: &[(usize, String)]) -> String {
         .join(" > ")
 }
 
-fn flush(buffer: &mut Vec<&str>, heading_path: &str, out: &mut Vec<Chunk>) {
+fn flush(buffer: &mut Vec<&str>, stack: &[(usize, String)], out: &mut Vec<Chunk>) {
     let body = buffer.join("\n");
     buffer.clear();
 
@@ -160,11 +164,92 @@ fn flush(buffer: &mut Vec<&str>, heading_path: &str, out: &mut Vec<Chunk>) {
         return;
     }
 
-    for window in windows(body) {
+    let heading_path = path_of(stack);
+    let parent_heading = if stack.len() > 1 {
+        stack.get(stack.len() - 2).map(|(_, title)| title.clone())
+    } else {
+        None
+    };
+
+    for (seq, window) in windows(body).into_iter().enumerate() {
         out.push(Chunk {
-            heading_path: heading_path.to_string(),
+            heading_path: heading_path.clone(),
             text: window,
+            parent_heading: parent_heading.clone(),
+            sequence: seq,
         });
+    }
+}
+
+/// Expands a chunk within its document context to return a larger surrounding window
+/// (small-to-big retrieval context), stopping at section boundaries or window_chars limit.
+pub fn expand_window(document: &str, chunk_text: &str, window_chars: usize) -> String {
+    let needle = chunk_text.trim();
+    if needle.is_empty() {
+        return chunk_text.to_string();
+    }
+
+    let Some(target_idx) = document.find(needle) else {
+        return chunk_text.to_string();
+    };
+
+    let target_end = target_idx + needle.len();
+
+    // Section boundary search: find enclosing section start and end.
+    // A section start is the preceding heading (`\n#` or start of document).
+    let doc_before = &document[..target_idx];
+    let section_start = doc_before
+        .rfind("\n#")
+        .map(|idx| idx + 1)
+        .unwrap_or(0);
+
+    let doc_after = &document[target_end..];
+    let section_end = doc_after
+        .find("\n#")
+        .map(|idx| target_end + idx)
+        .unwrap_or(document.len());
+
+    let section_text = &document[section_start..section_end];
+    if section_text.len() <= window_chars {
+        return section_text.trim().to_string();
+    }
+
+    // If section exceeds window_chars, expand outwards around target within the section,
+    // snapping to paragraph boundaries (\n\n).
+    let target_in_section = target_idx - section_start;
+    let target_end_in_section = target_end - section_start;
+
+    let mut start = target_in_section;
+    let mut end = target_end_in_section;
+
+    // Look backwards for paragraph boundary
+    let before_target = &section_text[..start];
+    if let Some(p) = before_target.rfind("\n\n") {
+        let candidate = p + 2;
+        if (end - candidate) <= window_chars {
+            start = candidate;
+        }
+    } else {
+        start = 0;
+    }
+
+    // Look forwards for paragraph boundary
+    let after_target = &section_text[end..];
+    if let Some(p) = after_target.find("\n\n") {
+        let candidate = end + p;
+        if (candidate - start) <= window_chars {
+            end = candidate;
+        }
+    } else {
+        end = section_text.len();
+    }
+
+    // If still larger than window_chars, truncate cleanly
+    if (end - start) > window_chars {
+        let bounded_end = (start + window_chars).min(section_text.len());
+        section_text[start..bounded_end].trim().to_string()
+    } else {
+        section_text[start..end].trim().to_string()
     }
 }
 
@@ -1121,4 +1206,35 @@ body
 
         assert_eq!(lag, vec!["inbox/2026-09-01-session-abc.md"]);
     }
+
+    #[test]
+    fn test_chunk_records_hierarchy_and_sequence() {
+        let text = "# Top Level\n\nIntro text.\n\n## Child Section\n\nChild text paragraph 1.\n\nChild text paragraph 2.\n";
+        let chunks = chunk(text);
+        assert_eq!(chunks.len(), 2);
+        assert_eq!(chunks[0].heading_path, "Top Level");
+        assert_eq!(chunks[0].parent_heading, None);
+        assert_eq!(chunks[0].sequence, 0);
+
+        assert_eq!(chunks[1].heading_path, "Top Level > Child Section");
+        assert_eq!(chunks[1].parent_heading, Some("Top Level".to_string()));
+        assert_eq!(chunks[1].sequence, 0);
+    }
+
+    #[test]
+    fn test_expand_window_expands_to_section_and_paragraph_boundaries() {
+        let doc = "# Architecture\n\nOverview paragraph.\n\n## Storage Layer\n\nParagraph 1: SQLite FTS5 index.\n\nParagraph 2: BM25 score calculation.\n\nParagraph 3: Windowing context assembly.\n\n## Network Layer\n\nRemote endpoints.\n";
+        // Search target is a small slice from paragraph 2
+        let target = "Paragraph 2: BM25 score calculation.";
+        let expanded = expand_window(doc, target, 500);
+
+        // Should expand to include surrounding paragraphs within the section boundary
+        assert!(expanded.contains("Paragraph 1: SQLite FTS5 index."));
+        assert!(expanded.contains("Paragraph 2: BM25 score calculation."));
+        assert!(expanded.contains("Paragraph 3: Windowing context assembly."));
+        // Should not bleed into next section
+        assert!(!expanded.contains("## Network Layer"));
+        assert!(!expanded.contains("Remote endpoints."));
+    }
 }
+

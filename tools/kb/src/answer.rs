@@ -96,6 +96,89 @@ impl Mode {
 /// derived from this.
 pub const BATCH: usize = 10;
 
+/// Maximum characters allowed for a single section window in prompt assembly.
+/// Keeps individual sections bounded while allowing complete paragraph context (~450 tokens).
+pub const MAX_SECTION_WINDOW: usize = 1800;
+
+/// Merges and bounds passages belonging to the same file.
+/// When chunks share a heading path, their text is consolidated by merging overlaps
+/// so the reader model receives a continuous section window rather than fragmented,
+/// duplicated chunks (Small-to-Big context assembly).
+pub fn assemble_passages(
+    passages: &[crate::retrieve::Passage],
+    max_passages: usize,
+) -> Vec<crate::retrieve::Passage> {
+    let mut out: Vec<crate::retrieve::Passage> = Vec::new();
+
+    for p in passages.iter().take(max_passages) {
+        if let Some(existing) = out.iter_mut().find(|e| {
+            e.heading_path == p.heading_path && e.captured_from == p.captured_from
+        }) {
+            existing.text = merge_chunk_text(&existing.text, &p.text);
+        } else {
+            out.push(p.clone());
+        }
+    }
+
+    for p in &mut out {
+        if p.text.len() > MAX_SECTION_WINDOW {
+            p.text = cap_window_cleanly(&p.text, MAX_SECTION_WINDOW);
+        }
+    }
+
+    out
+}
+
+/// Merges two text chunks from the same section, detecting and eliminating overlap.
+fn merge_chunk_text(first: &str, second: &str) -> String {
+    let first = first.trim();
+    let second = second.trim();
+
+    if first.contains(second) {
+        return first.to_string();
+    }
+    if second.contains(first) {
+        return second.to_string();
+    }
+
+    // Check for overlap: find the largest suffix of first that is a prefix of second.
+    let min_len = 10;
+    let max_overlap = first.len().min(second.len());
+    let mut overlap_size = 0;
+
+    for len in (min_len..=max_overlap).rev() {
+        if first.ends_with(&second[..len]) {
+            overlap_size = len;
+            break;
+        }
+    }
+
+    if overlap_size > 0 {
+        format!("{}\n{}", first, &second[overlap_size..].trim_start())
+    } else {
+        format!("{}\n\n{}", first, second)
+    }
+}
+
+/// Truncates an oversized section window cleanly at a paragraph or sentence boundary.
+fn cap_window_cleanly(text: &str, max_len: usize) -> String {
+    if text.len() <= max_len {
+        return text.to_string();
+    }
+    let slice = &text[..max_len];
+    if let Some(pos) = slice.rfind("\n\n") {
+        if pos > max_len / 2 {
+            return slice[..pos].trim().to_string();
+        }
+    }
+    if let Some(pos) = slice.rfind(". ") {
+        if pos > max_len / 2 {
+            return format!("{}.", slice[..pos].trim());
+        }
+    }
+    slice.trim().to_string()
+}
+
 /// The prompt, assembled from retrieval's output and nothing else.
 ///
 /// The model is told what the librarian knows: which files answered, how confidently,
@@ -144,7 +227,8 @@ pub fn prompt(question: &str, answer: &Answer, mode: Mode) -> String {
             crate::retrieve::Layer::Short => " [SHORT MEMORY: recent, not distilled]",
             crate::retrieve::Layer::Long => "",
         };
-        for p in f.passages.iter().take(mode.passages()) {
+        let assembled = assemble_passages(&f.passages, mode.passages());
+        for p in assembled {
             // The document the note was distilled from, when the note records one. Asked
             // "which document does this come from, who wrote it, what year", a base whose
             // notes all carried that in front matter answered that it did not record such
@@ -482,4 +566,63 @@ mod tests {
             "the caller can check citations against what was served"
         );
     }
+
+    #[test]
+    fn test_small_to_big_section_window_merges_contiguous_chunks() {
+        let mut h = hit("zed", "knowledge/allocator.md", "chunk 1");
+        h.passages = vec![
+            crate::retrieve::Passage {
+                captured_from: None,
+                heading_path: "Memory > Allocator".into(),
+                text: "Part 1: Linux buddy allocator. Page tables manage 4KB frames.".into(),
+                excerpt: String::new(),
+                provenance: None,
+                stage: None,
+            },
+            crate::retrieve::Passage {
+                captured_from: None,
+                heading_path: "Memory > Allocator".into(),
+                text: "Page tables manage 4KB frames. Part 2: Slab cache handles smaller objects.".into(),
+                excerpt: String::new(),
+                provenance: None,
+                stage: None,
+            },
+        ];
+        let a = answer_with(vec![h], Verdict::Hit, 30.0);
+        let p = prompt("como funciona o alocador", &a, Mode::Fast);
+
+        // Should only have one section header for Memory > Allocator, not two
+        let occurrences = p.matches("--- zed/knowledge/allocator.md (Memory > Allocator)").count();
+        assert_eq!(occurrences, 1, "contiguous chunks under same heading should merge: {p}");
+
+        // Overlap should be merged without repetition
+        let overlap_count = p.matches("Page tables manage 4KB frames.").count();
+        assert_eq!(overlap_count, 1, "overlapping sentence should not repeat: {p}");
+
+        // Both parts should be present
+        assert!(p.contains("Part 1: Linux buddy allocator."));
+        assert!(p.contains("Part 2: Slab cache handles smaller objects."));
+    }
+
+    #[test]
+    fn test_small_to_big_section_window_caps_oversized_section() {
+        let para = "This is a detailed paragraph explaining runtime semantics and safety invariants.\n\n";
+        let large_text = para.repeat(50); // ~4000 characters
+        let mut h = hit("zed", "knowledge/large.md", "chunk 1");
+        h.passages = vec![crate::retrieve::Passage {
+            captured_from: None,
+            heading_path: "Large > Section".into(),
+            text: large_text,
+            excerpt: String::new(),
+            provenance: None,
+            stage: None,
+        }];
+        let a = answer_with(vec![h], Verdict::Hit, 30.0);
+        let p = prompt("query", &a, Mode::Fast);
+
+        // Check that prompt is bounded and does not flood context
+        assert!(p.len() < 3500, "oversized section window should be bounded: length {}", p.len());
+        assert!(p.contains("Large > Section"));
+    }
 }
+

@@ -28,6 +28,113 @@ use std::time::Instant;
 
 use crate::memory::{AgentChoice, Confidence, Memory, Verdict};
 
+/// RAGAS-style Triad Grading: Faithfulness, Answer Relevance, Context Relevancy.
+#[derive(Debug, Clone, PartialEq)]
+pub struct TriadScore {
+    /// Ratio of answer content claims supported by served context (0.0 to 1.0).
+    pub faithfulness: f64,
+    /// Ratio of question terms/intents addressed by the answer (0.0 to 1.0).
+    pub answer_relevance: f64,
+    /// Ratio of context sentences bearing directly on the question (0.0 to 1.0).
+    pub context_relevancy: f64,
+}
+
+impl TriadScore {
+    pub fn composite(&self) -> f64 {
+        ((self.faithfulness + self.answer_relevance + self.context_relevancy) / 3.0 * 100.0).round() / 100.0
+    }
+}
+
+/// Tokenizes text into lowercase content terms, filtering out short tokens and stopwords.
+fn tokenize_content(text: &str) -> Vec<String> {
+    text.split(|c: char| !c.is_alphanumeric())
+        .map(str::to_lowercase)
+        .filter(|t| t.len() > 2 && !crate::index::STOPWORDS.contains(&t.as_str()))
+        .collect()
+}
+
+/// Evaluates generated answers against retrieved context and original question using
+/// offline mathematical RAGAS-style triad metrics (Faithfulness, Relevance, Context).
+pub fn evaluate_triad(question: &str, context: &[String], answer: &str) -> TriadScore {
+    let ans = answer.trim();
+    let q = question.trim();
+
+    // Check for honest abstention
+    let lower_ans = ans.to_lowercase();
+    let is_abstention = lower_ans.contains("library does not hold this")
+        || lower_ans.contains("the library does not")
+        || lower_ans.contains("nao possui")
+        || lower_ans.contains("não possui")
+        || lower_ans.contains("not found");
+
+    if is_abstention {
+        if context.is_empty() {
+            return TriadScore {
+                faithfulness: 1.0,
+                answer_relevance: 1.0,
+                context_relevancy: 1.0,
+            };
+        } else {
+            return TriadScore {
+                faithfulness: 1.0,
+                answer_relevance: 0.0,
+                context_relevancy: 0.5,
+            };
+        }
+    }
+
+    // 1. Faithfulness: answer content tokens grounded in served context
+    let ctx_combined = context.join(" ").to_lowercase();
+    let ans_tokens = tokenize_content(ans);
+    let faithfulness = if ans_tokens.is_empty() {
+        1.0
+    } else {
+        let grounded = ans_tokens.iter().filter(|t| ctx_combined.contains(t.as_str())).count();
+        (grounded as f64) / (ans_tokens.len() as f64)
+    };
+
+    // 2. Answer Relevance: question terms addressed in answer
+    let q_tokens = tokenize_content(q);
+    let answer_relevance = if q_tokens.is_empty() {
+        1.0
+    } else {
+        let matched = q_tokens.iter().filter(|t| lower_ans.contains(t.as_str())).count();
+        (matched as f64) / (q_tokens.len() as f64)
+    };
+
+    // 3. Context Relevancy: ratio of context sentences with question terms
+    let context_relevancy = if context.is_empty() {
+        0.0
+    } else {
+        let mut total_sentences = 0;
+        let mut relevant_sentences = 0;
+        for c in context {
+            for sent in c.split(&['.', '\n', ';'][..]) {
+                let sent = sent.trim();
+                if sent.len() < 10 {
+                    continue;
+                }
+                total_sentences += 1;
+                let sent_lower = sent.to_lowercase();
+                if q_tokens.iter().any(|t| sent_lower.contains(t.as_str())) {
+                    relevant_sentences += 1;
+                }
+            }
+        }
+        if total_sentences == 0 {
+            1.0
+        } else {
+            (relevant_sentences as f64) / (total_sentences as f64)
+        }
+    };
+
+    TriadScore {
+        faithfulness: (faithfulness * 100.0).round() / 100.0,
+        answer_relevance: (answer_relevance * 100.0).round() / 100.0,
+        context_relevancy: (context_relevancy * 100.0).round() / 100.0,
+    }
+}
+
 /// One graded question.
 pub struct Row {
     pub question: String,
@@ -645,4 +752,47 @@ mod tests {
         assert_eq!(rows[0].1, vec!["zed/a.md", "zed/b.md"]);
         assert!(rows[1].1.is_empty(), "a dash is abstain, not an answer named dash");
     }
+
+    #[test]
+    fn test_evaluate_triad_grounded_answer() {
+        let question = "como funciona o borrow checker no rust";
+        let context = vec![
+            "O borrow checker no rust gerencia regras de aliasing e mutabilidade em tempo de compilacao.".into(),
+            "Ele garante referencias validas sem garbage collector.".into(),
+        ];
+        let answer = "O borrow checker no rust gerencia aliasing e mutabilidade em tempo de compilacao.";
+        let score = evaluate_triad(question, &context, answer);
+
+        assert!(score.faithfulness >= 0.8, "faithful answer should score high: {}", score.faithfulness);
+        assert!(score.answer_relevance >= 0.7, "relevant answer should score high: {}", score.answer_relevance);
+        assert!(score.context_relevancy >= 0.5, "context relevancy: {}", score.context_relevancy);
+        assert!(score.composite() >= 0.7);
+    }
+
+    #[test]
+    fn test_evaluate_triad_hallucinated_answer() {
+        let question = "como funciona o borrow checker no rust";
+        let context = vec![
+            "O borrow checker no rust gerencia regras de aliasing e mutabilidade.".into(),
+        ];
+        let answer = "Python e Javascript usam garbage collection com contagem de referencia e tracing mark and sweep.";
+        let score = evaluate_triad(question, &context, answer);
+
+        assert!(score.faithfulness < 0.4, "hallucinated answer must have low faithfulness: {}", score.faithfulness);
+        assert!(score.answer_relevance < 0.5, "irrelevant answer must have low answer relevance: {}", score.answer_relevance);
+    }
+
+    #[test]
+    fn test_evaluate_triad_abstention() {
+        let question = "qual a distancia ate marte";
+        let context = vec![];
+        let answer = "The library does not hold this.";
+        let score = evaluate_triad(question, &context, answer);
+
+        assert_eq!(score.faithfulness, 1.0);
+        assert_eq!(score.answer_relevance, 1.0);
+        assert_eq!(score.context_relevancy, 1.0);
+        assert_eq!(score.composite(), 1.0);
+    }
 }
+
