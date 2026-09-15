@@ -714,6 +714,27 @@
           benchmark's refusal unchanged at 28 of 30 while its confident
           in-scope answers doubled from 6 to 12 of 20.
         </dd>
+        <dt>ADR-0041: the keys live in one place, and every door to a model filters</dt>
+        <dd>
+          Accepted 2026-09-07. A note's keys live in the note and nowhere else,
+          and every path by which base text reaches a model filters those lines
+          at the door. W02 retired, and orientation files like <code>MAP.md</code>
+          are exempt from indexing.
+        </dd>
+        <dt>ADR-0042: a source is an object and a citation is a pointer</dt>
+        <dd>
+          Accepted 2026-09-08. A source becomes a first-class object with an opaque
+          ten-character key, a citation is a <code>[src:KEY]</code> pointer at it,
+          and the bibliography is a byte-for-byte verified projection of the pointers.
+        </dd>
+        <dt>ADR-0043: local reader offline optimization and 4-bit AWQ distillation profile</dt>
+        <dd>
+          Accepted 2026-09-14. A local student model profile (Gemma-2 2B, Qwen 2.5 3B)
+          and 4-bit Activation-aware Weight Quantization (AWQ) under a strict 2 GB RAM
+          budget for standalone offline UI mode (Ulpia Tray), with an invariant of
+          zero external API calls and zero background reader daemons when running
+          inside an external agent harness.
+        </dd>
       </dl>
       <p>
         ADR-0032 and ADR-0033 are absent from

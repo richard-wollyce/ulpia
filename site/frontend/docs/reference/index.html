@@ -59,13 +59,13 @@
 
     <main class="doc" id="main" tabindex="-1">
       <h1>Reference</h1>
-      <p class="doc-date">Last updated: 8 September 2026</p>
+      <p class="doc-date">Last updated: 14 September 2026</p>
 
       <nav class="contents" aria-labelledby="contents-title">
         <p class="contents-title" id="contents-title">Contents</p>
         <ol>
           <li>
-            <a href="#the-twenty-six-verbs">The twenty-six verbs</a>
+            <a href="#the-twenty-eight-verbs">The twenty-eight verbs</a>
             <ol>
               <li><a href="#the-usage-block">The usage block</a></li>
               <li><a href="#verb-by-verb">Verb by verb</a></li>
@@ -121,16 +121,16 @@
         is expected to read it through.
       </p>
 
-      <h2 id="the-twenty-six-verbs">The twenty-six verbs</h2>
+      <h2 id="the-twenty-eight-verbs">The twenty-eight verbs</h2>
 
       <h3 id="the-usage-block">The usage block</h3>
       <p>
-        What <code>kb --help</code> prints, minus its prose, copied on 8
-        September 2026. Thirty-five lines for twenty-six verbs.
-        <code>init</code> and <code>panel</code> each carry more than one
+        What <code>kb --help</code> prints, minus its prose, copied on 14
+        September 2026. Thirty-nine lines for twenty-eight verbs.
+        <code>init</code>, <code>handoff</code> and <code>panel</code> each carry more than one
         usage, because each of their modes has its own argument set and
         folding them into one line would hide which flags may travel together;
-        <code>write</code>, <code>source add</code> and one of the
+        <code>write</code>, <code>source add</code>, <code>handoff save</code> and one of the
         <code>panel</code> usages wrap onto a continuation line because they
         are too long for the width.
       </p>
@@ -152,11 +152,15 @@ kb source add [path] --type T --title X --retrieved-on DATE --retrieval-status S
 kb sources [path]... [--json] [--all]
 kb fleet [path]... [--all]
 kb blocks [path] [--emit]
-kb eval &lt;gold.tsv&gt; [path]... [--top N] [--all] [--classify]
+kb eval &lt;gold.tsv&gt; [path]... [--top N] [--all] [--classify] [--triad]
 kb commit &lt;path&gt;... -m &lt;message&gt;
 kb boot [path]... [--top N] [--all] [--session ID] [--cwd DIR] [--text]
 kb ingest &lt;file&gt; [path]... [--agent NAME] [--keep] [--dry-run] [--top N] [--all]
 kb promote [path]... [--top N] [--all] [--dry-run] [--max N] [--lock]
+kb consolidate &lt;agent&gt; [path] [--sessions N] [--top N] [--dry-run] [--json]
+kb handoff save &lt;agent&gt; [path] --task &lt;text&gt; [--decision &lt;text&gt;]... [--blocker &lt;text&gt;]...
+                [--next &lt;text&gt;]... [--ref &lt;target&gt;]... [--session &lt;id&gt;] [--json]
+kb handoff [&lt;agent&gt;] [path] [--session &lt;id&gt;] [--json]
 kb ui [path]... [--port N] [--all]
 kb capture [path] [--session ID]
 kb serve [path]... [--top N] [--all]
@@ -197,15 +201,17 @@ kb panel [&lt;artifact&gt;] [path] --ledger [--json]</code></pre>
         <dd>
           Copied, where it used to be assembled: this verb had no line in
           <code>--help</code> when the page was written, and it has one now.
-          It runs
-          <code>route</code>, then hands only the served passages to the
-          command named by <code>answerer =</code> in <code>fleet.txt</code>,
-          which must ground every claim in them or say plainly that they do
-          not hold the answer. The default reads the top five files in one
-          model call; <code>--expanded</code> reads up to twelve;
-          <code>--complete</code> reads the whole base in batches of ten and
-          prints its estimate before the first call. It never reaches the model
-          on a <code>nothing</code> verdict, and without an
+          It runs <code>route</code>, then assembles context using
+          small-to-big section windowing: expanding matched chunk hits to their
+          enclosing section and paragraph boundaries (up to 1,800 characters,
+          ~450 tokens) and merging contiguous chunks cleanly. It then hands
+          the served passages to the command named by <code>answerer =</code>
+          in <code>fleet.txt</code>, which must ground every claim in them or
+          say plainly that they do not hold the answer. The default reads the
+          top five files in one model call; <code>--expanded</code> reads up to
+          twelve; <code>--complete</code> reads the whole base in batches of ten
+          and prints its estimate before the first call. It never reaches the
+          model on a <code>nothing</code> verdict, and without an
           <code>answerer</code> line it prints the reading list
           <code>route</code> would have printed, except in
           <code>--complete</code>, which is nothing but model calls and stops
@@ -338,27 +344,33 @@ kb panel [&lt;artifact&gt;] [path] --ledger [--json]</code></pre>
           <code>--all</code>.
         </dd>
 
-        <dt><code>kb eval &lt;gold.tsv&gt; [path]... [--top N] [--all] [--classify]</code></dt>
+        <dt><code>kb eval &lt;gold.tsv&gt; [path]... [--top N] [--all] [--classify] [--triad]</code></dt>
         <dd>
           Grades the catalogue against a gold file of questions and expected
           answers, including the questions it is supposed to refuse.
           <code>--classify</code> asks the command that chooses the agent,
           named by <code>classifier =</code> in <code>fleet.txt</code>, about
-          every question, one model call each. It refuses to grade a gold file that names
-          files the fleet does not have, because grading against a stale gold
-          file reports a wrong number confidently.
+          every question, one model call each. <code>--triad</code> computes
+          offline RAGAS-style triad metrics in pure Rust with zero external API calls:
+          faithfulness (grounding in served passages), answer relevance, and
+          context relevancy, scoring abstentions faithfully. It refuses to grade
+          a gold file that names files the fleet does not have, because grading
+          against a stale gold file reports a wrong number confidently.
         </dd>
 
-        <dt><code>kb boot [path]... [--top N] [--all]</code></dt>
+        <dt><code>kb boot [path]... [--top N] [--all] [--session ID] [--cwd DIR] [--text]</code></dt>
         <dd>
           The librarian at the door. On a <code>UserPromptSubmit</code> hook it
-          reads the message from stdin, routes it across the fleet, and prints
+          reads the message from stdin, decomposes compound multi-domain queries
+          into atomic sub-questions, routes them across the fleet, and prints
           the owner's constitution to stdout, where the runtime injects it; the
           constitution is emitted only when the routed agent changes, tracked
-          per session under <code>.kb/sessions/</code>. Below the gate it picks
-          nobody and emits the roster instead. It always exits 0, because exit
-          2 on that event erases the user's message and exit 1 shows them a
-          hook error.
+          per session under <code>.kb/sessions/</code>. When sub-queries trigger
+          distinct high-confidence agents, Vesta seats the primary agent as owner
+          and automatically convenes a multi-agent review panel (<code>kb panel</code>)
+          with secondary specialists. Below the gate it picks nobody and emits the
+          roster instead. It always exits 0, because exit 2 on that event erases the
+          user's message and exit 1 shows them a hook error.
         </dd>
 
         <dt><code>kb blocks [path] [--emit]</code></dt>
@@ -514,6 +526,10 @@ kb panel [&lt;artifact&gt;] [path] --ledger [--json]</code></pre>
           round in tokens before it is spent. <code>--from</code> records what
           one reviewer returned, silence included, as an objection, a
           <code>--nothing</code> or a <code>--not-returned</code>.
+          Objections are validated against constitutional self-critique rubrics:
+          blocking objections must be mechanism-grounded (citing repository
+          invariants, failure modes, memory limits, or rules). Subjective stylistic
+          nitpicks are classified as advisory and cannot block note admission.
           <code>--resolve</code> accounts for each objection as
           <code>--taken</code>, <code>--refused</code> with a reason, or
           <code>--escalated</code>. <code>--ledger</code> reads the round back,
@@ -522,6 +538,27 @@ kb panel [&lt;artifact&gt;] [path] --ledger [--json]</code></pre>
           blocking objection cannot be refused, and each reviewer gets at most
           one, because a reviewer who can block everything holds a veto rather
           than an objection.
+        </dd>
+
+        <dt><code>kb consolidate &lt;agent&gt; [path] [--sessions N] [--top N] [--dry-run] [--json]</code></dt>
+        <dd>
+          Compares records across multiple past sessions side-by-side to discover
+          recurrent patterns, cross-session architectural decisions, and common blockers.
+          Enforces a code-level invariant requiring every candidate pattern to cite at
+          least two distinct sessions that genuinely exist in recorded history before
+          passing to the three review lenses (contradiction, duplication, scope) against
+          the base. <code>--sessions N</code> controls how many past sessions to gather
+          (default 5); <code>--dry-run</code> evaluates everything without writing.
+        </dd>
+
+        <dt><code>kb handoff save &lt;agent&gt; [path] --task &lt;text&gt; [--decision &lt;text&gt;]... [--blocker &lt;text&gt;]... [--next &lt;text&gt;]... [--ref &lt;target&gt;]... [--session &lt;id&gt;] [--json]</code></dt>
+        <dt><code>kb handoff [&lt;agent&gt;] [path] [--session &lt;id&gt;] [--json]</code></dt>
+        <dd>
+          Persists and reads structured continuity records across sessions.
+          <code>handoff save</code> records the active task, architectural decisions,
+          blockers, references, and next steps into <code>.kb/sessions/&lt;session&gt;.handoff.md</code>.
+          Running <code>kb handoff</code> without save reads the latest handoff back, so
+          the incoming agent or session resumes with full context and zero memory loss.
         </dd>
 
         <dt><code>kb --version</code>, also <code>kb -V</code> and <code>kb version</code></dt>
