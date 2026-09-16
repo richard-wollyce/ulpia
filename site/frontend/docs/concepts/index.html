@@ -16,13 +16,16 @@
     <meta property="og:type" content="website" />
     <script src="/theme.js"></script>
     <script src="/nav.js" defer></script>
+        <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans:ital,wght@0,200;0,400;1,200;1,400&display=swap" rel="stylesheet" />
     <link rel="stylesheet" href="/src/styles.css" />
   </head>
   <body>
     <a class="skip" href="#main">Skip to content</a>
     <header class="band">
       <div class="band-inner">
-        <p class="wordmark"><a href="/">Ulpia</a></p>
+        <p class="wordmark"><a href="/" aria-label="Ulpia"><span class="logo-mark" aria-hidden="true">U<span class="logo-grow"><span class="logo-grow-inner">lpia</span></span></span></a></p>
         <nav class="nav" aria-label="Sections">
           <details class="nav-menu">
             <summary class="nav-door">Documentation</summary>
@@ -90,6 +93,7 @@
             <ol>
               <li><a href="#the-declaration">The declaration</a></li>
               <li><a href="#the-flag">The flag</a></li>
+              <li><a href="#data-sovereignty-and-air-gap">Data sovereignty and air-gap</a></li>
               <li><a href="#git-is-not-consulted">Git is not consulted</a></li>
               <li><a href="#what-git-is-still-for">What git is still for</a></li>
             </ol>
@@ -564,10 +568,14 @@ MAP.md
         provenance on the note saying which. <code>kb capture</code> is not a
         door. It runs no model and writes no label. It turns the session's
         record, which the librarian appends to on every message, into one raw
-        file in the last routed agent's deposit, at
+        file in the routed agent's deposit, at
         <code>provenance: agent</code> and <code>stage: raw</code>, and then
-        the filter reads it. No index is built in the background; every one
-        is rebuilt by whoever asks.
+        the filter reads it. With <code>--conclusion &lt;text&gt;</code>, it also
+        captures assistant decisions with automatic secret credential sanitization
+        in pure Rust std. For task continuity across sessions, <code>kb handoff</code>
+        enforces baton claim semantics (<code>Pending &rarr; Claimed &rarr; Completed</code>)
+        to prevent race conditions between concurrent agents. No index is built
+        in the background; every one is rebuilt by whoever asks.
       </p>
 
       <h3 id="the-filter">The filter</h3>
@@ -651,6 +659,31 @@ MAP.md
       <div class="note" role="note">
         <p><strong>Careful.</strong> The first deployment of this passed <code>--all</code> for the wrong reason: not to include a private layer, but to make anything serve at all under the older git rule described below. That reason no longer exists. Pass the flag only when the consumer is meant to see the private layer.</p>
       </div>
+
+      <h3 id="data-sovereignty-and-air-gap">Data sovereignty and air-gap</h3>
+      <p>
+        The security boundary is defined by where the model executes:
+      </p>
+      <ul>
+        <li>
+          <strong>Sovereign Local Air-Gapped Mode:</strong> When paired with local
+          inference (such as Ollama, llama.cpp, or 4-bit AWQ distillation via ADR-0043),
+          100% of your notes, search queries, and prompt contexts stay on the
+          physical machine. Zero bytes leave over the network, providing complete
+          data sovereignty, air-gap compliance, and eliminating third-party security surface.
+        </li>
+        <li>
+          <strong>External Cloud Provider Mode:</strong> When calling external
+          APIs (Claude, OpenAI, Gemini), retrieved passages and prompts travel
+          over HTTPS to the provider's data centers, subject to their terms and
+          governance policies.
+        </li>
+      </ul>
+      <p>
+        Full threat models, layout isolation details, and cross-machine migration
+        safety protocols (Windows, Linux, macOS) are formally documented in
+        <a href="https://github.com/richard-wollyce/ulpia/blob/main/DATA_HANDLING.md"><code>DATA_HANDLING.md</code></a>.
+      </p>
 
       <h3 id="git-is-not-consulted">Git is not consulted</h3>
       <p>

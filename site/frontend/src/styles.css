@@ -10,6 +10,11 @@
 
 /* Three faces, latin subset only, ~80KB total. Weights 400 and 600 are the only
  * legal font-weight values on this page; anything else would be synthesized. */
+@import url("https://fonts.googleapis.com/css2?family=Noto+Sans:ital,wght@0,200;0,400;1,200;1,400&display=swap");
+@import "@fontsource/noto-sans/latin-200.css";
+@import "@fontsource/noto-sans/latin-200-italic.css";
+@import "@fontsource/noto-sans/latin-400.css";
+@import "@fontsource/noto-sans/latin-400-italic.css";
 @import "@fontsource/eb-garamond/latin-400.css";
 @import "@fontsource/eb-garamond/latin-400-italic.css";
 @import "@fontsource/eb-garamond/latin-600.css";
@@ -230,6 +235,49 @@ body {
   text-align: left;
 }
 
+code,
+kbd,
+samp,
+pre {
+  font-family: "Noto Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  font-weight: 200;
+}
+
+code strong,
+code b,
+kbd strong,
+kbd b,
+samp strong,
+samp b,
+pre strong,
+pre b,
+.term strong,
+.term b,
+.doc code strong,
+.doc code b,
+.doc pre strong,
+.doc pre b {
+  font-weight: 400;
+}
+
+code em,
+code i,
+kbd em,
+kbd i,
+samp em,
+samp i,
+pre em,
+pre i,
+.term em,
+.term i,
+.doc code em,
+.doc code i,
+.doc pre em,
+.doc pre i {
+  font-style: italic;
+  font-weight: 200;
+}
+
 main,
 footer {
   padding-inline: var(--pad-page);
@@ -344,6 +392,40 @@ a:active {
    * at every value the clamp produces instead of being a second number to keep
    * in sync. */
   margin-inline-end: -0.3em;
+  display: inline-flex;
+  align-items: center;
+  cursor: pointer;
+  user-select: none;
+}
+
+.logo-mark {
+  display: inline-flex;
+  align-items: baseline;
+  white-space: nowrap;
+}
+
+.logo-grow {
+  display: inline-grid;
+  grid-template-columns: 0fr;
+  vertical-align: bottom;
+  transition: grid-template-columns 300ms cubic-bezier(0.33, 1, 0.68, 1);
+}
+
+.logo-grow-inner {
+  overflow: hidden;
+}
+
+.wordmark:hover .logo-grow,
+.wordmark:focus-within .logo-grow,
+.wordmark a:hover .logo-grow,
+.wordmark a:focus-visible .logo-grow {
+  grid-template-columns: 1fr;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .logo-grow {
+    transition: none;
+  }
 }
 
 /* The lamp (spec 15.B, from Richard's sketch): a single toggle whose icon IS
@@ -780,8 +862,8 @@ h2 {
   border-radius: 0;
   padding: 1.25rem 1.5rem;
   margin: 0;
-  font-family: ui-monospace, "Cascadia Code", SFMono-Regular, Menlo, Consolas,
-    "Liberation Mono", monospace;
+  font-family: "Noto Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  font-weight: 200;
   font-size: var(--size-mono);
   line-height: 1.6;
   font-variant-numeric: normal;
@@ -1201,8 +1283,8 @@ dialog::backdrop {
 }
 
 .addr code {
-  font-family: ui-monospace, "Cascadia Code", SFMono-Regular, Menlo, Consolas,
-    "Liberation Mono", monospace;
+  font-family: "Noto Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  font-weight: 200;
   font-size: var(--size-mono);
   user-select: all;
   overflow-wrap: anywhere;
@@ -1557,7 +1639,8 @@ input[type="email"]:focus-visible {
    * does not pay for it, the hairline gap stays 17.41px and the band stays 60px
    * tall, because only the anchor's own box changes and its glyph centre moves
    * half a pixel. */
-  display: inline-block;
+  display: inline-flex;
+  align-items: baseline;
   transition: color 120ms ease-out, transform 90ms ease-out;
 }
 
@@ -1653,8 +1736,8 @@ input[type="email"]:focus-visible {
    * documentation code is written to 56 columns and a line that cannot be
    * scrolls inside its plate and is named in the caption. */
   color: var(--plate-ink);
-  font-family: ui-monospace, "Cascadia Code", SFMono-Regular, Menlo, Consolas,
-    "Liberation Mono", monospace;
+  font-family: "Noto Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  font-weight: 200;
   font-size: var(--size-mono);
   line-height: 1.6;
   font-variant-numeric: normal;
@@ -1670,8 +1753,8 @@ input[type="email"]:focus-visible {
 }
 
 .doc code {
-  font-family: ui-monospace, "Cascadia Code", SFMono-Regular, Menlo, Consolas,
-    "Liberation Mono", monospace;
+  font-family: "Noto Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  font-weight: 200;
   font-size: 0.9em;
   background: var(--plate);
   padding: 0.1em 0.3em;
@@ -2124,8 +2207,8 @@ main:focus {
  * A combination is two kbd with the plus in running text. Radius 0, like
  * everything else. */
 kbd {
-  font-family: ui-monospace, "Cascadia Code", SFMono-Regular, Menlo, Consolas,
-    "Liberation Mono", monospace;
+  font-family: "Noto Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  font-weight: 200;
   font-size: 0.85em;
   background: var(--plate);
   color: var(--plate-ink);
@@ -2450,7 +2533,7 @@ body::after {
   background: none;
   padding: 0;
   font-size: 1em;
-  font-weight: 600;
+  font-weight: 400;
   color: var(--accent);
   letter-spacing: 0.01em;
 }

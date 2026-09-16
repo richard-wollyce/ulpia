@@ -55,8 +55,16 @@ place in an ordinary day:
 - **Consolidate patterns across sessions.** `kb consolidate <agent>` discovers recurrent
   cross-session architectural decisions, invariant changes, and blockers, validating that
   every candidate pattern cites at least two distinct real sessions before admitting it.
-- **Save session handoffs for the next agent.** `kb handoff save <agent>` records tasks,
-  decisions, blockers, and next steps into structured markdown for seamless continuity.
+- **Save session handoffs with baton claim semantics.** `kb handoff save <agent>` records
+  tasks, decisions, blockers, and next steps into structured markdown. `kb handoff claim <agent>`
+  and `kb handoff complete` enforce a strict `Pending -> Claimed -> Completed` baton lifecycle
+  to eliminate multi-agent race conditions.
+- **Capture sanitized turn conclusions into short memory.** `kb capture --conclusion "<text>"`
+  records key decisions into the owning agent's inbox deposit, automatically redacting API keys
+  and bearer tokens in pure Rust with zero external dependencies.
+- **Enforce strict data sovereignty.** Read [DATA_HANDLING.md](DATA_HANDLING.md) for formal
+  guarantees: 100% on-device air-gapped execution when paired with local models, explicit
+  transparency when using cloud providers, and complete portability across Windows, Linux, and macOS.
 - **Write in a tree several sessions are editing at once.** `kb commit <paths>` builds the
   commit from your paths alone, then reads it back off git and prints what it left dirty.
 - **Keep part of the library private by layout rather than by promise.** Each base
@@ -321,6 +329,9 @@ kb panel <artifact> .           convene multi-agent review with constitutional s
 kb eval gold.tsv . --triad      grade retrieval and generation with offline RAGAS metrics
 kb consolidate <agent> .        consolidate patterns across past sessions with multi-session proof
 kb handoff save <agent> .       persist session tasks, decisions, and blockers for next agent
+kb handoff claim <agent> .      claim the active task baton (prevents concurrent race conditions)
+kb handoff complete .           mark the active task baton as completed
+kb capture . --conclusion "<text>" record sanitized conclusion into deposit with secret scrubbing
 kb check .                      lint every agent, including keys no question can reach
 kb fleet .                      who is in the fleet
 kb eval examples/demo/gold.tsv examples/demo    the graded demo above
@@ -466,6 +477,25 @@ a fact. That is not a slogan, it is what makes the whole thing portable. Move th
 directory and everything moves with it, because **no absolute path exists anywhere
 inside a fleet.** Backup, sync, and moving to a new machine are all the same operation.
 
+### Moving across directories and operating systems (Windows, Linux, macOS)
+
+Migrating the `ulpia` directory between paths or across operating systems (e.g. moving
+from Windows to a Linux workstation or a MacBook) **does not break Git and does not break
+Ulpia's memory**:
+
+1. **Git object topology**: Git stores tree objects and blob paths relative to the repository
+   root using POSIX `/` forward slashes. Moving or copying the root directory leaves the
+   entire git history intact.
+2. **Relative fleet paths**: Note manifests (`fleet.txt`, `agent.txt`, `MAP.md`) and wikilinks
+   never use absolute paths.
+3. **Disposable SQLite index**: The `.kb/index.db` SQLite database is architecture-neutral
+   (endian-neutral). If moving across environments, running `kb index --all` rebuilds the
+   full derived search cache in seconds.
+4. **Line-ending normalization**: The ingestion engine strips `\r\n` transparently into `\n`,
+   so CRLF differences between Windows and Unix never trigger index drift or false misses.
+
+For full guarantees, threat models, and air-gapped procedures, see [DATA_HANDLING.md](DATA_HANDLING.md).
+
 ---
 
 ## More than one agent writes this at once
@@ -522,6 +552,16 @@ What that line covers is served, indexed and suggested only when the caller pass
 `--all`. Git is not consulted and used to be; it left the runtime in
 [ADR-0034](decisions/0034-git-leaves-the-runtime.md), because a folder should not have to
 be committed before a memory layer will answer from it.
+
+**Data sovereignty: Local air-gapped mode vs external cloud providers.**
+- **Sovereign Local Air-Gapped Mode**: When paired with local inference (Ollama, llama.cpp,
+  or 4-bit AWQ distillation via ADR-0043), 100% of memory notes, passages, and prompts
+  remain strictly on the local device. Zero packets travel over the network, guaranteeing
+  total confidentiality, air-gap compliance, and zero third-party vulnerability.
+- **External Cloud Provider Mode**: When using remote APIs (OpenAI, Anthropic, Google, etc.),
+  retrieved passages and prompts travel over HTTPS to third-party servers outside local
+  control, governed solely by external retention and privacy policies.
+Full threat models, layout isolation, and compliance guarantees are documented in [DATA_HANDLING.md](DATA_HANDLING.md).
 
 **An agent is a folder with a shape.** Run `kb init`, or browse
 [`agent-skeleton/`](agent-skeleton/) for the exact one; a test fails if the two ever

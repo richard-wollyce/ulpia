@@ -16,13 +16,16 @@
     <meta property="og:type" content="website" />
     <script src="/theme.js"></script>
     <script src="/nav.js" defer></script>
+        <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans:ital,wght@0,200;0,400;1,200;1,400&display=swap" rel="stylesheet" />
     <link rel="stylesheet" href="/src/styles.css" />
   </head>
   <body>
     <a class="skip" href="#main">Skip to content</a>
     <header class="band">
       <div class="band-inner">
-        <p class="wordmark"><a href="/">Ulpia</a></p>
+        <p class="wordmark"><a href="/" aria-label="Ulpia"><span class="logo-mark" aria-hidden="true">U<span class="logo-grow"><span class="logo-grow-inner">lpia</span></span></span></a></p>
         <nav class="nav" aria-label="Sections">
           <details class="nav-menu">
             <summary class="nav-door">Documentation</summary>
@@ -158,11 +161,12 @@ kb boot [path]... [--top N] [--all] [--session ID] [--cwd DIR] [--text]
 kb ingest &lt;file&gt; [path]... [--agent NAME] [--keep] [--dry-run] [--top N] [--all]
 kb promote [path]... [--top N] [--all] [--dry-run] [--max N] [--lock]
 kb consolidate &lt;agent&gt; [path] [--sessions N] [--top N] [--dry-run] [--json]
-kb handoff save &lt;agent&gt; [path] --task &lt;text&gt; [--decision &lt;text&gt;]... [--blocker &lt;text&gt;]...
-                [--next &lt;text&gt;]... [--ref &lt;target&gt;]... [--session &lt;id&gt;] [--json]
-kb handoff [&lt;agent&gt;] [path] [--session &lt;id&gt;] [--json]
+kb handoff save &lt;agent&gt; --task &lt;task&gt; [--decision &lt;d&gt;]... [--blocker &lt;b&gt;]... [--next &lt;n&gt;]... [--ref &lt;r&gt;]... [--session ID] [path]
+kb handoff claim &lt;agent&gt; [--session ID] [path]
+kb handoff complete [--session ID] [path]
+kb handoff [path] [--session ID] [--show] [--json]
 kb ui [path]... [--port N] [--all]
-kb capture [path] [--session ID]
+kb capture [path] [--session ID] [--conclusion &lt;text&gt;]
 kb serve [path]... [--top N] [--all]
 kb misses [path]... [--all] [--top N] [--json] [--apply --gold &lt;tsv&gt;]
 kb misroute &lt;message&gt; --chose &lt;agent&gt; --owner &lt;agent|none&gt; [--why &lt;text&gt;] [path]
@@ -432,15 +436,19 @@ kb panel [&lt;artifact&gt;] [path] --ledger [--json]</code></pre>
           however the path is spelled.
         </dd>
 
-        <dt><code>kb capture [path] [--session ID]</code></dt>
+        <dt><code>kb capture [path] [--session ID] [--conclusion &lt;text&gt;]</code></dt>
         <dd>
           Turns a session's record into a deposit: one markdown file in the
-          last routed agent's <code>inbox/</code>, raw and without a
+          routed agent's <code>inbox/</code>, raw and without a
           <em>Search for</em> line, so the catalogue never names it and every
           passage from it is labelled short memory. The session id comes from
           <code>--session</code> or from the hook payload on stdin, the same
-          JSON <code>boot</code> reads. It runs no model, writes no
-          <em>Search for</em> line, and captures nothing from a session no
+          JSON <code>boot</code> reads. With <code>--conclusion &lt;text&gt;</code>,
+          records assistant decisions or conclusions into the session events;
+          secret credentials (API keys, bearer tokens, passwords) are automatically
+          scrubbed in pure Rust standard library without external regex dependencies,
+          and rendered under a <code>## Decisions and conclusions</code> section
+          in the deposit. It runs no model and captures nothing from a session no
           agent was routed in.
         </dd>
 
@@ -551,13 +559,19 @@ kb panel [&lt;artifact&gt;] [path] --ledger [--json]</code></pre>
           (default 5); <code>--dry-run</code> evaluates everything without writing.
         </dd>
 
-        <dt><code>kb handoff save &lt;agent&gt; [path] --task &lt;text&gt; [--decision &lt;text&gt;]... [--blocker &lt;text&gt;]... [--next &lt;text&gt;]... [--ref &lt;target&gt;]... [--session &lt;id&gt;] [--json]</code></dt>
-        <dt><code>kb handoff [&lt;agent&gt;] [path] [--session &lt;id&gt;] [--json]</code></dt>
+        <dt><code>kb handoff save &lt;agent&gt; --task &lt;task&gt; [--decision &lt;d&gt;]... [--blocker &lt;b&gt;]... [--next &lt;n&gt;]... [--ref &lt;r&gt;]... [--session ID] [path]</code></dt>
+        <dt><code>kb handoff claim &lt;agent&gt; [--session ID] [path]</code></dt>
+        <dt><code>kb handoff complete [--session ID] [path]</code></dt>
+        <dt><code>kb handoff [path] [--session ID] [--show] [--json]</code></dt>
         <dd>
-          Persists and reads structured continuity records across sessions.
+          Persists and coordinates structured task continuity across sessions.
           <code>handoff save</code> records the active task, architectural decisions,
           blockers, references, and next steps into <code>.kb/sessions/&lt;session&gt;.handoff.md</code>.
-          Running <code>kb handoff</code> without save reads the latest handoff back, so
+          <code>kb handoff claim &lt;agent&gt;</code> and <code>kb handoff complete</code>
+          enforce strict baton claim semantics (<code>Pending &rarr; Claimed &rarr; Completed</code>):
+          an agent claims the active baton before starting work, preventing race conditions
+          between concurrent sessions, and marks it complete once finished.
+          Running <code>kb handoff</code> reads the latest handoff record back so
           the incoming agent or session resumes with full context and zero memory loss.
         </dd>
 

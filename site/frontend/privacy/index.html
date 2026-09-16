@@ -16,13 +16,16 @@
     <meta property="og:type" content="website" />
     <script src="/theme.js"></script>
     <script src="/nav.js" defer></script>
+        <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans:ital,wght@0,200;0,400;1,200;1,400&display=swap" rel="stylesheet" />
     <link rel="stylesheet" href="/src/styles.css" />
   </head>
   <body>
     <a class="skip" href="#main">Skip to content</a>
     <header class="band">
       <div class="band-inner">
-        <p class="wordmark"><a href="/">Ulpia</a></p>
+        <p class="wordmark"><a href="/" aria-label="Ulpia"><span class="logo-mark" aria-hidden="true">U<span class="logo-grow"><span class="logo-grow-inner">lpia</span></span></span></a></p>
         <nav class="nav" aria-label="Sections">
           <details class="nav-menu">
             <summary class="nav-door">Documentation</summary>
@@ -65,7 +68,10 @@
       <p>
         The website at ulpia.io, which is the page you are reading. Ulpia the
         software runs on your own machine and sends us nothing, so it is not
-        covered here and does not need to be.
+        covered here and does not need to be. For data handling guarantees,
+        local air-gap isolation, and threat boundaries regarding models and
+        memory notes, see
+        <a href="https://github.com/richard-wollyce/ulpia/blob/main/DATA_HANDLING.md"><code>DATA_HANDLING.md</code></a>.
       </p>
 
       <h2 id="what-we-collect">What we collect</h2>

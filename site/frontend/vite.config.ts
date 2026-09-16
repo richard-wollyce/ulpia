@@ -67,6 +67,21 @@ function preloadBodyFace(): Plugin {
   };
 }
 
+function injectNotoSans(): Plugin {
+  return {
+    name: "inject-noto-sans",
+    transformIndexHtml(html) {
+      if (html.includes("Noto+Sans")) return html;
+      const tags = [
+        '<link rel="preconnect" href="https://fonts.googleapis.com" />',
+        '<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />',
+        '<link href="https://fonts.googleapis.com/css2?family=Noto+Sans:ital,wght@0,200;0,400;1,200;1,400&display=swap" rel="stylesheet" />',
+      ].join("\n    ");
+      return html.replace("</head>", `    ${tags}\n  </head>`);
+    },
+  };
+}
+
 // No framework. Hand-written HTML, the generated writing, one stylesheet and
 // the three scripts in public/ (theme.js on every page, anim.js and
 // subscribe.js on the front page only, by owner directive), which vite copies
@@ -86,5 +101,5 @@ export default defineConfig({
       },
     },
   },
-  plugins: [preloadBodyFace()],
+  plugins: [preloadBodyFace(), injectNotoSans()],
 });

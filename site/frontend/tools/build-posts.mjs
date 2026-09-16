@@ -26,7 +26,7 @@ const esc = (s) =>
 // generated ones.
 const band = (current) => `    <header class="band">
       <div class="band-inner">
-        <p class="wordmark"><a href="/">Ulpia</a></p>
+        <p class="wordmark"><a href="/" aria-label="Ulpia"><span class="logo-mark" aria-hidden="true">U<span class="logo-grow"><span class="logo-grow-inner">lpia</span></span></span></a></p>
         <nav class="nav" aria-label="Sections">
           <details class="nav-menu">
             <summary class="nav-door">Documentation</summary>
@@ -90,6 +90,9 @@ const page = ({ title, description, canonical, body, ogType = "article", current
     <meta property="og:type" content="${esc(ogType)}" />
     <script src="/theme.js"></script>
     <script src="/nav.js" defer></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans:ital,wght@0,200;0,400;1,200;1,400&display=swap" rel="stylesheet" />
     <link rel="stylesheet" href="/src/styles.css" />
   </head>
   <body>
@@ -222,7 +225,7 @@ main { max-width:32rem; margin-inline:auto; padding:3rem 1.5rem; }
 h1 { font-weight:400; font-size:1.75rem; margin:0 0 .25rem; }
 .lede { color:var(--ink-2); margin:0 0 2rem; }
 .url { display:block; margin:0 0 2rem; padding:.75rem 1rem;
-  border:1px solid var(--rule); font-family:ui-monospace,Menlo,Consolas,monospace;
+  border:1px solid var(--rule); font-family:"Noto Sans",-apple-system,sans-serif; font-weight:200;
   font-size:.9rem; word-break:break-all; }
 h2 { font-weight:400; font-size:1.15rem; margin:1.75rem 0 .1rem; }
 h2 a { color:var(--ink); text-decoration:none; }

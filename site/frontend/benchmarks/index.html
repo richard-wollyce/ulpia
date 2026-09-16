@@ -23,13 +23,16 @@
     <script src="/theme.js"></script>
     <script src="/nav.js" defer></script>
     <script src="/anim.js" defer></script>
+        <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans:ital,wght@0,200;0,400;1,200;1,400&display=swap" rel="stylesheet" />
     <link rel="stylesheet" href="/src/styles.css" />
   </head>
   <body>
     <a class="skip" href="#main">Skip to content</a>
     <header class="band">
       <div class="band-inner">
-        <p class="wordmark"><a href="/">Ulpia</a></p>
+        <p class="wordmark"><a href="/" aria-label="Ulpia"><span class="logo-mark" aria-hidden="true">U<span class="logo-grow"><span class="logo-grow-inner">lpia</span></span></span></a></p>
         <nav class="nav" aria-label="Sections">
           <details class="nav-menu">
             <summary class="nav-door">Documentation</summary>
