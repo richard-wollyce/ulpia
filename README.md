@@ -620,9 +620,8 @@ Early, used daily, and honest about which is which.
 |---|---|
 | `tools/kb` | Works. `cargo test` in `tools/kb` is green, and the count is left out on purpose: it was published as 208 and was 212 by the time somebody checked and 217 an hour later, because more than one session writes this. One dependency. |
 | `kb ui` | The reading room, set in the site's own type and palette: the fleet, the catalog, the stacks (shelves and book spines, ribbons where another agent works the document), the desk (chat routed by the same boot hook as every session), block budgets, doctor. One embedded page plus three Garamond faces, loopback only. |
-| `tools/tray` | Windows only, and young. |
 | `site` | The page at [ulpia.io](https://ulpia.io). Static front, one Rust binary behind it. |
-| Local model routing | Documented in ADR-0043: 4-bit AWQ Gemma-2 2B / Qwen 2.5 3B under 2 GB RAM budget for standalone UI mode (Ulpia Tray), with zero API costs and zero background daemon overhead in agent harnesses. |
+| Local model routing | Documented in ADR-0043: 4-bit AWQ Gemma-2 2B / Qwen 2.5 3B under 2 GB RAM budget for standalone client apps (e.g. Wollyce), with zero API costs and zero background daemon overhead in agent harnesses. |
 | Voice | Not built. |
 | Licence | **Apache 2.0.** Use it, fork it, build on it; keep the notice and the attribution. The private layer under `fleet/` is not part of the repository and is not licensed, because it is not here. |
 

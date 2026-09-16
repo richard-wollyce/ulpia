@@ -6,9 +6,8 @@ library; Vesta is its librarian, the orchestrator that routes what arrives. Read
 
 ## If you are working on this repository
 
-The system is in `tools/`. `tools/kb` is the memory layer and has one dependency;
-`tools/tray` is a Windows tray app over the same library. Start at
-`tools/kb/src/memory.rs`, which is the contract every surface goes through.
+The system is in `tools/`. `tools/kb` is the memory layer and has one dependency.
+Start at `tools/kb/src/memory.rs`, which is the contract every surface goes through.
 
 Run the tests before believing anything: `cargo test` in `tools/kb`.
 

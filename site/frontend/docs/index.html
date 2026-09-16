@@ -197,8 +197,6 @@
         <dd>Works, and is used daily. <code>cargo test</code> in <code>tools/kb</code> is green, and the count is left out on purpose, because more than one session writes the repository and the number moves between them. One dependency.</dd>
         <dt><code>kb ui</code></dt>
         <dd>The reading room. It binds <code>127.0.0.1</code> and nothing else, and there is no flag to bind anywhere else, because the page has no business leaving the machine.</dd>
-        <dt><code>tools/tray</code></dt>
-        <dd>A Windows tray app over the same library. Windows only, and young.</dd>
         <dt>The site</dt>
         <dd>A static front on Cloudflare Pages, with one Rust binary behind it that is not in the production path today; it serves the site locally and stands up on a subdomain the day something has to be computed per request.</dd>
         <dt>Local model routing</dt>
