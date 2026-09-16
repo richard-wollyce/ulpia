@@ -675,6 +675,10 @@ mod split_command_tests {
         assert_eq!(program, script, "a file under the root resolves to it: {program:?}");
         assert_eq!(args, vec!["-p", "--stream"]);
 
+        let (program_slash, _) =
+            super::resolve(&root, "tools/chat-x.cmd -p --stream").expect("splits");
+        assert_eq!(program_slash, script, "forward slash path under root resolves: {program_slash:?}");
+
         let (bare, _) = super::resolve(Path::new("."), "claude -p").expect("splits");
         assert_eq!(bare, Path::new("claude"), "a name on PATH passes through untouched");
 
@@ -693,12 +697,16 @@ mod split_command_tests {
 /// are written relative to the fleet root in `fleet.txt`, and every caller changes the
 /// child's working directory, so the name has to be resolved before that happens. An
 /// absolute path, or a bare name that lives on PATH, passes through untouched.
+///
+/// Backslashes in paths written on Windows (e.g. `tools\foo`) are normalized to `/` so
+/// that relative resolution against the root works reliably on Linux/macOS as well.
 pub fn resolve(root: &Path, cmd: &str) -> Option<(PathBuf, Vec<String>)> {
     let parts = split_command(cmd);
     let mut parts = parts.into_iter();
     let program = parts.next()?;
     let args: Vec<String> = parts.collect();
-    let candidate = root.join(&program);
+    let normalized = program.replace('\\', "/");
+    let candidate = root.join(&normalized);
     let resolved = if candidate.is_file() { candidate } else { PathBuf::from(program) };
     Some((resolved, args))
 }
@@ -712,22 +720,9 @@ pub fn run(classifier: &Classifier, root: &Path, dossier: &str, roster: &[String
     let Classifier::Command(cmd) = classifier else { return None };
 
     // Quotes are honoured, because the first thing a Windows user types is a path with a
-    // space in it. `split_whitespace` alone turned `"C:\Program Files\llama\main.exe" -q`
-    // into a program called `"C:\Program` and an argument called `Files\llama\main.exe"`,
-    // then failed to find it and returned None, which this function turns into the silent
-    // fallback above. The classifier simply never ran and nothing said why.
-    let parts = split_command(cmd);
-    let mut parts = parts.iter().map(String::as_str);
-    let program = parts.next()?;
-    let args: Vec<&str> = parts.collect();
-
-    // The command is named relative to the fleet root in `fleet.txt`, so it has to be
-    // resolved against the root before the working directory stops being the root.
-    // An absolute path or a bare name on PATH passes through untouched.
-    let resolved = {
-        let candidate = root.join(program);
-        if candidate.is_file() { candidate } else { PathBuf::from(program) }
-    };
+    // space in it. The command is resolved against the fleet root before the working directory
+    // stops being the root. An absolute path or a bare name on PATH passes through untouched.
+    let (resolved, args) = resolve(root, cmd)?;
 
     let mut child = crate::base::quiet(&resolved.to_string_lossy())
         .args(&args)
