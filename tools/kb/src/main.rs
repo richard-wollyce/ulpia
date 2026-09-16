@@ -45,9 +45,11 @@ usage:
     kb promote [path]... [--top N] [--all] [--dry-run] [--max N] [--lock]
     kb consolidate <agent> [path] [--sessions N] [--top N] [--dry-run] [--json]
     kb ui [path]... [--port N] [--all]
-    kb capture [path] [--session ID]
+    kb capture [path] [--session ID] [--conclusion <text>]
     kb handoff [path] [--session ID] [--show] [--json]
     kb handoff save <agent> --task <task> [--decision <d>]... [--blocker <b>]... [--next <n>]... [--ref <r>]... [--session ID] [path]
+    kb handoff claim <agent> [--session ID] [path]
+    kb handoff complete [--session ID] [path]
     kb serve [path]... [--top N] [--all]
     kb misses [path]... [--all] [--top N] [--json] [--apply --gold <tsv>]
     kb misroute <message> --chose <agent> --owner <agent|none> [--why <text>] [path]
@@ -99,11 +101,14 @@ usage:
                 boot uses it to emit a constitution only when the routed agent changes.
                 capture files the deposit under it and refuses without one.
                 handoff reads or writes task continuity for that session
+    --conclusion capture: record a sanitized assistant conclusion or key decision
     --task      handoff: the active task or work in progress. Required for save
     --decision  handoff: key architectural decision or constraint decided in the session
     --blocker   handoff: active blocker or unresolved question
     --next      handoff: immediate next action to take
     --ref       handoff: relevant note stem, source key, or file path
+    --claim     handoff: agent claiming the active task baton
+    --complete  handoff: mark the active task baton as completed
     --lens      rejections: filter by lens: contradiction, duplication, or scope
     --sessions  consolidate: number of recent sessions to inspect, default 5
     --cwd       boot: the fleet root, when no path is named. A host with no config
@@ -372,8 +377,9 @@ const VALUE_FLAGS: &[&str] = &[
     "--type", "--title", "--author", "--year", "--container", "--volume", "--pages",
     "--publisher", "--url", "--doi", "--isbn", "--lang", "--retrieved-on",
     "--retrieval-status", "--replaces", "--note",
-    // `kb handoff save` and `kb rejections`
+    // `kb handoff save`, `kb rejections`, `kb handoff claim`, and `kb capture`
     "--task", "--decision", "--blocker", "--next", "--ref", "--reference", "--lens",
+    "--claim", "--conclusion",
 ];
 
 /// What build this is, in one line: `kb 0.2.1 (2269ba0, x86_64 linux)`.
@@ -536,7 +542,11 @@ fn main() -> ExitCode {
         "panel" => cmd_panel(&args, &positional, all, top, json),
         "capture" => {
             let paths = paths_or_default(&positional);
-            cmd_capture(paths[0], flag_value(&args, "--session").as_deref())
+            cmd_capture(
+                paths[0],
+                flag_value(&args, "--session").as_deref(),
+                flag_value(&args, "--conclusion").as_deref(),
+            )
         }
         "handoff" => cmd_handoff(
             &args,
@@ -3727,7 +3737,7 @@ fn cmd_boot(
 ///
 /// Prints one sentence about what it did, because it runs from a hook nobody watches
 /// and a feature that fails silently there is a feature that is off within a week.
-fn cmd_capture(root: &str, session: Option<&str>) -> ExitCode {
+fn cmd_capture(root: &str, session: Option<&str>, conclusion: Option<&str>) -> ExitCode {
     use std::io::Read;
 
     // The flag wins. Without it, the hook payload on stdin names the session, exactly
@@ -3746,6 +3756,12 @@ fn cmd_capture(root: &str, session: Option<&str>) -> ExitCode {
             }
         }
     };
+
+    if let Some(c) = conclusion {
+        if !c.trim().is_empty() {
+            capture::note_conclusion(Path::new(root), &session, c);
+        }
+    }
 
     // **Every outcome is printed, because one session can leave more than one deposit.**
     // A conversation that changed subject passed through more than one agent, and each
@@ -3812,6 +3828,8 @@ fn cmd_handoff(
             session: session.clone(),
             agent: agent.to_string(),
             task,
+            status: handoff::HandoffStatus::Pending,
+            claimed_by: None,
             decisions,
             blockers,
             next_steps,
@@ -3835,6 +3853,106 @@ fn cmd_handoff(
             }
             Err(e) => {
                 eprintln!("kb handoff: {e}");
+                ExitCode::from(1)
+            }
+        }
+    } else if positional.first() == Some(&"claim") || flag_value(args, "--claim").is_some() {
+        let agent = if positional.first() == Some(&"claim") {
+            match positional.get(1) {
+                Some(a) => a.to_string(),
+                None => {
+                    eprintln!("kb handoff claim: specify the agent name\n");
+                    return ExitCode::from(2);
+                }
+            }
+        } else {
+            flag_value(args, "--claim").unwrap_or_default()
+        };
+
+        if agent.trim().is_empty() {
+            eprintln!("kb handoff claim: agent name cannot be empty\n");
+            return ExitCode::from(2);
+        }
+
+        let root = if positional.first() == Some(&"claim") {
+            positional.get(2).copied().unwrap_or(".")
+        } else {
+            positional.first().copied().unwrap_or(".")
+        };
+
+        let record = match session_arg {
+            Some(s) => handoff::load(Path::new(root), s),
+            None => handoff::latest(Path::new(root)),
+        };
+
+        let mut record = match record {
+            Some(r) => r,
+            None => {
+                eprintln!("kb handoff claim: no handoff record found");
+                return ExitCode::from(1);
+            }
+        };
+
+        if let Err(e) = record.claim(&agent) {
+            eprintln!("kb handoff claim: {e}");
+            return ExitCode::from(1);
+        }
+        record.updated_at = misses::today();
+
+        match handoff::save(Path::new(root), &record) {
+            Ok(_) => {
+                if as_json {
+                    println!("{}", record.as_json().to_string());
+                } else {
+                    println!(
+                        "claimed handoff for session {} by {}",
+                        record.session, agent
+                    );
+                }
+                ExitCode::SUCCESS
+            }
+            Err(e) => {
+                eprintln!("kb handoff claim: {e}");
+                ExitCode::from(1)
+            }
+        }
+    } else if positional.first() == Some(&"complete") || args.iter().any(|a| a == "--complete") {
+        let root = if positional.first() == Some(&"complete") {
+            positional.get(1).copied().unwrap_or(".")
+        } else {
+            positional.first().copied().unwrap_or(".")
+        };
+
+        let record = match session_arg {
+            Some(s) => handoff::load(Path::new(root), s),
+            None => handoff::latest(Path::new(root)),
+        };
+
+        let mut record = match record {
+            Some(r) => r,
+            None => {
+                eprintln!("kb handoff complete: no handoff record found");
+                return ExitCode::from(1);
+            }
+        };
+
+        if let Err(e) = record.complete() {
+            eprintln!("kb handoff complete: {e}");
+            return ExitCode::from(1);
+        }
+        record.updated_at = misses::today();
+
+        match handoff::save(Path::new(root), &record) {
+            Ok(_) => {
+                if as_json {
+                    println!("{}", record.as_json().to_string());
+                } else {
+                    println!("completed handoff for session {}", record.session);
+                }
+                ExitCode::SUCCESS
+            }
+            Err(e) => {
+                eprintln!("kb handoff complete: {e}");
                 ExitCode::from(1)
             }
         }
@@ -5510,11 +5628,25 @@ with a body"];
             USAGE.contains("kb handoff save <agent> --task <task>"),
             "handoff save command must be in USAGE"
         );
+        assert!(
+            USAGE.contains("kb handoff claim <agent> [--session ID] [path]"),
+            "handoff claim command must be in USAGE"
+        );
+        assert!(
+            USAGE.contains("kb handoff complete [--session ID] [path]"),
+            "handoff complete command must be in USAGE"
+        );
+        assert!(
+            USAGE.contains("kb capture [path] [--session ID] [--conclusion <text>]"),
+            "capture conclusion command must be in USAGE"
+        );
         assert!(VALUE_FLAGS.contains(&"--task"), "--task must be in VALUE_FLAGS");
         assert!(VALUE_FLAGS.contains(&"--decision"), "--decision must be in VALUE_FLAGS");
         assert!(VALUE_FLAGS.contains(&"--blocker"), "--blocker must be in VALUE_FLAGS");
         assert!(VALUE_FLAGS.contains(&"--next"), "--next must be in VALUE_FLAGS");
         assert!(VALUE_FLAGS.contains(&"--ref"), "--ref must be in VALUE_FLAGS");
+        assert!(VALUE_FLAGS.contains(&"--claim"), "--claim must be in VALUE_FLAGS");
+        assert!(VALUE_FLAGS.contains(&"--conclusion"), "--conclusion must be in VALUE_FLAGS");
     }
 
     #[test]

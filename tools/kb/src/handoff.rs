@@ -19,12 +19,41 @@
 use std::path::{Path, PathBuf};
 use crate::boot::safe_session;
 
+/// The lifecycle status of a task handoff baton.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum HandoffStatus {
+    #[default]
+    Pending,
+    Claimed,
+    Completed,
+}
+
+impl HandoffStatus {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            HandoffStatus::Pending => "pending",
+            HandoffStatus::Claimed => "claimed",
+            HandoffStatus::Completed => "completed",
+        }
+    }
+
+    pub fn parse(s: &str) -> Self {
+        match s.trim().to_ascii_lowercase().as_str() {
+            "claimed" => HandoffStatus::Claimed,
+            "completed" => HandoffStatus::Completed,
+            _ => HandoffStatus::Pending,
+        }
+    }
+}
+
 /// A structured record of session continuity and task handoff.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct HandoffRecord {
     pub session: String,
     pub agent: String,
     pub task: String,
+    pub status: HandoffStatus,
+    pub claimed_by: Option<String>,
     pub decisions: Vec<String>,
     pub blockers: Vec<String>,
     pub next_steps: Vec<String>,
@@ -39,6 +68,10 @@ impl HandoffRecord {
         out.push_str("---\n");
         out.push_str(&format!("session: {}\n", self.session));
         out.push_str(&format!("agent: {}\n", self.agent));
+        out.push_str(&format!("status: {}\n", self.status.as_str()));
+        if let Some(c) = &self.claimed_by {
+            out.push_str(&format!("claimed_by: {}\n", c));
+        }
         out.push_str(&format!("updated_at: {}\n", self.updated_at));
         out.push_str("---\n\n");
 
@@ -81,6 +114,31 @@ impl HandoffRecord {
         out
     }
 
+    /// Claims the handoff baton for a specific agent. Fails if already claimed or completed.
+    pub fn claim(&mut self, agent: &str) -> Result<(), String> {
+        match self.status {
+            HandoffStatus::Claimed => {
+                let who = self.claimed_by.as_deref().unwrap_or("another agent");
+                Err(format!("handoff already claimed by {who}"))
+            }
+            HandoffStatus::Completed => Err("handoff is already completed".to_string()),
+            HandoffStatus::Pending => {
+                self.status = HandoffStatus::Claimed;
+                self.claimed_by = Some(agent.trim().to_string());
+                Ok(())
+            }
+        }
+    }
+
+    /// Marks the handoff task as completed.
+    pub fn complete(&mut self) -> Result<(), String> {
+        if self.status == HandoffStatus::Completed {
+            return Err("handoff is already completed".to_string());
+        }
+        self.status = HandoffStatus::Completed;
+        Ok(())
+    }
+
     /// Parses a handoff record from its Markdown representation.
     pub fn parse(text: &str) -> Option<Self> {
         let trimmed = text.trim_start();
@@ -95,6 +153,8 @@ impl HandoffRecord {
 
         let mut session = String::new();
         let mut agent = String::new();
+        let mut status = HandoffStatus::Pending;
+        let mut claimed_by: Option<String> = None;
         let mut updated_at = String::new();
 
         for line in fm_block.lines() {
@@ -103,6 +163,8 @@ impl HandoffRecord {
                 match k.trim() {
                     "session" => session = v.trim().to_string(),
                     "agent" => agent = v.trim().to_string(),
+                    "status" => status = HandoffStatus::parse(v),
+                    "claimed_by" => claimed_by = Some(v.trim().to_string()),
                     "updated_at" => updated_at = v.trim().to_string(),
                     _ => {}
                 }
@@ -183,6 +245,8 @@ impl HandoffRecord {
             session,
             agent,
             task,
+            status,
+            claimed_by,
             decisions,
             blockers,
             next_steps,
@@ -193,9 +257,16 @@ impl HandoffRecord {
 
     /// Formats a concise summary of the handoff to inject into model context on boot.
     pub fn format_for_briefing(&self, max_chars: usize) -> String {
-        let mut out = format!("VESTA: CONTINUITY (session {}):\n", self.session);
+        let mut out = format!(
+            "VESTA: CONTINUITY (session {}, status: {}):\n",
+            self.session,
+            self.status.as_str()
+        );
         if !self.agent.is_empty() {
             out.push_str(&format!("  Agent: {}\n", self.agent));
+        }
+        if let Some(claimer) = &self.claimed_by {
+            out.push_str(&format!("  Claimed by: {}\n", claimer));
         }
         if !self.task.is_empty() {
             out.push_str(&format!("  Active task: {}\n", self.task));
@@ -234,6 +305,10 @@ impl HandoffRecord {
         obj.set("session", crate::json::Value::Str(self.session.clone()));
         obj.set("agent", crate::json::Value::Str(self.agent.clone()));
         obj.set("task", crate::json::Value::Str(self.task.clone()));
+        obj.set("status", crate::json::Value::Str(self.status.as_str().to_string()));
+        if let Some(c) = &self.claimed_by {
+            obj.set("claimed_by", crate::json::Value::Str(c.clone()));
+        }
         obj.set(
             "decisions",
             crate::json::Value::Arr(self.decisions.iter().cloned().map(crate::json::Value::Str).collect()),
@@ -388,6 +463,8 @@ mod tests {
             session: "sess-1234".into(),
             agent: "zed".into(),
             task: "Implement Phase 2 handoff records with TDD".into(),
+            status: HandoffStatus::Claimed,
+            claimed_by: Some("cicero".into()),
             decisions: vec![
                 "Store handoffs in .kb/sessions/*.handoff.md".into(),
                 "Use atomic .tmp + rename to prevent corruption".into(),
@@ -407,11 +484,51 @@ mod tests {
         assert_eq!(parsed.session, original.session);
         assert_eq!(parsed.agent, original.agent);
         assert_eq!(parsed.task, original.task);
+        assert_eq!(parsed.status, original.status);
+        assert_eq!(parsed.claimed_by, original.claimed_by);
         assert_eq!(parsed.decisions, original.decisions);
         assert_eq!(parsed.blockers, original.blockers);
         assert_eq!(parsed.next_steps, original.next_steps);
         assert_eq!(parsed.references, original.references);
         assert_eq!(parsed.updated_at, original.updated_at);
+    }
+
+    #[test]
+    fn handoff_claim_and_complete_lifecycle() {
+        let mut record = HandoffRecord {
+            session: "lifecycle-sess".into(),
+            agent: "zed".into(),
+            task: "Multi-agent task handoff".into(),
+            status: HandoffStatus::Pending,
+            claimed_by: None,
+            decisions: vec![],
+            blockers: vec![],
+            next_steps: vec![],
+            references: vec![],
+            updated_at: "2026-09-16".into(),
+        };
+
+        assert_eq!(record.status, HandoffStatus::Pending);
+        assert!(record.claimed_by.is_none());
+
+        // First claim succeeds
+        assert!(record.claim("cicero").is_ok());
+        assert_eq!(record.status, HandoffStatus::Claimed);
+        assert_eq!(record.claimed_by.as_deref(), Some("cicero"));
+
+        // Second claim by another agent fails (already claimed)
+        let second_claim = record.claim("frontinus");
+        assert!(second_claim.is_err());
+        assert!(second_claim.unwrap_err().contains("already claimed by cicero"));
+
+        // Complete transitions to Completed
+        assert!(record.complete().is_ok());
+        assert_eq!(record.status, HandoffStatus::Completed);
+
+        // Claim on completed handoff fails
+        let third_claim = record.claim("yaron");
+        assert!(third_claim.is_err());
+        assert!(third_claim.unwrap_err().contains("already completed"));
     }
 
     #[test]
@@ -424,6 +541,8 @@ mod tests {
             session: "test-session-abc".into(),
             agent: "zed".into(),
             task: "Verify atomic write".into(),
+            status: HandoffStatus::Pending,
+            claimed_by: None,
             decisions: vec!["Checked with TDD".into()],
             blockers: Vec::new(),
             next_steps: vec!["Run cargo test".into()],
@@ -438,6 +557,7 @@ mod tests {
         let loaded = load(&temp, "test-session-abc").expect("load failed");
         assert_eq!(loaded.task, "Verify atomic write");
         assert_eq!(loaded.agent, "zed");
+        assert_eq!(loaded.status, HandoffStatus::Pending);
 
         let latest_rec = latest(&temp).expect("latest failed");
         assert_eq!(latest_rec.session, "test-session-abc");
@@ -451,6 +571,8 @@ mod tests {
             session: "budget-session".into(),
             agent: "zed".into(),
             task: "A very long task description that might exceed budget".into(),
+            status: HandoffStatus::Claimed,
+            claimed_by: Some("frontinus".into()),
             decisions: vec!["Decision 1".into(), "Decision 2".into()],
             blockers: Vec::new(),
             next_steps: vec!["Step 1".into()],
@@ -460,6 +582,8 @@ mod tests {
 
         let formatted_full = record.format_for_briefing(2000);
         assert!(formatted_full.contains("VESTA: CONTINUITY"));
+        assert!(formatted_full.contains("status: claimed"));
+        assert!(formatted_full.contains("Claimed by: frontinus"));
         assert!(formatted_full.contains("Decision 1"));
 
         let formatted_truncated = record.format_for_briefing(50);
@@ -472,6 +596,8 @@ mod tests {
             session: "json-sess".into(),
             agent: "zed".into(),
             task: "Test json serialization".into(),
+            status: HandoffStatus::Claimed,
+            claimed_by: Some("yaron".into()),
             decisions: vec!["Decision A".into()],
             blockers: vec!["None".into()],
             next_steps: vec!["Verify json".into()],
@@ -482,10 +608,12 @@ mod tests {
         let json_val = record.as_json();
         assert_eq!(json_val.get("session"), Some(&crate::json::Value::Str("json-sess".into())));
         assert_eq!(json_val.get("agent"), Some(&crate::json::Value::Str("zed".into())));
+        assert_eq!(json_val.get("status"), Some(&crate::json::Value::Str("claimed".into())));
+        assert_eq!(json_val.get("claimed_by"), Some(&crate::json::Value::Str("yaron".into())));
         assert_eq!(json_val.get("task"), Some(&crate::json::Value::Str("Test json serialization".into())));
         let serialized = json_val.to_string();
         assert!(serialized.contains("\"session\":\"json-sess\""));
-        assert!(serialized.contains("\"task\":\"Test json serialization\""));
+        assert!(serialized.contains("\"status\":\"claimed\""));
     }
 
     #[test]
@@ -498,6 +626,8 @@ mod tests {
             session: "s-1".into(),
             agent: "zed".into(),
             task: "Task 1".into(),
+            status: HandoffStatus::Pending,
+            claimed_by: None,
             decisions: vec![],
             blockers: vec![],
             next_steps: vec![],
@@ -508,6 +638,8 @@ mod tests {
             session: "s-2".into(),
             agent: "cicero".into(),
             task: "Task 2".into(),
+            status: HandoffStatus::Completed,
+            claimed_by: Some("cicero".into()),
             decisions: vec![],
             blockers: vec![],
             next_steps: vec![],

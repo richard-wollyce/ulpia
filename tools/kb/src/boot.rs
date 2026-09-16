@@ -1647,6 +1647,8 @@ body
             session: "s-handoff".into(),
             agent: "zed".into(),
             task: "Build feature X with TDD".into(),
+            status: crate::handoff::HandoffStatus::Pending,
+            claimed_by: None,
             decisions: vec!["Store in .kb/sessions".into()],
             blockers: vec!["None".into()],
             next_steps: vec!["Implement green phase".into()],
@@ -1663,7 +1665,7 @@ body
         let brief = brief(&memory, &root, &req, 5);
 
         assert!(
-            brief.text.contains("VESTA: CONTINUITY (session s-handoff):"),
+            brief.text.contains("VESTA: CONTINUITY (session s-handoff, status: pending):"),
             "expected continuity header in briefing text: {}",
             brief.text
         );

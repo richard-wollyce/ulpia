@@ -68,6 +68,108 @@ pub fn note_routed(root: &Path, session: &str, agent: &str) {
     append(root, session, &format!("routed\t{}", field(agent)));
 }
 
+/// A sanitized assistant conclusion or key decision recorded during the session.
+pub fn note_conclusion(root: &Path, session: &str, conclusion: &str) {
+    let sanitized = sanitize_event_summary(conclusion);
+    append(root, session, &format!("conclusion\t{}", field(&sanitized)));
+}
+
+/// Sanitizes sensitive secrets (API keys, bearer tokens, passwords) from event strings.
+///
+/// Uses pure Rust standard library without adding external regex dependencies.
+pub fn sanitize_event_summary(input: &str) -> String {
+    let mut words: Vec<String> = Vec::new();
+    let mut iter = input.split_whitespace().peekable();
+
+    while let Some(word) = iter.next() {
+        let lower = word.to_ascii_lowercase();
+
+        // Check for bearer token: e.g. "Bearer <token>" or "bearer: <token>"
+        if (lower == "bearer" || lower == "bearer:") && iter.peek().is_some() {
+            words.push(word.to_string());
+            if let Some(next_tok) = iter.peek() {
+                if next_tok.len() > 12 {
+                    words.push("[REDACTED_TOKEN]".to_string());
+                    let _ = iter.next();
+                    continue;
+                }
+            }
+            continue;
+        }
+
+        let (prefix, core, suffix) = trim_punctuation(word);
+
+        let sanitized_core = if is_secret_token(core) {
+            "[REDACTED_KEY]".to_string()
+        } else if let Some((k, _v)) = split_key_value(core) {
+            if is_secret_key_name(k) {
+                format!("{k}=[REDACTED_SECRET]")
+            } else if is_secret_token(_v) {
+                format!("{k}=[REDACTED_KEY]")
+            } else {
+                core.to_string()
+            }
+        } else {
+            core.to_string()
+        };
+
+        words.push(format!("{prefix}{sanitized_core}{suffix}"));
+    }
+
+    words.join(" ")
+}
+
+fn trim_punctuation(s: &str) -> (&str, &str, &str) {
+    let is_lead_punct = |c: char| matches!(c, '"' | '\'' | '`' | '(' | '[' | '{' | '<');
+    let is_trail_punct = |c: char| matches!(c, '"' | '\'' | '`' | ')' | ']' | '}' | '>' | ',' | '.' | ';' | ':');
+
+    let start = s.char_indices().find(|&(_, c)| !is_lead_punct(c)).map(|(i, _)| i).unwrap_or(s.len());
+    let (prefix, rest) = s.split_at(start);
+    if rest.is_empty() {
+        return (prefix, "", "");
+    }
+    let end = rest.char_indices().rfind(|&(_, c)| !is_trail_punct(c)).map(|(i, c)| i + c.len_utf8()).unwrap_or(0);
+    let (core, suffix) = rest.split_at(end);
+    (prefix, core, suffix)
+}
+
+fn is_secret_key_name(k: &str) -> bool {
+    let lower = k.to_ascii_lowercase();
+    matches!(lower.as_str(), "api_key" | "apikey" | "api-key" | "token" | "secret" | "password" | "access_token" | "auth_token")
+}
+
+fn split_key_value(s: &str) -> Option<(&str, &str)> {
+    if let Some(pos) = s.find('=') {
+        Some((&s[..pos], &s[pos + 1..]))
+    } else if let Some(pos) = s.find(':') {
+        Some((&s[..pos], &s[pos + 1..]))
+    } else {
+        None
+    }
+}
+
+fn is_secret_token(tok: &str) -> bool {
+    if tok.starts_with("sk-") && tok.len() > 16 {
+        return true;
+    }
+    if tok.starts_with("sk_live_") || tok.starts_with("sk_test_") {
+        return true;
+    }
+    if (tok.starts_with("ghp_") || tok.starts_with("gho_") || tok.starts_with("ghu_")
+        || tok.starts_with("ghs_") || tok.starts_with("ghr_") || tok.starts_with("github_pat_"))
+        && tok.len() > 10
+    {
+        return true;
+    }
+    if tok.starts_with("AIza") && tok.len() > 16 {
+        return true;
+    }
+    if (tok.starts_with("AKIA") || tok.starts_with("ASIA")) && tok.len() >= 16 {
+        return true;
+    }
+    false
+}
+
 /// One line of the record, in the order it was appended.
 ///
 /// **The order is the ownership**, which the first version of this module threw away. It
@@ -80,6 +182,7 @@ pub fn note_routed(root: &Path, session: &str, agent: &str) {
 pub enum Event {
     Refused { question: String, looked_like: Vec<String> },
     Routed(String),
+    Conclusion { summary: String },
 }
 
 /// What a session's record holds, read back.
@@ -102,7 +205,18 @@ impl Session {
                 Event::Refused { question, looked_like } => {
                     Some((question.clone(), looked_like.clone()))
                 }
-                Event::Routed(_) => None,
+                Event::Routed(_) | Event::Conclusion { .. } => None,
+            })
+            .collect()
+    }
+
+    /// Conclusions recorded during the session, in order.
+    pub fn conclusions(&self) -> Vec<String> {
+        self.events
+            .iter()
+            .filter_map(|e| match e {
+                Event::Conclusion { summary } => Some(summary.clone()),
+                _ => None,
             })
             .collect()
     }
@@ -172,6 +286,32 @@ impl Session {
         }
         out
     }
+
+    /// Conclusions attributed to each agent in file order, keyed by agent name.
+    pub fn conclusions_by_owner(&self) -> Vec<(String, Vec<String>)> {
+        let mut out: Vec<(String, Vec<String>)> = Vec::new();
+        for (i, event) in self.events.iter().enumerate() {
+            let Event::Conclusion { summary } = event else { continue };
+            let in_force = || {
+                self.events[..i].iter().rev().find_map(|e| match e {
+                    Event::Routed(a) => Some(a.clone()),
+                    _ => None,
+                })
+            };
+            let taken_later = || {
+                self.events[i..].iter().find_map(|e| match e {
+                    Event::Routed(a) => Some(a.clone()),
+                    _ => None,
+                })
+            };
+            let Some(owner) = in_force().or_else(taken_later) else { continue };
+            match out.iter_mut().find(|(a, _)| a == &owner) {
+                Some((_, list)) => list.push(summary.clone()),
+                None => out.push((owner, vec![summary.clone()])),
+            }
+        }
+        out
+    }
 }
 
 pub fn read(root: &Path, session: &str) -> Session {
@@ -197,6 +337,12 @@ pub fn read(root: &Path, session: &str) -> Session {
             Some("routed") => {
                 if let Some(agent) = parts.next().map(str::trim).filter(|a| !a.is_empty()) {
                     out.events.push(Event::Routed(agent.to_string()));
+                }
+            }
+            Some("conclusion") => {
+                let summary = parts.next().unwrap_or("").trim().to_string();
+                if !summary.is_empty() {
+                    out.events.push(Event::Conclusion { summary });
                 }
             }
             _ => {}
@@ -234,13 +380,42 @@ pub fn write_deposit(root: &Path, session: &str, today: &str) -> Result<Vec<Outc
         return Ok(vec![Outcome::Nothing("the session produced nothing to capture".into())]);
     }
 
-    let mut owned = record.by_owner();
+    let refusals_by_agent = record.by_owner();
+    let conclusions_by_agent = record.conclusions_by_owner();
+
+    let mut all_agents: Vec<String> = Vec::new();
+    for (a, _) in &refusals_by_agent {
+        if !all_agents.contains(a) {
+            all_agents.push(a.clone());
+        }
+    }
+    for (a, _) in &conclusions_by_agent {
+        if !all_agents.contains(a) {
+            all_agents.push(a.clone());
+        }
+    }
+
+    let mut owned: Vec<(String, Vec<(String, Vec<String>)>, Vec<String>)> = Vec::new();
+    for agent in &all_agents {
+        let r = refusals_by_agent
+            .iter()
+            .find(|(a, _)| a == agent)
+            .map(|(_, q)| q.clone())
+            .unwrap_or_default();
+        let c = conclusions_by_agent
+            .iter()
+            .find(|(a, _)| a == agent)
+            .map(|(_, cs)| cs.clone())
+            .unwrap_or_default();
+        owned.push((agent.clone(), r, c));
+    }
+
     if owned.is_empty() {
         // No routing anywhere in the record. The session's own marker is the last
         // fallback, and without that there is no owner and inventing one would put a
         // session's questions in a base that never saw them.
         match crate::boot::last_agent_of(root, session) {
-            Some(agent) => owned.push((agent, record.refused())),
+            Some(agent) => owned.push((agent, record.refused(), record.conclusions())),
             None => {
                 return Ok(vec![Outcome::Nothing(
                     "no agent was routed in this session, so the deposit has no owner".into(),
@@ -253,7 +428,7 @@ pub fn write_deposit(root: &Path, session: &str, today: &str) -> Result<Vec<Outc
     let mut out = Vec::new();
     let mut successful_agents = std::collections::HashSet::new();
 
-    for (agent, questions) in &owned {
+    for (agent, questions, conclusions) in &owned {
         let base = crate::write::agent_root(root, agent);
         if !base.is_dir() {
             out.push(Outcome::Nothing(format!(
@@ -277,7 +452,7 @@ pub fn write_deposit(root: &Path, session: &str, today: &str) -> Result<Vec<Outc
         }
 
         let tmp_path = inbox.join(format!("{}.tmp", filename));
-        match std::fs::write(&tmp_path, render(session, today, questions, &routed)) {
+        match std::fs::write(&tmp_path, render(session, today, questions, conclusions, &routed)) {
             Ok(()) => {
                 match std::fs::rename(&tmp_path, &path) {
                     Ok(()) => {
@@ -331,6 +506,30 @@ pub fn write_deposit(root: &Path, session: &str, today: &str) -> Result<Vec<Outc
                         remaining.push_str(&format!("refused\t{}\t{}\n", field(question), field(&looked_like.join(", "))));
                     }
                 }
+                Event::Conclusion { summary } => {
+                    let in_force = || {
+                        record.events[..i].iter().rev().find_map(|e| match e {
+                            Event::Routed(a) => Some(a.clone()),
+                            _ => None,
+                        })
+                    };
+                    let taken_later = || {
+                        record.events[i..].iter().find_map(|e| match e {
+                            Event::Routed(a) => Some(a.clone()),
+                            _ => None,
+                        })
+                    };
+                    let owner = in_force().or_else(taken_later).or_else(|| crate::boot::last_agent_of(root, session));
+                    
+                    let should_keep = match owner {
+                        Some(ref o) => !successful_agents.contains(o),
+                        None => true,
+                    };
+                    
+                    if should_keep {
+                        remaining.push_str(&format!("conclusion\t{}\n", field(summary)));
+                    }
+                }
             }
         }
         let _ = std::fs::write(file, remaining);
@@ -345,6 +544,7 @@ fn render(
     session: &str,
     today: &str,
     refused: &[(String, Vec<String>)],
+    conclusions: &[String],
     routed: &[String],
 ) -> String {
     let mut out = String::new();
@@ -368,6 +568,17 @@ fn render(
             if !looked_like.is_empty() {
                 out.push_str(&format!("  looked like: {}\n", looked_like.join(", ")));
             }
+        }
+        out.push('\n');
+    }
+
+    if !conclusions.is_empty() {
+        out.push_str("## Decisions and conclusions\n\n");
+        out.push_str(
+            "Key architectural decisions, constraints, or conclusions reached during the session.\n\n",
+        );
+        for c in conclusions {
+            out.push_str(&format!("- {c}\n"));
         }
         out.push('\n');
     }
@@ -607,5 +818,33 @@ mod tests {
         assert!(zed_deposit.exists(), "zed's deposit should still exist");
         
         assert!(!events_file(&root, "s-retry").exists(), "events file should be gone after full success");
+    }
+
+    #[test]
+    fn sanitization_redacts_keys_and_bearer_tokens_without_regex() {
+        let text = "Discovered key sk-1234567890abcdef1234567890 and Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9 inside config with api_key=secretValue999!";
+        let sanitized = sanitize_event_summary(text);
+        assert!(!sanitized.contains("sk-1234567890abcdef1234567890"), "secret sk- key must be redacted");
+        assert!(!sanitized.contains("eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9"), "bearer token must be redacted");
+        assert!(!sanitized.contains("secretValue999"), "api_key value must be redacted");
+        assert!(sanitized.contains("[REDACTED_KEY]"), "contains redacted key token");
+        assert!(sanitized.contains("[REDACTED_TOKEN]"), "contains redacted bearer token");
+        assert!(sanitized.contains("api_key=[REDACTED_SECRET]"), "contains redacted secret pair");
+    }
+
+    #[test]
+    fn conclusions_are_captured_in_deposit() {
+        let root = scratch("conclusions");
+        note_routed(&root, "s-conc", "zed");
+        note_conclusion(&root, "s-conc", "Fixed path separator bug across Linux runners");
+        note_conclusion(&root, "s-conc", "Auth test using Bearer 12345678901234567890 completed");
+
+        let out = write_deposit(&root, "s-conc", "2026-09-16").expect("captured");
+        assert_eq!(out.len(), 1);
+        let path = root.join("fleet").join("zed").join("inbox").join("2026-09-16-session-s-conc.md");
+        let text = std::fs::read_to_string(&path).expect("deposit written");
+        assert!(text.contains("## Decisions and conclusions"), "must have conclusions section: {text}");
+        assert!(text.contains("- Fixed path separator bug across Linux runners"), "{text}");
+        assert!(text.contains("- Auth test using Bearer [REDACTED_TOKEN] completed"), "{text}");
     }
 }
