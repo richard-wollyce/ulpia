@@ -1,5 +1,4 @@
-# The claim "tests are green" becomes externally checkable the day the repo is public.
-# Two platforms because the tool ships on Windows first and strangers clone on Linux.
+# Three platforms: Windows, Linux (Ubuntu), and macOS (Apple Silicon).
 name: ci
 
 on:
@@ -11,7 +10,7 @@ jobs:
   kb:
     strategy:
       matrix:
-        os: [ubuntu-latest, windows-latest]
+        os: [ubuntu-latest, windows-latest, macos-latest]
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
