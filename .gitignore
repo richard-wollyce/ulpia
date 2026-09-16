@@ -139,3 +139,10 @@ benchmarks/longmemeval/data/
 # takes it out of the tree, NOT out of the published history. Anyone who clones
 # can still read it at an older commit. This is tidiness, not erasure.
 /tools/scribe/
+
+# Wollyce AI Tutor application and local student data.
+# Private commercial product by Richard Wollyce, kept off the open-source Ulpia repository.
+/tools/wollyce/
+wollyce/
+data/
+
