@@ -1,0 +1,556 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Laboratório (Lab) - Identidade Visual & Logos Oficiais (PNG 1500x1500px + SVG)</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@700;800&family=DM+Sans:wght@400;500;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg: #090d16;
+      --card-bg: rgba(255, 255, 255, 0.035);
+      --card-border: rgba(255, 255, 255, 0.08);
+      --text: #f3f4f6;
+      --text-muted: #9ca3af;
+      --brand-blue: #002776;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      background-color: var(--bg);
+      color: var(--text);
+      font-family: 'DM Sans', -apple-system, BlinkMacSystemFont, sans-serif;
+      padding: 40px 24px;
+      line-height: 1.5;
+    }
+
+    .container { max-width: 1200px; margin: 0 auto; }
+
+    header {
+      margin-bottom: 36px;
+      border-bottom: 1px solid var(--card-border);
+      padding-bottom: 24px;
+    }
+
+    .badge {
+      display: inline-block;
+      padding: 4px 12px;
+      border-radius: 9999px;
+      background: rgba(37, 99, 235, 0.15);
+      color: #60a5fa;
+      font-size: 12px;
+      font-weight: 700;
+      letter-spacing: 0.05em;
+      text-transform: uppercase;
+      margin-bottom: 12px;
+      border: 1px solid rgba(59, 130, 246, 0.25);
+    }
+
+    h1 {
+      font-family: 'Plus Jakarta Sans', sans-serif;
+      font-size: 36px;
+      font-weight: 800;
+      letter-spacing: -0.035em;
+      margin-bottom: 8px;
+    }
+
+    p.lead {
+      color: var(--text-muted);
+      font-size: 15px;
+      max-width: 800px;
+    }
+
+    .specs-strip {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 16px;
+      margin-top: 20px;
+      padding: 12px 18px;
+      background: var(--card-bg);
+      border: 1px solid var(--card-border);
+      border-radius: 12px;
+      font-size: 13px;
+    }
+
+    .specs-strip code {
+      background: rgba(255, 255, 255, 0.1);
+      padding: 2px 6px;
+      border-radius: 4px;
+      color: #93c5fd;
+      font-family: 'JetBrains Mono', monospace;
+    }
+
+    /* Grid of the 3 requested colorways */
+    .colorways-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+      gap: 24px;
+      margin-top: 32px;
+      margin-bottom: 48px;
+    }
+
+    .colorway-card {
+      border-radius: 18px;
+      padding: 56px 32px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      min-height: 260px;
+      position: relative;
+      transition: transform 0.2s ease, box-shadow 0.2s ease;
+    }
+
+    .colorway-card:hover {
+      transform: translateY(-2px);
+    }
+
+    .colorway-label {
+      position: absolute;
+      top: 16px;
+      left: 20px;
+      right: 20px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 0.05em;
+      text-transform: uppercase;
+    }
+
+    /* Variation 1: Preto no Branco */
+    .theme-black {
+      background: #FFFFFF;
+      color: #000000;
+      border: 1px solid #E5E7EB;
+      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.08);
+    }
+    .theme-black .colorway-tag { color: #000000; }
+    .theme-black .colorway-hint { color: #666; }
+
+    /* Variation 2: Branco no Preto */
+    .theme-white {
+      background: #000000;
+      color: #FFFFFF;
+      border: 1px solid rgba(255, 255, 255, 0.15);
+      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+    }
+    .theme-white .colorway-tag { color: #FFFFFF; }
+    .theme-white .colorway-hint { color: #888; }
+
+    /* Variation 3: Azul no Branco */
+    .theme-blue {
+      background: #FFFFFF;
+      color: #002776;
+      border: 1px solid #E5E7EB;
+      box-shadow: 0 10px 30px rgba(0, 39, 118, 0.12);
+    }
+    .theme-blue .colorway-tag { color: #002776; }
+    .theme-blue .colorway-hint { color: #002776; opacity: 0.7; }
+
+    /* Interactive Logo Construction (Exact Veredito CSS Grid Mechanism) */
+    .logo-container {
+      display: inline-flex;
+      flex-direction: column;
+      align-items: center;
+      cursor: pointer;
+      user-select: none;
+    }
+
+    .logo-wordmark {
+      font-family: 'Plus Jakarta Sans', -apple-system, sans-serif;
+      font-weight: 800;
+      font-size: 46px;
+      letter-spacing: -0.035em;
+      line-height: 1;
+      display: inline-flex;
+      align-items: center;
+    }
+
+    .logo-letter {
+      flex-shrink: 0;
+    }
+
+    .logo-expand-grid {
+      display: inline-grid;
+      overflow: hidden;
+      vertical-align: bottom;
+      grid-template-columns: 0fr;
+      opacity: 0;
+      transition: grid-template-columns 450ms cubic-bezier(0.33, 1, 0.68, 1), opacity 350ms ease;
+    }
+
+    .logo-expand-content {
+      overflow: hidden;
+      white-space: nowrap;
+    }
+
+    .logo-container.is-open .logo-expand-grid {
+      grid-template-columns: 1fr;
+      opacity: 1;
+    }
+
+    .logo-slogan {
+      font-family: 'DM Sans', sans-serif;
+      font-weight: 500;
+      font-size: 13px;
+      margin-top: 8px;
+      opacity: 0.75;
+      letter-spacing: -0.01em;
+    }
+
+    /* PNG Gallery Section */
+    .section-title {
+      font-family: 'Plus Jakarta Sans', sans-serif;
+      font-size: 22px;
+      font-weight: 800;
+      letter-spacing: -0.02em;
+      margin-top: 48px;
+      margin-bottom: 20px;
+      color: #fff;
+    }
+
+    .gallery-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+      gap: 20px;
+      margin-bottom: 40px;
+    }
+
+    .gallery-card {
+      background: var(--card-bg);
+      border: 1px solid var(--card-border);
+      border-radius: 14px;
+      padding: 16px;
+      display: flex;
+      flex-direction: column;
+      transition: border-color 0.2s;
+    }
+
+    .gallery-card:hover {
+      border-color: rgba(255, 255, 255, 0.2);
+    }
+
+    .img-preview-box {
+      width: 100%;
+      height: 200px;
+      border-radius: 10px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      overflow: hidden;
+      margin-bottom: 12px;
+      position: relative;
+    }
+
+    .img-preview-box.bg-checkered {
+      background-image: linear-gradient(45deg, #181c26 25%, transparent 25%),
+                        linear-gradient(-45deg, #181c26 25%, transparent 25%),
+                        linear-gradient(45deg, transparent 75%, #181c26 75%),
+                        linear-gradient(-45deg, transparent 75%, #181c26 75%);
+      background-size: 20px 20px;
+      background-position: 0 0, 0 10px, 10px -10px, -10px 0px;
+      background-color: #0d121d;
+    }
+
+    .img-preview-box img {
+      max-width: 85%;
+      max-height: 85%;
+      object-fit: contain;
+    }
+
+    .gallery-info {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+
+    .gallery-name {
+      font-size: 13px;
+      font-weight: 700;
+      color: #f3f4f6;
+    }
+
+    .gallery-meta {
+      font-size: 11px;
+      color: var(--text-muted);
+      display: flex;
+      justify-content: space-between;
+    }
+
+    .gallery-btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      margin-top: 10px;
+      padding: 8px 12px;
+      background: rgba(255, 255, 255, 0.08);
+      color: #fff;
+      text-decoration: none;
+      border-radius: 8px;
+      font-size: 12px;
+      font-weight: 600;
+      transition: background 0.2s;
+    }
+
+    .gallery-btn:hover {
+      background: rgba(37, 99, 235, 0.4);
+      color: #fff;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <header>
+      <span class="badge">Branding & Identidade Oficial</span>
+      <h1>Laboratório</h1>
+      <p class="lead">
+        Sistema de identidade visual minimalista em <strong>Plus Jakarta Sans ExtraBold (800)</strong>. Comportamento idêntico ao do Veredito: inicia como <code>L</code>, expande suavemente ao passar o mouse para <code>Laboratório</code> e segura por 2 segundos antes de retrair.
+      </p>
+      <div class="specs-strip">
+        <span>Fonte: <code>Plus Jakarta Sans ExtraBold 800</code></span>
+        <span>Mecânica: <code>CSS Grid Columns 0fr ↔ 1fr</code> (Cubic-Bezier 450ms)</span>
+        <span>Delay de Retração: <code>2000ms</code></span>
+        <span>Bordão / Slogan: <code>"Não é difícil, é estratégia."</code></span>
+        <span>Resolução Oficial PNG: <code>1500 × 1500 px</code></span>
+      </div>
+    </header>
+
+    <h2 style="font-family: 'Plus Jakarta Sans', sans-serif; font-size: 20px; font-weight: 700; margin-bottom: 12px;">
+      1. Preview Interativo ao Vivo (Passe o mouse para testar a animação)
+    </h2>
+
+    <div class="colorways-grid">
+      <!-- Variação 1: Preto no Branco -->
+      <div class="colorway-card theme-black">
+        <div class="colorway-label">
+          <span class="colorway-tag">01. Preto no Branco</span>
+          <span class="colorway-hint">Hover para expandir</span>
+        </div>
+        <div class="logo-container is-open" data-logo>
+          <div class="logo-wordmark">
+            <span class="logo-letter">L</span>
+            <span class="logo-expand-grid">
+              <span class="logo-expand-content">aboratório</span>
+            </span>
+          </div>
+          <div class="logo-slogan">Não é difícil, é estratégia.</div>
+        </div>
+      </div>
+
+      <!-- Variação 2: Branco no Preto -->
+      <div class="colorway-card theme-white">
+        <div class="colorway-label">
+          <span class="colorway-tag">02. Branco no Preto</span>
+          <span class="colorway-hint">Hover para expandir</span>
+        </div>
+        <div class="logo-container is-open" data-logo>
+          <div class="logo-wordmark">
+            <span class="logo-letter">L</span>
+            <span class="logo-expand-grid">
+              <span class="logo-expand-content">aboratório</span>
+            </span>
+          </div>
+          <div class="logo-slogan">Não é difícil, é estratégia.</div>
+        </div>
+      </div>
+
+      <!-- Variação 3: Azul no Branco -->
+      <div class="colorway-card theme-blue">
+        <div class="colorway-label">
+          <span class="colorway-tag">03. Azul no Branco (#002776)</span>
+          <span class="colorway-hint">Hover para expandir</span>
+        </div>
+        <div class="logo-container is-open" data-logo>
+          <div class="logo-wordmark">
+            <span class="logo-letter">L</span>
+            <span class="logo-expand-grid">
+              <span class="logo-expand-content">aboratório</span>
+            </span>
+          </div>
+          <div class="logo-slogan">Não é difícil, é estratégia.</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- PNG Assets Section -->
+    <h2 class="section-title">2. Arquivos Oficiais de Alta Resolução (PNG 1500 × 1500 px)</h2>
+
+    <h3 style="font-size: 15px; color: #93c5fd; margin-bottom: 14px; text-transform: uppercase; letter-spacing: 0.05em;">A. Palavra Completa (Wordmark "Laboratório")</h3>
+    <div class="gallery-grid">
+      <div class="gallery-card">
+        <div class="img-preview-box" style="background: #FFFFFF;">
+          <img src="png/laboratorio-palavra-preto-fundo-branco.png" alt="Laboratório Preto Fundo Branco" />
+        </div>
+        <div class="gallery-info">
+          <div class="gallery-name">Preto / Fundo Branco</div>
+          <div class="gallery-meta"><span>1500 × 1500 px</span><span>PNG</span></div>
+          <a class="gallery-btn" href="png/laboratorio-palavra-preto-fundo-branco.png" download>Baixar PNG</a>
+        </div>
+      </div>
+
+      <div class="gallery-card">
+        <div class="img-preview-box" style="background: #000000;">
+          <img src="png/laboratorio-palavra-branco-fundo-preto.png" alt="Laboratório Branco Fundo Preto" />
+        </div>
+        <div class="gallery-info">
+          <div class="gallery-name">Branco / Fundo Preto</div>
+          <div class="gallery-meta"><span>1500 × 1500 px</span><span>PNG</span></div>
+          <a class="gallery-btn" href="png/laboratorio-palavra-branco-fundo-preto.png" download>Baixar PNG</a>
+        </div>
+      </div>
+
+      <div class="gallery-card">
+        <div class="img-preview-box" style="background: #FFFFFF;">
+          <img src="png/laboratorio-palavra-azul-fundo-branco.png" alt="Laboratório Azul Fundo Branco" />
+        </div>
+        <div class="gallery-info">
+          <div class="gallery-name">Azul (#002776) / Fundo Branco</div>
+          <div class="gallery-meta"><span>1500 × 1500 px</span><span>PNG</span></div>
+          <a class="gallery-btn" href="png/laboratorio-palavra-azul-fundo-branco.png" download>Baixar PNG</a>
+        </div>
+      </div>
+
+      <div class="gallery-card">
+        <div class="img-preview-box bg-checkered">
+          <img src="png/laboratorio-palavra-azul-transparente.png" alt="Laboratório Azul Transparente" />
+        </div>
+        <div class="gallery-info">
+          <div class="gallery-name">Azul (#002776) / Transparente</div>
+          <div class="gallery-meta"><span>1500 × 1500 px</span><span>Alpha PNG</span></div>
+          <a class="gallery-btn" href="png/laboratorio-palavra-azul-transparente.png" download>Baixar PNG</a>
+        </div>
+      </div>
+    </div>
+
+    <h3 style="font-size: 15px; color: #93c5fd; margin-bottom: 14px; text-transform: uppercase; letter-spacing: 0.05em;">B. Ícone / Letra Isolada "L"</h3>
+    <div class="gallery-grid">
+      <div class="gallery-card">
+        <div class="img-preview-box" style="background: #FFFFFF;">
+          <img src="png/laboratorio-letra-l-preto-fundo-branco.png" alt="L Preto Fundo Branco" />
+        </div>
+        <div class="gallery-info">
+          <div class="gallery-name">L Preto / Fundo Branco</div>
+          <div class="gallery-meta"><span>1500 × 1500 px</span><span>PNG</span></div>
+          <a class="gallery-btn" href="png/laboratorio-letra-l-preto-fundo-branco.png" download>Baixar PNG</a>
+        </div>
+      </div>
+
+      <div class="gallery-card">
+        <div class="img-preview-box" style="background: #000000;">
+          <img src="png/laboratorio-letra-l-branco-fundo-preto.png" alt="L Branco Fundo Preto" />
+        </div>
+        <div class="gallery-info">
+          <div class="gallery-name">L Branco / Fundo Preto</div>
+          <div class="gallery-meta"><span>1500 × 1500 px</span><span>PNG</span></div>
+          <a class="gallery-btn" href="png/laboratorio-letra-l-branco-fundo-preto.png" download>Baixar PNG</a>
+        </div>
+      </div>
+
+      <div class="gallery-card">
+        <div class="img-preview-box" style="background: #FFFFFF;">
+          <img src="png/laboratorio-letra-l-azul-fundo-branco.png" alt="L Azul Fundo Branco" />
+        </div>
+        <div class="gallery-info">
+          <div class="gallery-name">L Azul (#002776) / Fundo Branco</div>
+          <div class="gallery-meta"><span>1500 × 1500 px</span><span>PNG</span></div>
+          <a class="gallery-btn" href="png/laboratorio-letra-l-azul-fundo-branco.png" download>Baixar PNG</a>
+        </div>
+      </div>
+
+      <div class="gallery-card">
+        <div class="img-preview-box bg-checkered">
+          <img src="png/laboratorio-letra-l-azul-transparente.png" alt="L Azul Transparente" />
+        </div>
+        <div class="gallery-info">
+          <div class="gallery-name">L Azul (#002776) / Transparente</div>
+          <div class="gallery-meta"><span>1500 × 1500 px</span><span>Alpha PNG</span></div>
+          <a class="gallery-btn" href="png/laboratorio-letra-l-azul-transparente.png" download>Baixar PNG</a>
+        </div>
+      </div>
+    </div>
+
+    <h3 style="font-size: 15px; color: #93c5fd; margin-bottom: 14px; text-transform: uppercase; letter-spacing: 0.05em;">C. Lockup Completo ("Laboratório" + "Não é difícil, é estratégia.")</h3>
+    <div class="gallery-grid">
+      <div class="gallery-card">
+        <div class="img-preview-box" style="background: #FFFFFF;">
+          <img src="png/laboratorio-lockup-preto-fundo-branco.png" alt="Lockup Preto Fundo Branco" />
+        </div>
+        <div class="gallery-info">
+          <div class="gallery-name">Lockup Preto / Fundo Branco</div>
+          <div class="gallery-meta"><span>1500 × 1500 px</span><span>PNG</span></div>
+          <a class="gallery-btn" href="png/laboratorio-lockup-preto-fundo-branco.png" download>Baixar PNG</a>
+        </div>
+      </div>
+
+      <div class="gallery-card">
+        <div class="img-preview-box" style="background: #000000;">
+          <img src="png/laboratorio-lockup-branco-fundo-preto.png" alt="Lockup Branco Fundo Preto" />
+        </div>
+        <div class="gallery-info">
+          <div class="gallery-name">Lockup Branco / Fundo Preto</div>
+          <div class="gallery-meta"><span>1500 × 1500 px</span><span>PNG</span></div>
+          <a class="gallery-btn" href="png/laboratorio-lockup-branco-fundo-preto.png" download>Baixar PNG</a>
+        </div>
+      </div>
+
+      <div class="gallery-card">
+        <div class="img-preview-box" style="background: #FFFFFF;">
+          <img src="png/laboratorio-lockup-azul-fundo-branco.png" alt="Lockup Azul Fundo Branco" />
+        </div>
+        <div class="gallery-info">
+          <div class="gallery-name">Lockup Azul / Fundo Branco</div>
+          <div class="gallery-meta"><span>1500 × 1500 px</span><span>PNG</span></div>
+          <a class="gallery-btn" href="png/laboratorio-lockup-azul-fundo-branco.png" download>Baixar PNG</a>
+        </div>
+      </div>
+
+      <div class="gallery-card">
+        <div class="img-preview-box bg-checkered">
+          <img src="png/laboratorio-lockup-azul-transparente.png" alt="Lockup Azul Transparente" />
+        </div>
+        <div class="gallery-info">
+          <div class="gallery-name">Lockup Azul / Transparente</div>
+          <div class="gallery-meta"><span>1500 × 1500 px</span><span>Alpha PNG</span></div>
+          <a class="gallery-btn" href="png/laboratorio-lockup-azul-transparente.png" download>Baixar PNG</a>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // Exact Veredito Interactive Behavior
+    const logos = document.querySelectorAll('[data-logo]');
+
+    logos.forEach(logo => {
+      let timer = null;
+
+      // On initial page load: keep expanded for 2 seconds, then smoothly collapse to L
+      timer = setTimeout(() => {
+        logo.classList.remove('is-open');
+        timer = null;
+      }, 2000);
+
+      logo.addEventListener('mouseenter', () => {
+        if (timer) {
+          clearTimeout(timer);
+          timer = null;
+        }
+        logo.classList.add('is-open');
+      });
+
+      logo.addEventListener('mouseleave', () => {
+        if (timer) clearTimeout(timer);
+        timer = setTimeout(() => {
+          logo.classList.remove('is-open');
+          timer = null;
+        }, 2000);
+      });
+    });
+  </script>
+</body>
+</html>
